@@ -7,15 +7,17 @@ nanoui-controls is a Zig library of controls for [nanoui](https://github.com/jus
 Requires Zig 0.17.1 or later.
 
 ```sh
-zig fmt build.zig build.zig.zon src   # format
-zig build test                        # run the tests; must pass before every commit
-zig build docs                        # build the API docs into zig-out/docs
+zig fmt build.zig build.zig.zon src examples   # format
+zig build test                                 # run the tests; must pass before every commit
+zig build docs                                 # build the API docs into zig-out/docs
+zig build example                              # run the example app
 ```
 
 ## Layout
 
 - `src/controls.zig`: the module root, which re-exports each control.
 - `src/<control>.zig`: one file per control, with its tests at the bottom.
+- `examples/grid/main.zig`: the example app.
 - `build.zig.zon`: the version and the pinned nanoui release.
 - `.github/workflows/ci.yml`: formatting, tests and docs on macOS, Linux and Windows.
 

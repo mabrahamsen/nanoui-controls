@@ -82,11 +82,21 @@ g.end();
 
 See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
+## Example
+
+[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, narrow the window to hide columns, switch on stripes, or show only the five largest files.
+
+```sh
+zig build example
+```
+
 ## Building
 
 ```sh
-zig build test   # run the tests
-zig build docs   # build the API docs into zig-out/docs
+zig build           # build the example into zig-out/bin
+zig build test      # run the tests
+zig build docs      # build the API docs into zig-out/docs
+zig build example   # run the example
 ```
 
 ## Versioning

@@ -28,4 +28,20 @@ pub fn build(b: *std.Build) void {
         .install_subdir = "docs",
     });
     b.step("docs", "Build the API docs into zig-out/docs").dependOn(&install_docs.step);
+
+    // The example: `zig build` builds it, `zig build example` runs it.
+    const example = b.addExecutable(.{
+        .name = "grid-example",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("examples/grid/main.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "nanoui", .module = nanoui },
+                .{ .name = "nanoui_controls", .module = controls },
+            },
+        }),
+    });
+    b.installArtifact(example);
+    b.step("example", "Run the grid example").dependOn(&b.addRunArtifact(example).step);
 }
