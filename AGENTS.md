@@ -19,7 +19,8 @@ zig build example                              # run the example app
 - `src/<control>.zig`: one file per control, with its tests at the bottom.
 - `examples/grid/main.zig`: the example app.
 - `build.zig.zon`: the version and the pinned nanoui release.
-- `.github/workflows/ci.yml`: formatting, tests and docs on macOS, Linux and Windows.
+- `.github/workflows/ci.yml`: formatting, tests, docs and the example on macOS, Linux and Windows.
+- `.github/workflows/release.yml` and `tools/release-notes.sh`: a pushed `vX.Y.Z` tag creates the GitHub release (see CONTRIBUTING.md).
 
 ## Rules
 
