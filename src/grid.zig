@@ -24,6 +24,12 @@
 //! the text (`typed`), the caller finds the first row it begins, and
 //! `jump` selects that row and scrolls to it.
 //!
+//! Given `widths`, dragging the edge between two titles resizes a column
+//! and a double click fits it to its contents. Given `order`, dragging a
+//! title moves its column. With `scroll_x`, columns that don't fit scroll
+//! sideways, the first staying in place with `freeze_first`. A cell whose
+//! text is cut off shows all of it on hover.
+//!
 //!     const columns = [_]controls.GridColumn{
 //!         .{ .title = "Name", .sortable = true },
 //!         .{ .title = "Size", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
@@ -43,13 +49,9 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const keys = @import("grid_keys.zig");
-
-/// The room a scrolling grid leaves at its right edge for the scrollbar's
-/// track, in points as the bar's are, unscaled. Its rows stop short of
-/// it: nanoui gives a press to a clickable box under the track rather
-/// than to the bar, so a row reaching under it would keep the bar from
-/// being dragged or clicked.
-const scrollbar_gutter = 10;
+const lay_mod = @import("grid_layout.zig");
+const Layout = lay_mod.Layout;
+const header = @import("grid_header.zig").header;
 
 pub const Column = struct {
     title: []const u8 = "",
@@ -97,6 +99,13 @@ pub const Options = struct {
     clickable: bool = true,
     /// Every other row is shaded.
     striped: bool = false,
+    /// A line between rows, in the theme's border color; the rows then
+    /// meet it square, without their rounded corners and `gap`.
+    row_lines: bool = false,
+    /// A line down the middle of the gap between columns, through the
+    /// titles and the rows. With `freeze_first`, the frozen column has
+    /// one at its edge whenever the others are scrolled.
+    column_lines: bool = false,
     /// Shows this many rows at most, without scrolling, and takes only
     /// their height; null fills the room left and scrolls.
     rows: ?usize = null,
@@ -121,6 +130,20 @@ pub const Options = struct {
     /// `width`; a column without one isn't resized, but gives or takes
     /// the room. Null: columns don't resize.
     widths: ?[]f32 = null,
+    /// The order the columns show in, kept by the caller: column numbers,
+    /// one a place, which dragging a title changes. Cells keep their
+    /// numbers whatever the order. Null: the columns' own order, and
+    /// titles don't move.
+    order: ?[]usize = null,
+    /// Columns that don't fit keep their widths, and the grid scrolls
+    /// sideways (with the wheel's or the trackpad's x, or the bar under
+    /// the rows) rather than cutting them off.
+    scroll_x: bool = false,
+    /// With `scroll_x`, the first column in the order stays in place as
+    /// the others scroll, as a spreadsheet's names do.
+    freeze_first: bool = false,
+    /// A cell whose text is cut off shows all of it on hover.
+    tooltips: bool = true,
     /// Scrolls the grid in this frame so this row is in view.
     scroll_to: ?usize = null,
     /// Shown under the titles when there are no rows.
@@ -176,6 +199,10 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         if (m.len != opts.count) @panic("grid: `multi` needs one flag a row");
         if (opts.selected == null) @panic("grid: `multi` needs `selected`");
     }
+    if (opts.order) |o| {
+        if (o.len != columns.len) @panic("grid: `order` needs one column a place");
+        for (o, 0..) |col, i| if (col >= columns.len or std.mem.indexOfScalar(usize, o[0..i], col) != null) @panic("grid: `order` needs each column once");
+    }
     const t = kit.tokens(c);
     const k = opts.scale;
     if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
@@ -185,21 +212,23 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     var box = ui.div(c).column().wFull();
     if (opts.rows == null) box = box.grow();
     // Copied in here and written back by `end`.
-    const kept = state(c, Kept).*;
-    const unit = flexUnit(c, columns, opts, box);
-    const sorted = header(c, columns, opts, unit);
+    const kept = lay_mod.state(c, Kept).*;
+    const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
+    const head = header(c, columns, opts, lay);
     if (opts.rule) ui.div(c).wFull().h(1).bg(t.border).end();
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .unit = unit, .anchor = kept.anchor, .sorted = sorted };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .sorted = head.sorted, .fit = head.fit, .fit_w = head.fit_w };
+    // Rows with lines between them meet the lines, without a gap.
+    const row_gap = if (opts.row_lines) 0 else opts.gap;
     if (g.anchor) |a| if (a >= opts.count) {
         g.anchor = null;
     };
-    const pitch = (opts.row_height + opts.gap) * k;
+    const pitch = (opts.row_height + row_gap) * k;
     const before = if (opts.selected) |s| s.* else null;
     if (opts.rows) |n| {
         g.rows_end = @min(n, opts.count);
         g.last = g.rows_end;
         g.useKeys(before, keys.useKeys(c, opts.selected, g.rows_end, n));
-        g.plain = ui.div(c).column().wFull().gap(opts.gap * k).pt(opts.gap * k);
+        g.plain = ui.div(c).column().wFull().gap(row_gap * k).pt(row_gap * k);
     } else {
         // The list's scroll and height as the last frame left them, to
         // page by a view, keep a row in it and say which rows it shows.
@@ -216,17 +245,17 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         var scroll_to: ?f32 = null;
         if (want) |i| if (i < opts.count) {
             const top = @as(f32, @floatFromInt(i)) * pitch;
-            const bottom = top + pitch + opts.gap * k;
+            const bottom = top + pitch + row_gap * k;
             if (top < offset) scroll_to = top else if (bottom > offset + view_h) scroll_to = bottom - view_h;
         };
         if (scroll_to) |y| offset = y;
         offset = std.math.clamp(offset, 0, @max(0, pitch * count - view_h));
-        const pad = opts.gap * k;
+        const pad = row_gap * k;
         g.first = @min(opts.count, @as(usize, @intFromFloat(@floor(@max(0, offset - pad) / pitch))));
         g.last = @min(opts.count, @as(usize, @intFromFloat(@ceil(@max(0, offset + view_h - pad) / pitch))));
-        g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = opts.gap * k, .padding = .{ .top = pad, .right = scrollbar_gutter }, .scroll_to = scroll_to });
+        g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = row_gap * k, .padding = .{ .top = pad, .right = lay_mod.scrollbar_gutter }, .scroll_to = scroll_to });
     }
-    g.typed = keys.useTyping(c, state(c, keys.Typing), opts.count);
+    g.typed = keys.useTyping(c, lay_mod.state(c, keys.Typing), opts.count);
     if (opts.count == 0) if (opts.empty) |text| {
         const d = ui.div(c).wFull().px(opts.padding * k).py(8 * k);
         defer d.end();
@@ -235,179 +264,22 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     return g;
 }
 
-/// The width a column without one gets for each unit of its `flex`: the
-/// room the others leave, shared out, with a column whose share would be
-/// under its `min_width` held at that and the rest shared again. The
-/// room is the grid's width as the last frame laid it out; when it
-/// changed, another frame is drawn with the new one.
-fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Div) f32 {
-    const k = opts.scale;
-    const id = c.node(box.index).id;
-    const width = if (c.rects.get(id)) |r| r.w else c.size.w;
-    const last = c.state(struct { width: f32 = 0 }, "grid-width");
-    if (last.width != width) {
-        last.width = width;
-        c.frameIn(0);
-    }
-    var room = width - 2 * opts.padding * k - gutter(opts);
-    var shown_count: f32 = 0;
-    for (columns, 0..) |col, i| {
-        if (!shown(c, columns, opts, i)) continue;
-        shown_count += 1;
-        if (col.width != null) room -= columnWidth(columns, opts, i, 0);
-    }
-    room -= @max(0, shown_count - 1) * opts.column_gap * k;
-    var unit: f32 = 0;
-    // Each pass holds more columns at their minimum, and at most every
-    // column is held.
-    for (0..columns.len + 1) |_| {
-        var left = room;
-        var flex: f32 = 0;
-        for (columns, 0..) |col, i| {
-            if (!shown(c, columns, opts, i) or col.width != null) continue;
-            if (col.flex * unit < col.min_width * k and unit > 0) left -= col.min_width * k else flex += col.flex;
-        }
-        const next = if (flex > 0) @max(0, left / flex) else 0;
-        if (next == unit) break;
-        unit = next;
-    }
-    return unit;
-}
-
-/// Column `i`'s width in this frame, scaled: its own, the caller's, or
-/// its share of the room left at `unit` a flex.
-fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 {
-    const col = columns[i];
-    const k = opts.scale;
-    if (col.width) |w| return (if (opts.widths) |ws| ws[i] else w) * k;
-    return @max(col.min_width * k, col.flex * unit);
-}
-
-/// The room left for the scrollbar: none in a grid of a set number of
-/// rows, which doesn't scroll.
-fn gutter(opts: Options) f32 {
-    return if (opts.rows == null) scrollbar_gutter else 0;
-}
-
 /// What the grid keeps between frames: where Shift-click and Shift with
-/// the keys select from, and the row `jump` scrolls to next.
-const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null };
+/// the keys select from, the row `jump` scrolls to next, and how far the
+/// columns are scrolled sideways.
+const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null, sx: f32 = 0 };
 
-/// The grid's `T` between frames, found by a key of its own in the grid's
-/// box: the same at the start of `grid` and in `end`, wherever the rows
-/// put them. The pointer lasts only until the next state is made, which
-/// any widget in a cell may do, so it isn't kept: use it at once.
-fn state(c: *ui.Context, comptime T: type) *T {
-    ui.key(c, "grid-state");
-    // Looking a state up doesn't take the key, as a new box would.
-    defer c.next_key = null;
-    return c.state(T, @typeName(T));
-}
-
-/// Draws the column titles, with the edges between them that resize
-/// columns, and returns whether a click changed the sort.
-fn header(c: *ui.Context, columns: []const Column, opts: Options, unit: f32) bool {
-    const t = kit.tokens(c);
-    const k = opts.scale;
-    var sorted = false;
-    // No gap of its own: the edges between titles take its room. Over the
-    // scrollbar's gutter, so the titles line up with the rows.
-    const head = ui.div(c).row().wFull().itemsCenter().pl(opts.padding * k).pr(opts.padding * k + gutter(opts)).pb(6 * k);
-    defer head.end();
-    var before: ?usize = null;
-    for (columns, 0..) |col, i| {
-        if (!shown(c, columns, opts, i)) continue;
-        if (before) |b| edge(c, columns, opts, b, i);
-        before = i;
-        ui.key(c, c.print("grid-column-{d}", .{i}));
-        const sort = if (col.sortable) opts.sort else null;
-        var title = cellBox(c, columns, opts, unit, i);
-        if (sort != null) title = title.control();
-        const it = title.interaction();
-        defer title.end();
-        if (sort) |s| if (it.clicked) {
-            s.* = if (s.column == i) .{ .column = i, .descending = !s.descending } else .{ .column = i, .descending = col.descending_first };
-            sorted = true;
-            c.changed = true;
-        };
-        const on = if (sort) |s| s.column == i else false;
-        if (sort) |s| ui.access.describe(c, title.index, .{
-            .label = col.title,
-            .value = if (!on) "" else if (s.descending) "sorted descending" else "sorted ascending",
-            .hint = "Sorts the rows by this column",
-        });
-        const ts = opts.title;
-        const muted = ts.color orelse t.muted;
-        const fg = if (on) ts.sorted_color orelse t.foreground else if (sort != null and it.hovered) muted.mix(t.foreground, 0.5) else muted;
-        const arrow = if (sort) |s| (if (s.descending) "chevron.down" else "chevron.up") else "";
-        const weight = ts.weight orelse if (on) ui.Weight.semibold else .medium;
-        // At the end of a title; before it when the column's numbers
-        // line up at the end, so the title lines up with them.
-        if (on and col.alignment == .end) ui.icon(c, arrow, .{ .size = 8 * k, .color = fg });
-        ui.text(c, col.title, .{ .size = ts.size, .weight = weight, .mono = ts.mono, .color = fg, .truncate = .ellipsis });
-        if (on and col.alignment == .start) ui.icon(c, arrow, .{ .size = 8 * k, .color = fg });
-    }
-    return sorted;
-}
-
-/// The gap between the titles of columns `a` and `b`. Given
-/// `opts.widths`, dragging it resizes `a` if it has a width, else `b`,
-/// and a line shows it under the pointer.
-fn edge(c: *ui.Context, columns: []const Column, opts: Options, a: usize, b: usize) void {
-    const k = opts.scale;
-    ui.key(c, c.print("grid-edge-{d}", .{a}));
-    const drag = c.state(EdgeDrag, "drag");
-    const d = ui.div(c).w(opts.column_gap * k).hFull().center();
-    defer d.end();
-    const widths = opts.widths orelse return;
-    // The column the drag resizes, and which way: `b` narrows as the
-    // edge moves right.
-    const i, const way: f32 = if (columns[a].width != null) .{ a, 1 } else if (columns[b].width != null) .{ b, -1 } else return;
-    const it = d.interaction();
-    if (it.hovered or it.pressed) {
-        c.cursor = .resize_left_right;
-        ui.div(c).w(1).hFull().bg(kit.tokens(c).border).end();
-    }
-    if (!it.pressed) {
-        drag.on = false;
-        return;
-    }
-    if (!drag.on) {
-        drag.* = .{ .on = true, .x = c.input.mouse.x, .width = widths[i] };
-        return;
-    }
-    const w = @max(columns[i].min_width, drag.width + way * (c.input.mouse.x - drag.x) / k);
-    if (w != widths[i]) {
-        widths[i] = w;
-        c.changed = true;
-    }
-}
-
-/// An edge being dragged: where the pointer and the column's width
-/// started.
-const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0 };
-
-/// Column `i` is shown: the caller doesn't hide it, and the window is
-/// wide enough.
-fn shown(c: *const ui.Context, columns: []const Column, opts: Options, i: usize) bool {
-    if (opts.hidden) |h| if (h[i]) return false;
-    return c.size.w / opts.scale >= columns[i].min_window_width;
-}
-
-/// A cell of column `i`: its width, and its contents placed as it says.
-fn cellBox(c: *ui.Context, columns: []const Column, opts: Options, unit: f32, i: usize) ui.Div {
-    var d = ui.div(c).row().itemsCenter().gap(opts.column_gap * opts.scale / 2).w(columnWidth(columns, opts, i, unit));
-    if (columns[i].alignment == .end) d = d.justifyEnd();
-    return d;
-}
+/// The sideways scrollbar's thumb being dragged: where the pointer and
+/// the scroll started.
+const BarDrag = struct { on: bool = false, x: f32 = 0, sx: f32 = 0 };
 
 pub const Grid = struct {
     c: *ui.Context,
     box: ui.Div,
     columns: []const Column,
     opts: Options,
-    /// The width of a unit of `flex` (`flexUnit`).
-    unit: f32,
+    /// Where the columns go this frame.
+    lay: Layout,
     /// Where Shift-click and Shift with the keys select from, kept by
     /// `end` for the next frame.
     anchor: ?usize,
@@ -433,10 +305,19 @@ pub const Grid = struct {
     typed: ?[]const u8 = null,
     /// The row `jump` scrolls to, in the next frame.
     jump_to: ?usize = null,
-    /// The row and the cell being built, ended by the next or by `end`.
+    /// The column a double-click on an edge fits, and the widest of its
+    /// title and its cells in view.
+    fit: ?usize = null,
+    fit_w: f32 = 0,
+    /// The row and the cell being built, ended by the next or by `end`;
+    /// the box past the frozen column that cuts the row's other cells
+    /// off; and whether the row is under the pointer.
     row: ?ui.Div = null,
+    cut: ?ui.Div = null,
     cell_box: ?ui.Div = null,
+    cell_column: usize = 0,
     column: usize = 0,
+    row_hovered: bool = false,
 
     /// Opens the next row in view, or null when the view is full.
     pub fn next(g: *Grid) ?Row {
@@ -448,7 +329,9 @@ pub const Grid = struct {
         };
         const t = kit.tokens(g.c);
         const k = g.opts.scale;
-        var r = ui.div(g.c).row().wFull().h(g.opts.row_height * k).itemsCenter().gap(g.opts.column_gap * k).px(g.opts.padding * k).rounded(t.radius - 2);
+        // Its cells are placed by the layout, in the columns' order.
+        var r = ui.div(g.c).wFull().h(g.opts.row_height * k);
+        if (!g.opts.row_lines) r = r.rounded(t.radius - 2);
         const it: ui.Interaction = if (g.opts.clickable) r.interaction() else .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
         if (it.secondary_clicked) {
             if (!g.isSelected(i)) g.pick(i, .only);
@@ -467,6 +350,7 @@ pub const Grid = struct {
         // A row to a screen reader, read as its cells' text.
         ui.access.describe(g.c, r.index, .{ .role = .row, .selected = selected });
         g.row = r;
+        g.row_hovered = it.hovered;
         g.column = 0;
         return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = it.double_clicked or g.opened == i, .secondary_clicked = it.secondary_clicked };
     }
@@ -538,32 +422,135 @@ pub const Grid = struct {
         std.debug.assert(g.row != null and i >= g.column and i < g.columns.len);
         g.column = i + 1;
         if (!g.shows(i)) return false;
-        g.cell_box = cellBox(g.c, g.columns, g.opts, g.unit, i);
+        const c = g.c;
+        const l = g.lay;
+        const k = g.opts.scale;
+        const h = g.opts.row_height * k;
+        // The frozen column's cell sits in the row; the others in a box
+        // past it that cuts them off as they scroll.
+        var origin: f32 = 0;
+        if (l.frozen == i) {
+            g.endCut();
+        } else {
+            if (g.cut == null) g.cut = ui.div(c).absolute().offset(l.clip_x, 0).w(@max(0, l.view - l.clip_x)).h(h).clip();
+            origin = l.clip_x;
+        }
+        var d = ui.div(c).absolute().offset(l.at(i) - origin, 0).w(l.w[i]).h(h).row().itemsCenter().gap(g.opts.column_gap * k / 2);
+        if (g.columns[i].alignment == .end) d = d.justifyEnd();
+        g.cell_box = d;
+        g.cell_column = i;
         return true;
     }
 
     /// Column `i` is shown this frame.
     pub fn shows(g: *const Grid, i: usize) bool {
-        return shown(g.c, g.columns, g.opts, i);
+        return lay_mod.shown(g.c, g.columns, g.opts, i);
     }
 
     pub fn end(g: *Grid) void {
         g.endRow();
         if (g.list) |*l| l.end();
         if (g.plain) |p| p.end();
-        state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to };
+        if (g.fit) |f| if (g.opts.widths) |widths| {
+            widths[f] = @max(g.columns[f].min_width, @ceil(g.fit_w / g.opts.scale) + 1);
+            g.c.changed = true;
+        };
+        if (g.opts.scroll_x and g.lay.maxScroll() > 0) g.sideBar();
+        lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx };
         g.box.end();
     }
 
+    /// A bar under the rows, its thumb as wide as the share of the columns
+    /// in view, dragged to scroll them sideways.
+    fn sideBar(g: *Grid) void {
+        const c = g.c;
+        const l = &g.lay;
+        const k = g.opts.scale;
+        const t = kit.tokens(c);
+        const track = ui.div(c).wFull().h(10 * k).pr(lay_mod.gutter(g.opts));
+        defer track.end();
+        const thumb_w = @max(24 * k, l.view * l.view / l.content);
+        const travel = @max(1, l.view - thumb_w);
+        const drag = lay_mod.state(c, BarDrag);
+        const thumb = ui.div(c).absolute().offset(l.sx / l.maxScroll() * travel, 2 * k).w(thumb_w).h(6 * k).rounded(3 * k).bg(t.muted.alpha(0.45)).control();
+        defer thumb.end();
+        const it = thumb.interaction();
+        if (!it.pressed) {
+            drag.on = false;
+            return;
+        }
+        if (!drag.on) {
+            drag.* = .{ .on = true, .x = c.input.mouse.x, .sx = l.sx };
+            return;
+        }
+        l.sx = std.math.clamp(drag.sx + (c.input.mouse.x - drag.x) / travel * l.maxScroll(), 0, l.maxScroll());
+        c.changed = true;
+    }
+
+    /// Ends the cell, measuring it for a fit, and showing its whole text on
+    /// hover if it is cut off.
     fn endCell(g: *Grid) void {
-        if (g.cell_box) |b| b.end();
+        const b = g.cell_box orelse return;
+        const i = g.cell_column;
+        if (g.fit == i) g.fit_w = @max(g.fit_w, lay_mod.natural(g.c, b.index));
+        if (g.opts.tooltips) g.tooltip(b, i);
+        b.end();
         g.cell_box = null;
+    }
+
+    /// The cell's whole text over it, while the pointer rests on it and
+    /// the text is cut off. Asked of every cut-off cell in view, under the
+    /// pointer or not, so its wait starts when the pointer comes.
+    fn tooltip(g: *Grid, b: ui.Div, i: usize) void {
+        const c = g.c;
+        const id = c.node(b.index).id;
+        const rect = c.rects.get(id) orelse return;
+        if (lay_mod.natural(c, b.index) <= g.lay.w[i] + 0.5) return;
+        // Not where the frozen column covers it.
+        const visible = g.lay.frozen == i or c.input.mouse.x >= g.lay.left + g.lay.clip_x;
+        const over = g.row_hovered and visible and rect.contains(c.input.mouse);
+        const text = ui.access.textOf(c, c.alloc(), b.index) catch return;
+        kit.tooltip(c, .{ .id = id, .rect = rect, .hovered = over, .pressed = false, .clicked = false, .focused = false }, text, .{});
+    }
+
+    fn endCut(g: *Grid) void {
+        if (g.cut) |d| d.end();
+        g.cut = null;
     }
 
     fn endRow(g: *Grid) void {
         g.endCell();
+        if (g.row != null) g.lines();
+        g.endCut();
         if (g.row) |r| r.end();
         g.row = null;
+    }
+
+    /// The row's lines: down the gaps between its columns, the scrolled
+    /// ones' cut off past the frozen column, and along its bottom.
+    fn lines(g: *Grid) void {
+        const c = g.c;
+        const l = g.lay;
+        const k = g.opts.scale;
+        const h = g.opts.row_height * k;
+        const border = kit.tokens(c).border;
+        const half = g.opts.column_gap * k / 2;
+        if (g.opts.column_lines) {
+            if (g.cut == null) g.cut = ui.div(c).absolute().offset(l.clip_x, 0).w(@max(0, l.view - l.clip_x)).h(h).clip();
+            var last: ?usize = null;
+            for (l.order) |i| if (l.w[i] > 0) {
+                last = i;
+            };
+            for (l.order) |i| {
+                if (l.w[i] == 0 or i == last or i == l.frozen) continue;
+                ui.div(c).absolute().offset(l.at(i) + l.w[i] + half - l.clip_x, 0).w(1).h(h).bg(border).end();
+            }
+        }
+        g.endCut();
+        if (l.frozen) |f| if (g.opts.column_lines or l.sx > 0) {
+            ui.div(c).absolute().offset(l.x[f] + l.w[f] + half, 0).w(1).h(h).bg(border).end();
+        };
+        if (g.opts.row_lines) ui.div(c).absolute().offset(0, h - 1).w(l.view).h(1).bg(border).end();
     }
 };
 
