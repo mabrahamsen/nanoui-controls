@@ -2,6 +2,11 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- Fixed: `grid` kept a pointer to its state, where Shift-selection starts, across the building of its rows. When widget state made meanwhile (a cell's, the column edges') grew nanoui's store of it, the grid wrote to freed memory: a crash in a debug build. It now copies its state in at the start of a frame and writes it back in `end`.
+- `grid` jumps to a row as you type: `typed` is the text typed while the grid has the keyboard (a pause of a second starts it afresh), the caller finds the first row it begins, and `jump` selects that row and scrolls to it.
+
 ## 0.2.0
 
 - `grid` selects: with `selected`, a click selects a row and it is drawn highlighted. Up, Down, Page Up, Page Down, Home and End move the selection while nothing else has the keyboard, scrolling it into view, and Enter or a double click opens it. `Row` says whether a row is `selected` and `opened`.
