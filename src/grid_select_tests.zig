@@ -14,11 +14,27 @@ const Many = struct {
     selected: ?usize = null,
     sort: Sort = .{},
     menu: ?usize = null,
+    /// Make new widget state between the grid and its rows, as a busy
+    /// app's widgets do, so nanoui's store of it grows.
+    churn: bool = false,
+    frames: usize = 0,
+    burst: usize = 0,
 
     fn view(m: *Many, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
         var g = grid(c, &Fruit.columns, .{ .count = m.marked.len, .sort = &m.sort, .selected = &m.selected, .multi = &m.marked });
+        m.frames += 1;
+        // In the frame a click lands, more new state than the store has
+        // room for, twice as much each time, so it grows then.
+        if (m.churn and c.input.released) {
+            m.burst = if (m.burst == 0) 20_000 else m.burst * 2;
+            for (0..m.burst) |j| {
+                ui.key(c, c.print("churn-{d}-{d}", .{ m.frames, j }));
+                _ = c.state(struct { x: u8 = 0 }, "churn");
+                c.next_key = null;
+            }
+        }
         while (g.next()) |row| {
             if (row.secondary_clicked) m.menu = row.index;
             g.cell();
@@ -266,4 +282,18 @@ test "a grid whose rows aren't clickable is a table to read" {
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 1), tb.clicked);
     try std.testing.expectEqual(@as(?usize, 1), tb.selected);
+}
+
+test "the selection's anchor holds while other widgets make state between the grid and its rows" {
+    var m: Many = .{ .churn = true };
+    var t: ui.Tester = undefined;
+    try start(&t, &m);
+    defer t.deinit();
+    try clickRow(&t, 2, .{});
+    for (0..5) |_| t.frame();
+    try clickRow(&t, 6, .{ .shift = true });
+    try m.expectRows(&.{ 2, 3, 4, 5, 6 });
+    for (0..5) |_| t.frame();
+    try clickRow(&t, 4, .{ .shift = true });
+    try m.expectRows(&.{ 2, 3, 4 });
 }

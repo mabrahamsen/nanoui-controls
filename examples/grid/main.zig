@@ -5,7 +5,8 @@
 //! to select it, move the selection with the arrow keys, Page Up and Page
 //! Down, Home and End, and open it with Enter or a double click. Cmd-click
 //! (Ctrl-click) and Shift select several, Cmd+A (Ctrl+A) all of them, and
-//! a right-click opens a menu to open, select or delete them. "Load as it
+//! a right-click opens a menu to open, select or delete them. Typing a
+//! name's first letters jumps to it. "Load as it
 //! scrolls" has rows arrive a page at a time, as from a server.
 const std = @import("std");
 const builtin = @import("builtin");
@@ -108,6 +109,11 @@ const Browser = struct {
         });
         b.scroll_to = null;
         if (g.sorted) b.resort();
+        // Typing jumps to the first file, in the grid's order, whose name
+        // it begins.
+        if (g.typed) |text| for (b.shown[0..b.shown_len], 0..) |file, i| {
+            if (std.ascii.startsWithIgnoreCase(b.files[file].name, text)) break g.jump(i);
+        };
         if (b.loading) b.ask(c, g.first, g.last);
         while (g.next()) |row| {
             if (b.loading and !b.arrived(c, row.index)) {
@@ -153,7 +159,7 @@ const Browser = struct {
             ui.textf(c, .{ .color = t.muted }, "{d} files selected: a right-click shows what to do with them.", .{marked});
         } else if (b.selected) |i| {
             ui.textf(c, .{ .color = t.muted }, "Selected {s}: Enter or a double click opens it, a right-click shows a menu.", .{b.files[b.shown[i]].name});
-        } else ui.text(c, "Click a row to select it, then move with the arrow keys.", .{ .color = t.muted });
+        } else ui.text(c, "Click a row to select it, move with the arrow keys, or type a name to jump to it.", .{ .color = t.muted });
     }
 
     /// Says what an action did, under the grid, until the next.

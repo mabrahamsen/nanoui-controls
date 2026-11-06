@@ -20,6 +20,10 @@
 //! Shift-click and Shift with the keys select a run of rows, and Cmd+A
 //! (Ctrl+A) selects them all.
 //!
+//! Typing while the grid has the keyboard jumps to a row: the grid keeps
+//! the text (`typed`), the caller finds the first row it begins, and
+//! `jump` selects that row and scrolls to it.
+//!
 //!     const columns = [_]controls.GridColumn{
 //!         .{ .title = "Name", .sortable = true },
 //!         .{ .title = "Size", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
@@ -38,6 +42,7 @@ const builtin = @import("builtin");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const keys = @import("grid_keys.zig");
 
 /// The room a scrolling grid leaves at its right edge for the scrollbar's
 /// track, in points as the bar's are, unscaled. Its rows stop short of
@@ -176,32 +181,33 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
         s.* = if (opts.count > 0) opts.count - 1 else null;
     };
-    // Where Shift-click and Shift with the keys select from.
-    const anchor = &c.state(struct { row: ?usize = null }, "grid-anchor").row;
-    if (anchor.*) |a| if (a >= opts.count) {
-        anchor.* = null;
-    };
     if (opts.multi) |m| if (c.focus == 0 and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
     var box = ui.div(c).column().wFull();
     if (opts.rows == null) box = box.grow();
+    // Copied in here and written back by `end`.
+    const kept = state(c, Kept).*;
     const unit = flexUnit(c, columns, opts, box);
     const sorted = header(c, columns, opts, unit);
     if (opts.rule) ui.div(c).wFull().h(1).bg(t.border).end();
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .unit = unit, .anchor = anchor, .sorted = sorted };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .unit = unit, .anchor = kept.anchor, .sorted = sorted };
+    if (g.anchor) |a| if (a >= opts.count) {
+        g.anchor = null;
+    };
     const pitch = (opts.row_height + opts.gap) * k;
     const before = if (opts.selected) |s| s.* else null;
     if (opts.rows) |n| {
         g.rows_end = @min(n, opts.count);
         g.last = g.rows_end;
-        g.useKeys(before, useKeys(c, opts.selected, g.rows_end, n));
+        g.useKeys(before, keys.useKeys(c, opts.selected, g.rows_end, n));
         g.plain = ui.div(c).column().wFull().gap(opts.gap * k).pt(opts.gap * k);
     } else {
         // The list's scroll and height as the last frame left them, to
         // page by a view, keep a row in it and say which rows it shows.
         const id = c.peekId(null);
         const view_h = if (c.rects.get(id)) |r| r.h else c.size.h;
-        g.useKeys(before, useKeys(c, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
+        g.useKeys(before, keys.useKeys(c, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
         var want = opts.scroll_to;
+        if (kept.jump_to) |i| want = i;
         if (opts.selected) |s| if (s.* != before) if (s.*) |i| {
             want = i;
         };
@@ -220,6 +226,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         g.last = @min(opts.count, @as(usize, @intFromFloat(@ceil(@max(0, offset + view_h - pad) / pitch))));
         g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = opts.gap * k, .padding = .{ .top = pad, .right = scrollbar_gutter }, .scroll_to = scroll_to });
     }
+    g.typed = keys.useTyping(c, state(c, keys.Typing), opts.count);
     if (opts.count == 0) if (opts.empty) |text| {
         const d = ui.div(c).wFull().px(opts.padding * k).py(8 * k);
         defer d.end();
@@ -280,6 +287,21 @@ fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 
 /// rows, which doesn't scroll.
 fn gutter(opts: Options) f32 {
     return if (opts.rows == null) scrollbar_gutter else 0;
+}
+
+/// What the grid keeps between frames: where Shift-click and Shift with
+/// the keys select from, and the row `jump` scrolls to next.
+const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null };
+
+/// The grid's `T` between frames, found by a key of its own in the grid's
+/// box: the same at the start of `grid` and in `end`, wherever the rows
+/// put them. The pointer lasts only until the next state is made, which
+/// any widget in a cell may do, so it isn't kept: use it at once.
+fn state(c: *ui.Context, comptime T: type) *T {
+    ui.key(c, "grid-state");
+    // Looking a state up doesn't take the key, as a new box would.
+    defer c.next_key = null;
+    return c.state(T, @typeName(T));
 }
 
 /// Draws the column titles, with the edges between them that resize
@@ -365,56 +387,6 @@ fn edge(c: *ui.Context, columns: []const Column, opts: Options, a: usize, b: usi
 /// started.
 const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0 };
 
-/// What the keys did this frame (`useKeys`).
-const Keys = struct {
-    /// The row Enter opened.
-    opened: ?usize = null,
-    /// Shift was held as the selection moved, which extends it.
-    extend: bool = false,
-};
-
-/// Moves the selection by the keys pressed this frame, while nothing else
-/// has the keyboard, among `count` rows of which `page` fit in a view.
-fn useKeys(c: *ui.Context, selected: ?*?usize, count: usize, page: usize) Keys {
-    const s = selected orelse return .{};
-    if (c.focus != 0 or count == 0) return .{};
-    const last = count - 1;
-    const i = s.*;
-    const down = if (i) |n| @min(n + 1, last) else 0;
-    const up = if (i) |n| n -| 1 else 0;
-    var to: ?usize = null;
-    var keys: Keys = .{};
-    if (c.shortcut(.{ .key = ui.Shortcut.down })) {
-        to = down;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.down, .shift = true })) {
-        to = down;
-        keys.extend = true;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
-        to = up;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.up, .shift = true })) {
-        to = up;
-        keys.extend = true;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.enter })) {
-        keys.opened = i;
-    } else if (c.input.key) |key| {
-        switch (key) {
-            .down => to = down,
-            .up => to = up,
-            .page_down => to = if (i) |n| @min(n + page, last) else @min(page, last),
-            .page_up => to = if (i) |n| n -| page else 0,
-            .home => to = 0,
-            .end => to = last,
-            .enter => keys.opened = i,
-            else => return .{},
-        }
-        keys.extend = c.input.shift;
-        c.input.key = null;
-        c.changed = true;
-    }
-    if (to) |n| s.* = n;
-    return keys;
-}
-
 /// Column `i` is shown: the caller doesn't hide it, and the window is
 /// wide enough.
 fn shown(c: *const ui.Context, columns: []const Column, opts: Options, i: usize) bool {
@@ -436,8 +408,9 @@ pub const Grid = struct {
     opts: Options,
     /// The width of a unit of `flex` (`flexUnit`).
     unit: f32,
-    /// Where Shift-click and Shift with the keys select from.
-    anchor: *?usize,
+    /// Where Shift-click and Shift with the keys select from, kept by
+    /// `end` for the next frame.
+    anchor: ?usize,
     /// The rows in view this frame, from `first` up to but not including
     /// `last`: a caller that loads rows as they come into view fetches
     /// these, and the ones around them.
@@ -454,6 +427,12 @@ pub const Grid = struct {
     sorted: bool,
     /// The row Enter opened this frame.
     opened: ?usize = null,
+    /// What has been typed to jump to a row, with this frame's typing;
+    /// null when nothing was typed this frame. The caller finds the first
+    /// row it begins (ignoring case, as Finder does) and `jump`s to it.
+    typed: ?[]const u8 = null,
+    /// The row `jump` scrolls to, in the next frame.
+    jump_to: ?usize = null,
     /// The row and the cell being built, ended by the next or by `end`.
     row: ?ui.Div = null,
     cell_box: ?ui.Div = null,
@@ -492,6 +471,15 @@ pub const Grid = struct {
         return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = it.double_clicked or g.opened == i, .secondary_clicked = it.secondary_clicked };
     }
 
+    /// Selects row `i` alone, if rows select, and scrolls it into view:
+    /// where `typed` leads. The grid is drawn again to show it.
+    pub fn jump(g: *Grid, i: usize) void {
+        if (i >= g.opts.count) return;
+        g.pick(i, .only);
+        g.jump_to = i;
+        g.c.changed = true;
+    }
+
     /// Row `i` is selected: among `multi`'s, or `selected` without it.
     fn isSelected(g: *const Grid, i: usize) bool {
         if (g.opts.multi) |m| return m[i];
@@ -511,15 +499,15 @@ pub const Grid = struct {
             .only => {
                 @memset(m, false);
                 m[i] = true;
-                g.anchor.* = i;
+                g.anchor = i;
             },
             .toggle => {
                 m[i] = !m[i];
-                g.anchor.* = i;
+                g.anchor = i;
             },
             .extend => {
-                const from = g.anchor.* orelse i;
-                g.anchor.* = from;
+                const from = g.anchor orelse i;
+                g.anchor = from;
                 @memset(m, false);
                 @memset(m[@min(from, i) .. @max(from, i) + 1], true);
             },
@@ -528,11 +516,11 @@ pub const Grid = struct {
 
     /// Follows the keys with `multi`: the row they moved to alone, or with
     /// Shift the rows from the anchor to it.
-    fn useKeys(g: *Grid, before: ?usize, keys: Keys) void {
-        g.opened = keys.opened;
+    fn useKeys(g: *Grid, before: ?usize, k: keys.Keys) void {
+        g.opened = k.opened;
         const s = g.opts.selected orelse return;
         const i = s.* orelse return;
-        if (i != before) g.pick(i, if (keys.extend) .extend else .only);
+        if (i != before) g.pick(i, if (k.extend) .extend else .only);
     }
 
     /// Opens the row's next cell, ending the one before: what is drawn
@@ -563,6 +551,7 @@ pub const Grid = struct {
         g.endRow();
         if (g.list) |*l| l.end();
         if (g.plain) |p| p.end();
+        state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to };
         g.box.end();
     }
 
@@ -582,4 +571,5 @@ test {
     _ = @import("grid_tests.zig");
     _ = @import("grid_columns_tests.zig");
     _ = @import("grid_select_tests.zig");
+    _ = @import("grid_keys_tests.zig");
 }
