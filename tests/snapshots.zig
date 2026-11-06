@@ -24,6 +24,7 @@ const Files = struct {
     rows: ?usize = null,
     title: controls.GridTitleStyle = .{},
     rule: bool = true,
+    count: usize = files.len,
 
     const columns = [_]controls.GridColumn{
         .{ .title = "Name", .sortable = true },
@@ -42,7 +43,8 @@ const Files = struct {
         const root = ui.div(c).column().sizeFull().p(12);
         defer root.end();
         var g = controls.grid(c, &columns, .{
-            .count = files.len,
+            .count = f.count,
+            .empty = "No files here.",
             .sort = &f.sort,
             .selected = &f.selected,
             .striped = true,
@@ -65,6 +67,11 @@ var fonts_registered = false;
 
 /// Draws `f` in a window 360 by 240 and compares it with `name`'s PNG.
 fn expectSnapshot(name: []const u8, f: *Files, dark: bool) !void {
+    return expectSnapshotAt(name, f, dark, null);
+}
+
+/// The same, with the pointer resting on the text `over`.
+fn expectSnapshotAt(name: []const u8, f: *Files, dark: bool, over: ?[]const u8) !void {
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     if (!fonts_registered) {
@@ -78,6 +85,11 @@ fn expectSnapshot(name: []const u8, f: *Files, dark: bool) !void {
     try t.init(gpa, .init(f, Files.view), .{ .width = 360, .height = 240, .theme = theme });
     defer t.deinit();
     t.settle(1);
+    if (over) |text| {
+        const r = t.findText(text).?;
+        t.moveTo(r.x + r.w / 2, r.y + r.h / 2);
+        t.settle(1);
+    }
     const pixels = try t.render(gpa);
     defer pixels.deinit(gpa);
     const stored = try ui.png.encode(gpa, pixels);
@@ -168,6 +180,17 @@ test "a sorted, striped grid with a selected row, light" {
 test "a sorted, striped grid with a selected row, dark" {
     var f: Files = .{};
     try expectSnapshot("grid-dark", &f, true);
+}
+
+test "the selected row keeps its color under the pointer, and another row lights up" {
+    var f: Files = .{};
+    try expectSnapshotAt("grid-hover-selected", &f, false, "photo.png");
+    try expectSnapshotAt("grid-hover", &f, false, "notes.txt");
+}
+
+test "an empty grid says so under its titles" {
+    var f: Files = .{ .count = 0, .selected = null };
+    try expectSnapshot("grid-empty", &f, false);
 }
 
 test "a grid of three rows with styled titles, a hidden column and no rule" {

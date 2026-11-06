@@ -10,7 +10,7 @@ const Sort = g_mod.Sort;
 
 /// A grid of fruit for the tests: a name, a sortable count lined up at
 /// the end, and a column that doesn't sort.
-const Fruit = struct {
+pub const Fruit = struct {
     sort: Sort = .{},
     sorted: usize = 0,
     clicked: ?usize = null,
@@ -19,12 +19,12 @@ const Fruit = struct {
     /// The view marked a frame changed.
     changed: bool = false,
 
-    const columns = [_]Column{
+    pub const columns = [_]Column{
         .{ .title = "Fruit", .sortable = true },
         .{ .title = "Count", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
         .{ .title = "Note", .width = 120 },
     };
-    const names = [_][]const u8{ "apple", "banana", "cherry" };
+    pub const names = [_][]const u8{ "apple", "banana", "cherry" };
 
     fn view(f: *Fruit, c: *ui.Context) void {
         var g = grid(c, &columns, .{ .count = f.count, .sort = &f.sort });
@@ -193,7 +193,9 @@ test "a grid's lengths follow its scale" {
     t.resize(800, 600);
     t.settle(1);
     try std.testing.expect(t.findText("Count") == null);
-    try std.testing.expectApproxEqAbs(note1 * 2, t.findText("Note").?.x, 1);
+    // Everything doubles but the scrollbar's gutter, which the bar
+    // doesn't scale either: Note's right edge stays 10 points further in.
+    try std.testing.expectApproxEqAbs((note1 + 10) * 2 - 10, t.findText("Note").?.x, 1);
     try std.testing.expectApproxEqAbs(row1 * 2, t.findText("fruit 1").?.y - t.findText("fruit 0").?.y, 1);
 }
 
@@ -297,12 +299,20 @@ const Picker = struct {
     rows: ?usize = null,
     field: bool = false,
     search: ui.TextBuffer = .{},
+    /// Asked of the grid for one frame.
+    scroll_to: ?usize = null,
+    /// The rows the grid says are in view.
+    first: usize = 0,
+    last: usize = 0,
 
     fn view(p: *Picker, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
         if (p.field) _ = ui.textField(c, &p.search, .{ .placeholder = "Search" });
-        var g = grid(c, &Fruit.columns, .{ .count = p.count, .selected = &p.selected, .rows = p.rows });
+        var g = grid(c, &Fruit.columns, .{ .count = p.count, .selected = &p.selected, .rows = p.rows, .scroll_to = p.scroll_to });
+        p.scroll_to = null;
+        p.first = g.first;
+        p.last = g.last;
         while (g.next()) |row| {
             if (row.opened) p.opened = row.index;
             g.cell();
@@ -313,6 +323,13 @@ const Picker = struct {
             ui.text(c, if (row.selected) "picked" else "-", .{});
         }
         g.end();
+    }
+
+    /// Where row `i`'s first cell starts, if it is built.
+    fn top(t: *ui.Tester, i: usize) ?f32 {
+        var buf: [32]u8 = undefined;
+        const r = t.findText(std.fmt.bufPrint(&buf, "fruit {d}", .{i}) catch unreachable) orelse return null;
+        return r.y;
     }
 
     /// Row `i` is built and inside the window, not just in the overscan.
@@ -446,4 +463,94 @@ test "a grid of a set number of rows keeps the selection among them" {
     try std.testing.expectEqual(@as(?usize, 2), p.selected);
     t.key(.page_up);
     try std.testing.expectEqual(@as(?usize, 0), p.selected);
+}
+
+test "a grid says which rows are in view, as it scrolls" {
+    var p: Picker = .{};
+    defer p.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Picker.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), p.first);
+    // The last row in view starts inside the window, perhaps cut off at
+    // its bottom; the next starts below it.
+    try std.testing.expect(Picker.top(&t, p.last - 1).? < t.size.h);
+    try std.testing.expect(Picker.top(&t, p.last).? >= t.size.h);
+    t.key(.end);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 1000), p.last);
+    try std.testing.expect(p.first > 980);
+    // The first row in view ends inside it, perhaps cut off at its top.
+    const first = t.findText("fruit 0");
+    try std.testing.expect(first == null or first.?.y < 0);
+    try std.testing.expect(Picker.top(&t, p.first).? + 20 > t.findText("Fruit").?.y);
+}
+
+test "a grid of a set number of rows has them all in view" {
+    var p: Picker = .{ .rows = 3 };
+    defer p.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Picker.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), p.first);
+    try std.testing.expectEqual(@as(usize, 3), p.last);
+}
+
+test "scroll_to brings a row into view, and leaves the scroll alone after" {
+    var p: Picker = .{};
+    defer p.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Picker.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    p.scroll_to = 500;
+    t.settle(1);
+    try std.testing.expect(Picker.inView(&t, 500));
+    try std.testing.expect(p.first <= 500 and 500 < p.last);
+    // A row already in view doesn't move.
+    const first = p.first;
+    p.scroll_to = first + 1;
+    t.settle(1);
+    try std.testing.expectEqual(first, p.first);
+    // Nor does the scroll jump back once the caller stops asking.
+    t.scroll(200, 200, -60);
+    t.settle(1);
+    try std.testing.expect(p.first != first);
+}
+
+test "the scrollbar's thumb drags and its track clicks, over the rows" {
+    var p: Picker = .{};
+    defer p.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Picker.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // The thumb starts at the top of the rows, at the window's right edge.
+    const top = t.findText("fruit 0").?.y;
+    t.drag(396, top + 10, 396, top + 120);
+    t.settle(1);
+    try std.testing.expect(p.first > 0);
+    try std.testing.expectEqual(@as(?usize, null), p.selected);
+    // A press low on the track jumps toward the end.
+    t.click(396, t.size.h - 10);
+    t.settle(1);
+    try std.testing.expect(p.first > 900);
+    try std.testing.expectEqual(@as(?usize, null), p.selected);
+}
+
+test "a scrolling grid's rows stop short of the scrollbar, and the titles with them" {
+    var f: Fruit = .{ .count = 100 };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&f, Fruit.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Note ends at the window's edge less the padding and the gutter.
+    const ripe = t.findText("ripe").?;
+    try std.testing.expect(t.findText("Note").?.x + 120 <= 400 - 10 - 10 + 0.5);
+    try std.testing.expectApproxEqAbs(t.findText("Note").?.x, ripe.x, 0.5);
+    const count = t.findText("Count").?;
+    const hundred = t.findText("100").?;
+    try std.testing.expectApproxEqAbs(count.x + count.w, hundred.x + hundred.w, 0.5);
 }
