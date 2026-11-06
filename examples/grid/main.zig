@@ -1,6 +1,9 @@
 //! The grid with ten thousand files. Click a column's title to sort by
-//! it, drag the edge between two titles to resize a column, narrow the
-//! window to hide the kind and modified columns, switch on stripes, or
+//! it, drag it to move the column, drag the edge between two titles to
+//! resize a column or double-click it to fit, rest on a cut-off name to
+//! read it whole, narrow the window to hide the kind and modified columns
+//! or, with "Sideways", to scroll them past the names, draw lines between
+//! the rows and columns, switch on stripes, or
 //! show only the five largest files. Search to filter them. Click a row
 //! to select it, move the selection with the arrow keys, Page Up and Page
 //! Down, Home and End, and open it with Enter or a double click. Cmd-click
@@ -34,6 +37,14 @@ const columns = [_]controls.GridColumn{
     .{ .title = "Size", .width = 90, .alignment = .end, .sortable = true, .descending_first = true },
 };
 
+/// The same, none hiding in a narrow window, for scrolling sideways.
+const all_columns = blk: {
+    var all = columns;
+    for (&all) |*col| col.min_window_width = 0;
+    all[0].min_width = 160;
+    break :blk all;
+};
+
 /// With "Load as it scrolls", rows arrive this many at a time, this long
 /// after the grid shows them, as from a server.
 const page_rows = 50;
@@ -50,6 +61,9 @@ const Browser = struct {
     search: ui.TextBuffer = .{},
     sort: controls.GridSort = .{},
     widths: [columns.len]f32 = @splat(0),
+    order: [columns.len]usize = .{ 0, 1, 2, 3 },
+    sideways: bool = false,
+    lines: bool = false,
     striped: bool = false,
     show_kind: bool = true,
     loading: bool = false,
@@ -76,7 +90,11 @@ const Browser = struct {
             defer bar.end();
             ui.textf(c, .{ .size = 16, .weight = .semibold }, "{d} files", .{b.shown_len});
             ui.spacer(c);
-            if (ui.textField(c, &b.search, .{ .placeholder = "Search", .width = .{ .px = 200 } }).changed) {
+            if (ui.segmented(c, &.{ "All", "Largest five" }, &b.view_mode) and b.view_mode == 1) {
+                b.sort = .{ .column = 3, .descending = true };
+                b.resort();
+            }
+            if (ui.textField(c, &b.search, .{ .placeholder = "Search", .width = .{ .px = 160 } }).changed) {
                 b.keepMarks();
                 b.refilter(b.selectedName());
             }
@@ -87,15 +105,12 @@ const Browser = struct {
             _ = ui.toggle(c, "Striped", &b.striped);
             _ = ui.toggle(c, "Kind", &b.show_kind);
             if (ui.toggle(c, "Load as it scrolls", &b.loading)) b.arrives = @splat(0);
-            ui.spacer(c);
-            if (ui.segmented(c, &.{ "All", "Largest five" }, &b.view_mode) and b.view_mode == 1) {
-                b.sort = .{ .column = 3, .descending = true };
-                b.resort();
-            }
+            _ = ui.toggle(c, "Sideways", &b.sideways);
+            _ = ui.toggle(c, "Lines", &b.lines);
         }
 
         const hidden = [columns.len]bool{ false, !b.show_kind, false, false };
-        var g = controls.grid(c, &columns, .{
+        var g = controls.grid(c, if (b.sideways) &all_columns else &columns, .{
             .count = b.shown_len,
             .sort = &b.sort,
             .striped = b.striped,
@@ -104,6 +119,11 @@ const Browser = struct {
             .selected = &b.selected,
             .multi = b.marked[0..b.shown_len],
             .widths = &b.widths,
+            .order = &b.order,
+            .scroll_x = b.sideways,
+            .freeze_first = b.sideways,
+            .row_lines = b.lines,
+            .column_lines = b.lines,
             .scroll_to = b.scroll_to,
             .empty = "No files match the search.",
         });
@@ -131,8 +151,8 @@ const Browser = struct {
             }
             _ = g.cellAt(0);
             ui.text(c, f.name, .{ .truncate = .ellipsis });
-            if (g.cellAt(1)) ui.text(c, f.kind, .{ .color = t.muted });
-            if (g.cellAt(2)) ui.text(c, ago(c, f.age), .{ .color = t.muted });
+            if (g.cellAt(1)) ui.text(c, f.kind, .{ .color = t.muted, .truncate = .ellipsis });
+            if (g.cellAt(2)) ui.text(c, ago(c, f.age), .{ .color = t.muted, .truncate = .ellipsis });
             _ = g.cellAt(3);
             ui.text(c, size(c, f.size), .{ .mono = true });
         }

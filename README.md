@@ -76,7 +76,10 @@ g.end();
 ```
 
 - **Columns** are fixed-width (`width`) or share the room the fixed ones leave (`width = null`), by their `flex` and never narrower than their `min_width`. Their contents sit at the `start` or the `end`, where numbers line up.
-- **Resizing:** with `widths`, an array the caller keeps (one width a column, starting at 0), dragging the edge between two titles resizes the column on its left if it has a width, else the one on its right.
+- **Resizing:** with `widths`, an array the caller keeps (one width a column, starting at 0), dragging the edge between two titles resizes the column on its left if it has a width, else the one on its right, and a double click fits that column to its widest title or cell in view.
+- **Reordering:** with `order`, an array the caller keeps (the column numbers in the order they show), dragging a title moves its column. Cells keep their column numbers, so the code that builds them doesn't change.
+- **Scrolling sideways:** with `scroll_x`, columns that don't fit keep their widths and scroll sideways, with the wheel's or trackpad's sideways scroll or the bar under the rows; `freeze_first` keeps the first column in place, as a spreadsheet's names are.
+- **Tooltips:** a cell whose text is cut off shows all of it when the pointer rests on it (`tooltips`, on by default).
 - **Sorting:** clicking a `sortable` column's title sorts by it, and clicking again reverses it. `g.sorted` says the sort changed this frame, so the caller sorts its rows before building them.
 - **Selection:** with `selected`, a click selects a row and it is drawn highlighted. While nothing else has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is a row index, so a caller that sorts finds its row again.
 - **Several rows:** with `multi` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
@@ -89,13 +92,14 @@ g.end();
 - **A set number of rows:** `rows = 5` shows at most five, without scrolling, and takes only their height.
 - **Tables to read:** `clickable = false` makes rows that take no clicks, don't light up and show no pointing hand, for a summary or comparison; a screen reader still hears them as rows.
 - **Hiding columns:** a column with `min_window_width` hides in narrower windows, and `hidden` hides columns on the caller's say. Build cells with `g.cellAt(i)`, which returns false for a hidden column, so columns keep their numbers.
+- **Lines:** `row_lines` draws a line between rows, which then meet it square, and `column_lines` one down the middle of each gap between columns, through the titles. With `freeze_first`, the frozen column has a line at its edge while the others are scrolled.
 - **Look:** `striped`, `hover`, `padding`, `rule`, `row_height` and the gaps, `title` (`GridTitleStyle`) for the column titles, and `scale` for apps that zoom their layout with `c.setZoom`. Colors come from the theme unless set.
 
 See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
 ## Example
 
-[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, resize columns, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, type a name to jump to it, and have rows arrive a page at a time as they scroll into view.
+[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, move, resize and fit columns, scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, type a name to jump to it, and have rows arrive a page at a time as they scroll into view.
 
 ```sh
 zig build example

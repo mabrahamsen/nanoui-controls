@@ -25,10 +25,27 @@ const Files = struct {
     title: controls.GridTitleStyle = .{},
     rule: bool = true,
     count: usize = files.len,
+    order: [3]usize = .{ 0, 1, 2 },
+    /// Wide columns that scroll sideways past a frozen name.
+    wide: bool = false,
+    /// A Kind column too narrow for its words.
+    narrow: bool = false,
+    /// Lines between the rows and the columns.
+    lines: bool = false,
 
     const columns = [_]controls.GridColumn{
         .{ .title = "Name", .sortable = true },
         .{ .title = "Kind", .width = 70, .sortable = true },
+        .{ .title = "Size", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
+    };
+    const wide_columns = [_]controls.GridColumn{
+        .{ .title = "Name", .width = 110, .sortable = true },
+        .{ .title = "Kind", .width = 140, .sortable = true },
+        .{ .title = "Size", .width = 140, .alignment = .end, .sortable = true, .descending_first = true },
+    };
+    const narrow_columns = [_]controls.GridColumn{
+        .{ .title = "Name", .sortable = true },
+        .{ .title = "Kind", .width = 36, .sortable = true },
         .{ .title = "Size", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
     };
     const files = [_]struct { []const u8, []const u8, []const u8 }{
@@ -42,7 +59,8 @@ const Files = struct {
     fn view(f: *Files, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull().p(12);
         defer root.end();
-        var g = controls.grid(c, &columns, .{
+        const cols: []const controls.GridColumn = if (f.wide) &wide_columns else if (f.narrow) &narrow_columns else &columns;
+        var g = controls.grid(c, cols, .{
             .count = f.count,
             .empty = "No files here.",
             .sort = &f.sort,
@@ -52,11 +70,16 @@ const Files = struct {
             .rows = f.rows,
             .title = f.title,
             .rule = f.rule,
+            .order = &f.order,
+            .scroll_x = f.wide,
+            .freeze_first = f.wide,
+            .row_lines = f.lines,
+            .column_lines = f.lines,
         });
         while (g.next()) |row| {
             const file = files[row.index];
             if (g.cellAt(0)) ui.text(c, file[0], .{});
-            if (g.cellAt(1)) ui.text(c, file[1], .{ .color = kit.tokens(c).muted });
+            if (g.cellAt(1)) ui.text(c, file[1], .{ .color = kit.tokens(c).muted, .truncate = .ellipsis });
             if (g.cellAt(2)) ui.text(c, file[2], .{ .mono = true });
         }
         g.end();
@@ -67,11 +90,26 @@ var fonts_registered = false;
 
 /// Draws `f` in a window 360 by 240 and compares it with `name`'s PNG.
 fn expectSnapshot(name: []const u8, f: *Files, dark: bool) !void {
-    return expectSnapshotAt(name, f, dark, null);
+    return expectSnapshotWith(name, f, .{ .dark = dark });
 }
 
 /// The same, with the pointer resting on the text `over`.
 fn expectSnapshotAt(name: []const u8, f: *Files, dark: bool, over: ?[]const u8) !void {
+    return expectSnapshotWith(name, f, .{ .dark = dark, .over = over });
+}
+
+const Setup = struct {
+    dark: bool = false,
+    /// The pointer rests on this text, or in this column's cell (by its
+    /// title) of this row (by its first cell's text).
+    over: ?[]const u8 = null,
+    cell: ?[2][]const u8 = null,
+    /// The columns scrolled sideways this far.
+    scroll_x: f32 = 0,
+};
+
+fn expectSnapshotWith(name: []const u8, f: *Files, setup: Setup) !void {
+    const dark = setup.dark;
     const gpa = std.testing.allocator;
     const io = std.testing.io;
     if (!fonts_registered) {
@@ -85,9 +123,19 @@ fn expectSnapshotAt(name: []const u8, f: *Files, dark: bool, over: ?[]const u8) 
     try t.init(gpa, .init(f, Files.view), .{ .width = 360, .height = 240, .theme = theme });
     defer t.deinit();
     t.settle(1);
-    if (over) |text| {
+    if (setup.scroll_x != 0) {
+        t.hscroll(180, 120, -setup.scroll_x);
+        t.moveTo(-100, -100);
+        t.settle(1);
+    }
+    if (setup.over) |text| {
         const r = t.findText(text).?;
         t.moveTo(r.x + r.w / 2, r.y + r.h / 2);
+        t.settle(1);
+    }
+    if (setup.cell) |cell| {
+        const row = t.findText(cell[1]).?;
+        t.moveTo(t.findText(cell[0]).?.x + 6, row.y + row.h / 2);
         t.settle(1);
     }
     const pixels = try t.render(gpa);
@@ -186,6 +234,28 @@ test "the selected row keeps its color under the pointer, and another row lights
     var f: Files = .{};
     try expectSnapshotAt("grid-hover-selected", &f, false, "photo.png");
     try expectSnapshotAt("grid-hover", &f, false, "notes.txt");
+}
+
+test "columns in another order, their cells with them" {
+    var f: Files = .{ .order = .{ 2, 0, 1 } };
+    try expectSnapshot("grid-reordered", &f, false);
+}
+
+test "a cut-off cell's whole text over it" {
+    var f: Files = .{ .narrow = true, .selected = null };
+    // On photo.png's Kind, "Image", which 36 points cut off.
+    try expectSnapshotWith("grid-tooltip", &f, .{ .cell = .{ "Kind", "photo.png" } });
+}
+
+test "columns scrolled sideways past the name, which stays" {
+    var f: Files = .{ .wide = true };
+    try expectSnapshotWith("grid-scrolled", &f, .{ .scroll_x = 60 });
+}
+
+test "lines between the rows and the columns, light and dark" {
+    var f: Files = .{ .lines = true };
+    try expectSnapshot("grid-lines", &f, false);
+    try expectSnapshot("grid-lines-dark", &f, true);
 }
 
 test "an empty grid says so under its titles" {
