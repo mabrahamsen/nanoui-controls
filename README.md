@@ -60,11 +60,13 @@ const columns = [_]controls.GridColumn{
 
 // Kept by the caller, across frames.
 var sort: controls.GridSort = .{};
+var selected: ?usize = null;
 
 // In the frame:
-var g = controls.grid(c, &columns, .{ .count = files.len, .sort = &sort });
+var g = controls.grid(c, &columns, .{ .count = files.len, .sort = &sort, .selected = &selected });
 if (g.sorted) sortFiles(files, sort);
 while (g.next()) |row| {
+    if (row.opened) openFile(files[row.index]);
     g.cell();
     ui.text(c, files[row.index].name, .{});
     g.cell();
@@ -75,6 +77,7 @@ g.end();
 
 - **Columns** are fixed-width (`width`) or take the room the fixed ones leave (`width = null`, on one column). Their contents sit at the `start` or the `end`, where numbers line up.
 - **Sorting:** clicking a `sortable` column's title sorts by it, and clicking again reverses it. `g.sorted` says the sort changed this frame, so the caller sorts its rows before building them.
+- **Selection:** with `selected`, a click selects a row and it is drawn highlighted. While nothing else has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is a row index, so a caller that sorts finds its row again.
 - **Long lists** cost what a screenful does: only the rows in view are built. The grid fills the room left in its parent, which needs a bounded height.
 - **A set number of rows:** `rows = 5` shows at most five, without scrolling, and takes only their height.
 - **Hiding columns:** a column with `min_window_width` hides in narrower windows, and `hidden` hides columns on the caller's say. Build cells with `g.cellAt(i)`, which returns false for a hidden column, so columns keep their numbers.
@@ -84,7 +87,7 @@ See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
 ## Example
 
-[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, narrow the window to hide columns, switch on stripes, or show only the five largest files.
+[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, narrow the window to hide columns, switch on stripes, show only the five largest files, and select and open files with the mouse or the keyboard.
 
 ```sh
 zig build example
@@ -93,10 +96,11 @@ zig build example
 ## Building
 
 ```sh
-zig build           # build the example into zig-out/bin
-zig build test      # run the tests
-zig build docs      # build the API docs into zig-out/docs
-zig build example   # run the example
+zig build                  # build the example into zig-out/bin
+zig build test             # run the tests
+zig build test-snapshots   # compare the grid's drawings with tests/snapshots
+zig build docs             # build the API docs into zig-out/docs
+zig build example          # run the example
 ```
 
 ## Versioning
@@ -109,4 +113,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The DejaVu fonts in [`tests/fonts`](tests/fonts), which only the snapshot tests use, have [their own license](tests/fonts/LICENSE).

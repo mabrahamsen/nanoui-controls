@@ -1,6 +1,8 @@
 //! The grid with ten thousand files. Click a column's title to sort by
 //! it, narrow the window to hide the kind and modified columns, switch on
-//! stripes, or show only the five largest files.
+//! stripes, or show only the five largest files. Click a row to select
+//! it, move the selection with the arrow keys, Page Up and Page Down,
+//! Home and End, and open it with Enter or a double click.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const controls = @import("nanoui_controls");
@@ -29,7 +31,9 @@ const Browser = struct {
     show_kind: bool = true,
     /// 0 shows every file, 1 the five largest.
     view_mode: usize = 0,
-    selected: ?[]const u8 = null,
+    /// The selected row; sorting finds its file again.
+    selected: ?usize = null,
+    opened: ?[]const u8 = null,
 
     fn view(b: *Browser, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -44,7 +48,7 @@ const Browser = struct {
             _ = ui.toggle(c, "Kind", &b.show_kind);
             if (ui.segmented(c, &.{ "All", "Largest five" }, &b.view_mode) and b.view_mode == 1) {
                 b.sort = .{ .column = 3, .descending = true };
-                sortFiles(b.files, b.sort);
+                b.resort();
             }
         }
 
@@ -55,11 +59,12 @@ const Browser = struct {
             .striped = b.striped,
             .hidden = &hidden,
             .rows = if (b.view_mode == 1) 5 else null,
+            .selected = &b.selected,
         });
-        if (g.sorted) sortFiles(b.files, b.sort);
+        if (g.sorted) b.resort();
         while (g.next()) |row| {
             const f = b.files[row.index];
-            if (row.clicked) b.selected = f.name;
+            if (row.opened) b.opened = f.name;
             _ = g.cellAt(0);
             ui.text(c, f.name, .{ .truncate = .ellipsis });
             if (g.cellAt(1)) ui.text(c, f.kind, .{ .color = t.muted });
@@ -69,9 +74,21 @@ const Browser = struct {
         }
         g.end();
 
-        if (b.selected) |name| {
-            ui.textf(c, .{ .color = t.muted }, "Selected: {s}", .{name});
-        } else ui.text(c, "Click a row to select it.", .{ .color = t.muted });
+        if (b.opened) |name| {
+            ui.textf(c, .{ .color = t.muted }, "Opened {s}.", .{name});
+        } else if (b.selected) |i| {
+            ui.textf(c, .{ .color = t.muted }, "Selected {s}: Enter or a double click opens it.", .{b.files[i].name});
+        } else ui.text(c, "Click a row to select it, then move with the arrow keys.", .{ .color = t.muted });
+    }
+
+    /// Sorts the files as `sort` says, keeping the same file selected.
+    fn resort(b: *Browser) void {
+        const name = if (b.selected) |i| b.files[i].name else null;
+        sortFiles(b.files, b.sort);
+        const n = name orelse return;
+        b.selected = for (b.files, 0..) |f, i| {
+            if (f.name.ptr == n.ptr) break i;
+        } else null;
     }
 };
 

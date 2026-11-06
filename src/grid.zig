@@ -12,6 +12,11 @@
 //! keep their numbers: build their cells with `cellAt`, which skips a
 //! hidden one.
 //!
+//! Given `selected`, a click selects a row, and while nothing else has
+//! the keyboard Up and Down move the selection a row, Page Up and Page
+//! Down a view, and Home and End to the ends, scrolling it into view.
+//! Enter or a double click opens the row (`Row.opened`).
+//!
 //!     const columns = [_]controls.GridColumn{
 //!         .{ .title = "Name", .sortable = true },
 //!         .{ .title = "Size", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
@@ -72,6 +77,11 @@ pub const Options = struct {
     /// Columns the caller hides, one flag a column, on top of their
     /// `min_window_width`.
     hidden: ?[]const bool = null,
+    /// The selected row, kept by the caller, which clicks and keys
+    /// change; a row past `count` moves back to the last. It is a row's
+    /// index, so a caller that sorts finds its row again. Null: rows
+    /// don't select.
+    selected: ?*?usize = null,
     /// Multiplies the grid's lengths (widths, heights, gaps), for an app
     /// that zooms its layout along with `c.setZoom`, which zooms text.
     scale: f32 = 1,
@@ -98,13 +108,22 @@ pub const Row = struct {
     index: usize,
     clicked: bool,
     hovered: bool,
+    /// It is the selected row.
+    selected: bool = false,
+    /// Double-clicked, or Enter pressed while it is selected: open what
+    /// it shows.
+    opened: bool = false,
 };
 
 /// Opens the grid's box, which takes the room left in its parent, and
 /// draws the header: build the rows with `next` and `cell`, then `end`.
 pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
+    if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
     const t = kit.tokens(c);
     const k = opts.scale;
+    if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
+        s.* = if (opts.count > 0) opts.count - 1 else null;
+    };
     var box = ui.div(c).column().wFull();
     if (opts.rows == null) box = box.grow();
     var sorted = false;
@@ -139,13 +158,62 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     }
     if (opts.rule) ui.div(c).wFull().h(1).bg(t.border).end();
     var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .sorted = sorted };
+    const pitch = (opts.row_height + opts.gap) * k;
     if (opts.rows) |n| {
         g.last = @min(n, opts.count);
+        g.opened = useKeys(c, opts.selected, g.last, n);
         g.plain = ui.div(c).column().wFull().gap(opts.gap * k).pt(opts.gap * k);
     } else {
-        g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = opts.gap * k, .padding = .{ .top = opts.gap * k } });
+        // The list's scroll and height as the last frame left them, to
+        // page by a view and keep the selection in it.
+        const id = c.peekId(null);
+        const view_h = if (c.rects.get(id)) |r| r.h else c.size.h;
+        const before = if (opts.selected) |s| s.* else null;
+        g.opened = useKeys(c, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch))));
+        var scroll_to: ?f32 = null;
+        if (opts.selected) |s| if (s.*) |i| if (before != s.*) {
+            const offset = c.scroll.get(id) orelse 0;
+            const top = @as(f32, @floatFromInt(i)) * pitch;
+            const bottom = top + pitch + opts.gap * k;
+            if (top < offset) scroll_to = top else if (bottom > offset + view_h) scroll_to = bottom - view_h;
+        };
+        g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = opts.gap * k, .padding = .{ .top = opts.gap * k }, .scroll_to = scroll_to });
     }
     return g;
+}
+
+/// Moves the selection by the keys pressed this frame, while nothing else
+/// has the keyboard, among `count` rows of which `page` fit in a view.
+/// Returns the row Enter opens.
+fn useKeys(c: *ui.Context, selected: ?*?usize, count: usize, page: usize) ?usize {
+    const s = selected orelse return null;
+    if (c.focus != 0 or count == 0) return null;
+    const last = count - 1;
+    const i = s.*;
+    var to: ?usize = null;
+    var opened: ?usize = null;
+    if (c.shortcut(.{ .key = ui.Shortcut.down })) {
+        to = if (i) |n| @min(n + 1, last) else 0;
+    } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
+        to = if (i) |n| n -| 1 else 0;
+    } else if (c.shortcut(.{ .key = ui.Shortcut.enter })) {
+        opened = i;
+    } else if (c.input.key) |key| {
+        switch (key) {
+            .down => to = if (i) |n| @min(n + 1, last) else 0,
+            .up => to = if (i) |n| n -| 1 else 0,
+            .page_down => to = if (i) |n| @min(n + page, last) else @min(page, last),
+            .page_up => to = if (i) |n| n -| page else 0,
+            .home => to = 0,
+            .end => to = last,
+            .enter => opened = i,
+            else => return null,
+        }
+        c.input.key = null;
+        c.changed = true;
+    }
+    if (to) |n| s.* = n;
+    return opened;
 }
 
 /// Column `i` is shown: the caller doesn't hide it, and the window is
@@ -177,6 +245,8 @@ pub const Grid = struct {
     /// The header changed the sort this frame: sort the rows before
     /// building them.
     sorted: bool,
+    /// The row Enter opened this frame.
+    opened: ?usize = null,
     /// The row and the cell being built, ended by the next or by `end`.
     row: ?ui.Div = null,
     cell_box: ?ui.Div = null,
@@ -193,19 +263,26 @@ pub const Grid = struct {
         const t = kit.tokens(g.c);
         const k = g.opts.scale;
         var r = ui.div(g.c).row().wFull().h(g.opts.row_height * k).itemsCenter().gap(g.opts.column_gap * k).px(g.opts.padding * k).rounded(t.radius - 2);
-        if (g.opts.striped and i % 2 == 1) r = r.bg(t.surface.alpha(0.35));
-        if (g.opts.hover) r = r.hover(t.surface_hover.alpha(0.6));
         const it = r.interaction();
-        if (it.clicked) g.c.changed = true;
+        if (it.clicked) {
+            if (g.opts.selected) |s| s.* = i;
+            g.c.changed = true;
+        }
+        const selected = if (g.opts.selected) |s| s.* == i else false;
+        if (selected) {
+            r = r.bg(t.primary.alpha(0.18));
+        } else if (g.opts.striped and i % 2 == 1) r = r.bg(t.surface.alpha(0.35));
+        if (g.opts.hover) r = r.hover(t.surface_hover.alpha(0.6));
         g.row = r;
         g.column = 0;
-        return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered };
+        return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = it.double_clicked or g.opened == i };
     }
 
     /// Opens the row's next cell, ending the one before: what is drawn
-    /// until the next `cell` goes in it. When columns hide, use `cellAt`.
+    /// until the next `cell` goes in it. When columns hide, use `cellAt`,
+    /// as this panics on a hidden one.
     pub fn cell(g: *Grid) void {
-        std.debug.assert(g.cellAt(g.column));
+        if (!g.cellAt(g.column)) @panic("grid: `cell` opened a hidden column; use `cellAt`");
     }
 
     /// Opens column `i`'s cell, ending the one before, and returns true;
@@ -244,214 +321,6 @@ pub const Grid = struct {
     }
 };
 
-/// A grid of fruit for the tests: a name, a sortable count lined up at
-/// the end, and a column that doesn't sort.
-const Fruit = struct {
-    sort: Sort = .{},
-    sorted: usize = 0,
-    clicked: ?usize = null,
-    built: usize = 0,
-    count: usize = 3,
-
-    const columns = [_]Column{
-        .{ .title = "Fruit", .sortable = true },
-        .{ .title = "Count", .width = 80, .alignment = .end, .sortable = true, .descending_first = true },
-        .{ .title = "Note", .width = 120 },
-    };
-    const names = [_][]const u8{ "apple", "banana", "cherry" };
-
-    fn view(f: *Fruit, c: *ui.Context) void {
-        var g = grid(c, &columns, .{ .count = f.count, .sort = &f.sort });
-        if (g.sorted) f.sorted += 1;
-        while (g.next()) |row| {
-            f.built += 1;
-            if (row.clicked) f.clicked = row.index;
-            g.cell();
-            ui.text(c, if (row.index < names.len) names[row.index] else "more", .{});
-            g.cell();
-            ui.text(c, c.print("{d}", .{row.index * 100}), .{});
-            g.cell();
-            ui.text(c, "ripe", .{});
-        }
-        g.end();
-    }
-};
-
-test "a grid's titles sort: a new column its own way first, again the other way" {
-    var f: Fruit = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&f, Fruit.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    // Largest first, as the column asks.
-    try t.clickText("Count");
-    t.settle(1);
-    try std.testing.expectEqual(Sort{ .column = 1, .descending = true }, f.sort);
-    try t.clickText("Count");
-    t.settle(1);
-    try std.testing.expectEqual(Sort{ .column = 1, .descending = false }, f.sort);
-    try t.clickText("Fruit");
-    t.settle(1);
-    try std.testing.expectEqual(Sort{ .column = 0, .descending = false }, f.sort);
-    // A column that doesn't sort ignores clicks.
-    try t.clickText("Note");
-    t.settle(1);
-    try std.testing.expectEqual(Sort{ .column = 0, .descending = false }, f.sort);
-    try std.testing.expectEqual(@as(usize, 3), f.sorted);
-}
-
-test "a grid's cells line up under their titles, and its rows report clicks" {
-    var f: Fruit = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&f, Fruit.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    const fruit = t.findText("Fruit").?;
-    const apple = t.findText("apple").?;
-    try std.testing.expectApproxEqAbs(fruit.x, apple.x, 0.5);
-    // Lined up at the end: the right edges meet.
-    const count = t.findText("Count").?;
-    const hundred = t.findText("100").?;
-    try std.testing.expectApproxEqAbs(count.x + count.w, hundred.x + hundred.w, 0.5);
-    try std.testing.expect(hundred.y > count.y);
-    const note = t.findText("Note").?;
-    try std.testing.expectApproxEqAbs(note.x, t.findText("ripe").?.x, 0.5);
-    try t.clickText("banana");
-    t.settle(1);
-    try std.testing.expectEqual(@as(?usize, 1), f.clicked);
-}
-
-test "a long grid builds only the rows in view" {
-    var f: Fruit = .{ .count = 10_000 };
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&f, Fruit.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    f.built = 0;
-    t.frame();
-    try std.testing.expect(f.built > 0 and f.built < 30);
-}
-
-/// A grid of fruit whose columns hide, in a window `Tester` sizes.
-const Basket = struct {
-    sort: Sort = .{},
-    hidden: [3]bool = .{ false, false, false },
-    rows: ?usize = null,
-    scale: f32 = 1,
-    count: usize = 3,
-    built: usize = 0,
-    hidden_cells: usize = 0,
-
-    const columns = [_]Column{
-        .{ .title = "Fruit", .sortable = true },
-        .{ .title = "Count", .width = 80, .alignment = .end, .sortable = true, .min_window_width = 500 },
-        .{ .title = "Note", .width = 120 },
-    };
-
-    fn view(b: *Basket, c: *ui.Context) void {
-        const root = ui.div(c).column().sizeFull();
-        defer root.end();
-        var g = grid(c, &columns, .{ .count = b.count, .sort = &b.sort, .hidden = &b.hidden, .rows = b.rows, .scale = b.scale });
-        while (g.next()) |row| {
-            b.built += 1;
-            if (g.cellAt(0)) ui.text(c, c.print("fruit {d}", .{row.index}), .{});
-            if (g.cellAt(1)) ui.text(c, c.print("{d}", .{row.index * 100}), .{}) else b.hidden_cells += 1;
-            if (g.cellAt(2)) ui.text(c, "ripe", .{}) else b.hidden_cells += 1;
-        }
-        g.end();
-        ui.text(c, "below", .{});
-    }
-};
-
-test "a grid's columns hide in narrow windows and when the caller hides them" {
-    var b: Basket = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&b, Basket.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    // Narrower than Count's 500: its title and cells are gone.
-    try std.testing.expect(t.findText("Count") == null);
-    try std.testing.expect(t.findText("100") == null);
-    try std.testing.expect(b.hidden_cells > 0);
-    try std.testing.expectApproxEqAbs(t.findText("Note").?.x, t.findText("ripe").?.x, 0.5);
-    b.hidden[2] = true;
-    t.settle(1);
-    try std.testing.expect(t.findText("Note") == null);
-    try std.testing.expect(t.findText("ripe") == null);
-    try std.testing.expect(t.findText("fruit 0") != null);
-}
-
-test "a grid's columns show in wide windows, keeping their numbers" {
-    var b: Basket = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&b, Basket.view), .{ .width = 600, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    const count = t.findText("Count").?;
-    const hundred = t.findText("100").?;
-    try std.testing.expectApproxEqAbs(count.x + count.w, hundred.x + hundred.w, 0.5);
-    try std.testing.expectEqual(@as(usize, 0), b.hidden_cells);
-    try t.clickText("Count");
-    t.settle(1);
-    try std.testing.expectEqual(@as(usize, 1), b.sort.column);
-}
-
-test "a grid of a few rows builds that many, takes their height and doesn't fill the room" {
-    var b: Basket = .{ .rows = 2, .count = 100 };
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&b, Basket.view), .{ .width = 400, .height = 600 });
-    defer t.deinit();
-    t.settle(1);
-    try std.testing.expect(t.findText("fruit 1") != null);
-    try std.testing.expect(t.findText("fruit 2") == null);
-    b.built = 0;
-    t.frame();
-    try std.testing.expectEqual(@as(usize, 2), b.built);
-    // What follows sits under the two rows, not at the bottom of the window.
-    const below = t.findText("below").?;
-    const last = t.findText("fruit 1").?;
-    try std.testing.expect(below.y > last.y and below.y < last.y + 40);
-}
-
-test "a grid's lengths follow its scale" {
-    var b: Basket = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&b, Basket.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    const note1 = t.findText("Note").?.x;
-    const row1 = t.findText("fruit 1").?.y - t.findText("fruit 0").?.y;
-    b.scale = 2;
-    // 800 wide at scale 2: as wide as 400 is at 1, so Count stays hidden.
-    t.resize(800, 600);
-    t.settle(1);
-    try std.testing.expect(t.findText("Count") == null);
-    try std.testing.expectApproxEqAbs(note1 * 2, t.findText("Note").?.x, 1);
-    try std.testing.expectApproxEqAbs(row1 * 2, t.findText("fruit 1").?.y - t.findText("fruit 0").?.y, 1);
-}
-
-test "a long name in the column that takes the room left keeps the others in line" {
-    const Long = struct {
-        fn view(_: *@This(), c: *ui.Context) void {
-            var g = grid(c, &Fruit.columns, .{ .count = 1 });
-            while (g.next()) |_| {
-                g.cell();
-                ui.text(c, "a name far too long for the room the fixed columns leave it, and then some", .{ .truncate = .ellipsis });
-                g.cell();
-                ui.text(c, "100", .{});
-                g.cell();
-                ui.text(c, "ripe", .{});
-            }
-            g.end();
-        }
-    };
-    var l: Long = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&l, Long.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    try std.testing.expectApproxEqAbs(t.findText("Note").?.x, t.findText("ripe").?.x, 0.5);
-    const count = t.findText("Count").?;
-    const hundred = t.findText("100").?;
-    try std.testing.expectApproxEqAbs(count.x + count.w, hundred.x + hundred.w, 0.5);
+test {
+    _ = @import("grid_tests.zig");
 }

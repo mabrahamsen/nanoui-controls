@@ -1,6 +1,8 @@
-# Checks the formatting, runs the tests, and builds the docs and the
-# example on macOS, Linux and Windows on every push to main and every
-# pull request.
+# Checks the formatting, runs the tests in Debug and ReleaseSafe, and
+# builds the docs and the example on macOS, Linux and Windows on every
+# push to main and every pull request. On macOS it also compares the
+# grid's drawings with tests/snapshots, keeping the ones that differ, and
+# draws the example.
 name: CI
 
 on:
@@ -23,7 +25,20 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.1
-      - run: zig fmt --check build.zig build.zig.zon src examples
+      - run: zig fmt --check build.zig build.zig.zon src examples tests
       - run: zig build test --summary all
+      - run: zig build test -Doptimize=ReleaseSafe --summary all
       - run: zig build docs
       - run: zig build
+      - name: The snapshot tests, and the example drawn
+        if: runner.os == 'macOS'
+        run: |
+          zig build test-snapshots --summary all
+          zig-out/bin/grid-example --nanoui-snapshot=zig-out/example.png
+      - name: Keep the drawings that differ
+        if: failure() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots
+          path: zig-out/snapshots
+          if-no-files-found: ignore

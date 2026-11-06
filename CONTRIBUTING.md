@@ -17,8 +17,19 @@ Controls follow the conventions of `nanoui.kit`, so any of them could move into 
 - **The caller keeps the state:** the control takes a pointer to it, such as a sort or a selection, and doesn't own data.
 - **Styled from the theme** through `kit.tokens(c)`, never fixed colors, so it fits light, dark and each app's palette.
 - **nanoui's public API only:** `nanoui.ui` and `nanoui.kit`, nothing from the app.
-- **Tested next to its code** with `ui.Tester`.
+- **Tested next to its code** with `ui.Tester`, in `src/<control>_tests.zig` when the tests would make the file long. Files stay under 600 lines.
+- **Drawn in a snapshot test** (`tests/snapshots.zig`), in light and dark, so a change to how it looks shows up in review.
 - **Documented:** doc comments on every public declaration, and a row in the README's table of controls.
+
+## Snapshot tests
+
+`zig build test-snapshots` draws the controls with nanoui's own text and CPU renderer, in the DejaVu fonts in `tests/fonts`, and compares the drawings with the PNGs in `tests/snapshots`. A drawing that differs is written to `zig-out/snapshots`, and CI keeps those as an artifact of the run.
+
+When a control is meant to look different, write the snapshots anew and commit them with the change, so the review shows the new drawings:
+
+```sh
+zig build test-snapshots -Dupdate-snapshots
+```
 
 ## Releasing
 
