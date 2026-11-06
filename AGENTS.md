@@ -7,16 +7,19 @@ nanoui-controls is a Zig library of controls for [nanoui](https://github.com/jus
 Requires Zig 0.17.1 or later.
 
 ```sh
-zig fmt build.zig build.zig.zon src examples   # format
-zig build test                                 # run the tests; must pass before every commit
-zig build docs                                 # build the API docs into zig-out/docs
-zig build example                              # run the example app
+zig fmt build.zig build.zig.zon src examples tests   # format
+zig build test                                       # run the tests; must pass before every commit
+zig build test-snapshots                             # compare drawings with tests/snapshots
+zig build test-snapshots -Dupdate-snapshots          # write them anew, when a look changes on purpose
+zig build docs                                       # build the API docs into zig-out/docs
+zig build example                                    # run the example app
 ```
 
 ## Layout
 
 - `src/controls.zig`: the module root, which re-exports each control.
-- `src/<control>.zig`: one file per control, with its tests at the bottom.
+- `src/<control>.zig`: one file per control, with its tests at the bottom or in `src/<control>_tests.zig`.
+- `tests/snapshots.zig`, `tests/snapshots/*.png`, `tests/fonts`: the snapshot tests, their drawings and the fonts they draw with.
 - `examples/grid/main.zig`: the example app.
 - `build.zig.zon`: the version and the pinned nanoui release.
 - `.github/workflows/ci.yml`: formatting, tests, docs and the example on macOS, Linux and Windows.
@@ -27,4 +30,5 @@ zig build example                              # run the example app
 - Follow the control conventions in CONTRIBUTING.md: a call in a frame, state kept by the caller, colors from `kit.tokens(c)`, nanoui's public API only, tests with `ui.Tester` in the same file.
 - Match the surrounding code's style: doc comments say what a thing is or does, in plain sentences.
 - A new or changed control updates the README (its table and section) and `CHANGELOG.md`.
+- A change to how a control looks updates its snapshots (`-Dupdate-snapshots`); look at the new PNGs before committing them.
 - Branches are named `dev/<issue-number>-<description>`, and commits reference the issue.

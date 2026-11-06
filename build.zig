@@ -21,6 +21,33 @@ pub fn build(b: *std.Build) void {
     const tests = b.addTest(.{ .root_module = controls });
     b.step("test", "Run the controls' tests").dependOn(&b.addRunArtifact(tests).step);
 
+    // The snapshot tests draw with nanoui's own text and CPU renderer, so
+    // a drawing is the same on any machine (tests/snapshots.zig).
+    const update = b.option(bool, "update-snapshots", "Write the snapshot tests' PNGs instead of comparing them") orelse false;
+    const portable = b.dependency("nanoui", .{ .target = target, .optimize = optimize, .portable = true }).module("nanoui");
+    const snapshot_options = b.addOptions();
+    snapshot_options.addOption(bool, "update", update);
+    const snapshots = b.addTest(.{ .root_module = b.createModule(.{
+        .root_source_file = b.path("tests/snapshots.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "nanoui", .module = portable },
+            .{ .name = "nanoui_controls", .module = b.createModule(.{
+                .root_source_file = b.path("src/controls.zig"),
+                .target = target,
+                .optimize = optimize,
+                .imports = &.{.{ .name = "nanoui", .module = portable }},
+            }) },
+        },
+    }) });
+    snapshots.root_module.addOptions("snapshot_options", snapshot_options);
+    const run_snapshots = b.addRunArtifact(snapshots);
+    run_snapshots.setCwd(b.path("."));
+    // The PNGs are read at run time: a changed one runs the tests again.
+    run_snapshots.has_side_effects = true;
+    b.step("test-snapshots", "Compare the grid's drawings with tests/snapshots").dependOn(&run_snapshots.step);
+
     const docs = b.addObject(.{ .name = "nanoui_controls", .root_module = controls });
     const install_docs = b.addInstallDirectory(.{
         .source_dir = docs.getEmittedDocs(),
