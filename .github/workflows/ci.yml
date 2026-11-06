@@ -1,5 +1,6 @@
-# Checks the formatting and runs the tests on macOS, Linux and Windows on
-# every push to main and every pull request.
+# Checks the formatting, runs the tests, and builds the docs and the
+# example on macOS, Linux and Windows on every push to main and every
+# pull request.
 name: CI
 
 on:
@@ -22,6 +23,7 @@ jobs:
       - uses: mlugg/setup-zig@v2
         with:
           version: 0.17.1
-      - run: zig fmt --check build.zig build.zig.zon src
+      - run: zig fmt --check build.zig build.zig.zon src examples
       - run: zig build test --summary all
       - run: zig build docs
+      - run: zig build
