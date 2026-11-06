@@ -6,6 +6,7 @@
 2. Branch from `main` as `dev/<issue-number>-<description>`, e.g. `dev/1-initial-import`.
 3. Run `zig fmt` and `zig build test` before committing.
 4. Open a pull request that references the issue (`Closes #1`). CI must pass on macOS, Linux and Windows.
+5. Pull requests are squash-merged: the pull request's title and description become the commit on `main`, and the branch is deleted.
 
 ## Writing a control
 
@@ -21,9 +22,15 @@ Controls follow the conventions of `nanoui.kit`, so any of them could move into 
 
 ## Releasing
 
-1. Set `.version` in `build.zig.zon`. While it is 0.x, bump the minor version for a change to the API and the patch version for a fix.
-2. Add the release to `CHANGELOG.md`, and update the version in the README's installation command.
-3. Tag the commit on `main` as `vX.Y.Z` and push the tag.
+1. In a pull request, set `.version` in `build.zig.zon`. While it is 0.x, bump the minor version for a change to the API and the patch version for a fix.
+2. In the same pull request, rename the changelog's "Unreleased" section to the version, and update the version in the README's installation command.
+3. After it is merged, tag `main` and push the tag:
+
+   ```sh
+   git tag -a vX.Y.Z -m "nanoui-controls X.Y.Z" && git push origin vX.Y.Z
+   ```
+
+The release workflow then checks that the tag is the version in `build.zig.zon` and is on `main`, runs the tests, and creates the GitHub release with the version's changelog section as its notes. A tag with a hyphen (`v0.2.0-rc.1`) makes a prerelease, with notes from its own section or else from `0.2.0`'s. Check the notes before tagging with `tools/release-notes.sh vX.Y.Z`.
 
 ## Upgrading nanoui
 
