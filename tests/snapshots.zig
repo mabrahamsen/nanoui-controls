@@ -106,9 +106,15 @@ const Setup = struct {
     cell: ?[2][]const u8 = null,
     /// The columns scrolled sideways this far.
     scroll_x: f32 = 0,
+    height: f32 = 240,
 };
 
 fn expectSnapshotWith(name: []const u8, f: *Files, setup: Setup) !void {
+    return expectView(name, .init(f, Files.view), setup);
+}
+
+/// Draws `view` as `setup` says and compares it with `name`'s PNG.
+fn expectView(name: []const u8, view: ui.View, setup: Setup) !void {
     const dark = setup.dark;
     const gpa = std.testing.allocator;
     const io = std.testing.io;
@@ -120,7 +126,7 @@ fn expectSnapshotWith(name: []const u8, f: *Files, setup: Setup) !void {
     theme.font = "DejaVu Sans";
     theme.mono_font = "DejaVu Sans Mono";
     var t: ui.Tester = undefined;
-    try t.init(gpa, .init(f, Files.view), .{ .width = 360, .height = 240, .theme = theme });
+    try t.init(gpa, view, .{ .width = 360, .height = setup.height, .theme = theme });
     defer t.deinit();
     t.settle(1);
     if (setup.scroll_x != 0) {
@@ -256,6 +262,22 @@ test "lines between the rows and the columns, light and dark" {
     var f: Files = .{ .lines = true };
     try expectSnapshot("grid-lines", &f, false);
     try expectSnapshot("grid-lines-dark", &f, true);
+}
+
+/// A pager of twenty pages, on the tenth.
+const Pages = struct {
+    page: usize = 9,
+    fn view(p: *Pages, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(12);
+        defer root.end();
+        _ = controls.pager(c, &p.page, 20, .{});
+    }
+};
+
+test "a pager, light and dark" {
+    var p: Pages = .{};
+    try expectView("pager", .init(&p, Pages.view), .{ .height = 60 });
+    try expectView("pager-dark", .init(&p, Pages.view), .{ .height = 60, .dark = true });
 }
 
 test "an empty grid says so under its titles" {

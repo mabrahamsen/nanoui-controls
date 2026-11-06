@@ -18,7 +18,7 @@ zig build example                                    # run the example app
 ## Layout
 
 - `src/controls.zig`: the module root, which re-exports each control.
-- `src/<control>.zig`: one file per control, with its tests at the bottom or in `src/<control>_tests.zig`.
+- `src/<control>.zig`: one file per control (`grid.zig`, `pager.zig`), with its tests at the bottom or in `src/<control>_tests.zig`; the grid's parts are in `src/grid_*.zig`.
 - `tests/snapshots.zig`, `tests/snapshots/*.png`, `tests/fonts`: the snapshot tests, their drawings and the fonts they draw with.
 - `examples/grid/main.zig`: the example app.
 - `build.zig.zon`: the version and the pinned nanoui release.

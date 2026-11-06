@@ -144,6 +144,12 @@ pub const Options = struct {
     freeze_first: bool = false,
     /// A cell whose text is cut off shows all of it on hover.
     tooltips: bool = true,
+    /// A row held and moved a few points starts a drag out of the grid
+    /// (`Row.drag_started`), to which the caller gives what it carries
+    /// with `dragOut`. The row is selected first, unless it is already,
+    /// so the drag carries the selection. nanoui drags text out on macOS
+    /// so far.
+    drag_rows: bool = false,
     /// Scrolls the grid in this frame so this row is in view.
     scroll_to: ?usize = null,
     /// Shown under the titles when there are no rows.
@@ -183,6 +189,9 @@ pub const Row = struct {
     /// menu. It selects the row, unless it is selected already, so the
     /// menu acts on the selection.
     secondary_clicked: bool = false,
+    /// It was held and moved far enough to drag: give `dragOut` what the
+    /// drag carries, in this frame.
+    drag_started: bool = false,
 };
 
 /// Opens the grid's box, which takes the room left in its parent, and
@@ -213,10 +222,11 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     if (opts.rows == null) box = box.grow();
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;
+    const press: Press = if (c.input.down) lay_mod.state(c, Press).* else .{};
     const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
     const head = header(c, columns, opts, lay);
     if (opts.rule) ui.div(c).wFull().h(1).bg(t.border).end();
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .sorted = head.sorted, .fit = head.fit, .fit_w = head.fit_w };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .fit = head.fit, .fit_w = head.fit_w };
     // Rows with lines between them meet the lines, without a gap.
     const row_gap = if (opts.row_lines) 0 else opts.gap;
     if (g.anchor) |a| if (a >= opts.count) {
@@ -269,9 +279,9 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
 /// columns are scrolled sideways.
 const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null, sx: f32 = 0 };
 
-/// The sideways scrollbar's thumb being dragged: where the pointer and
-/// the scroll started.
-const BarDrag = struct { on: bool = false, x: f32 = 0, sx: f32 = 0 };
+/// A row held down: which, where the pointer went down, and whether it
+/// has moved far enough to drag.
+const Press = struct { row: ?usize = null, x: f32 = 0, y: f32 = 0, dragging: bool = false };
 
 pub const Grid = struct {
     c: *ui.Context,
@@ -280,9 +290,10 @@ pub const Grid = struct {
     opts: Options,
     /// Where the columns go this frame.
     lay: Layout,
-    /// Where Shift-click and Shift with the keys select from, kept by
-    /// `end` for the next frame.
+    /// Where Shift-click and Shift with the keys select from, and the row
+    /// held down, kept by `end` for the next frame.
     anchor: ?usize,
+    press: Press,
     /// The rows in view this frame, from `first` up to but not including
     /// `last`: a caller that loads rows as they come into view fetches
     /// these, and the ones around them.
@@ -341,6 +352,7 @@ pub const Grid = struct {
             g.pick(i, if (in.shift) .extend else if (adds) .toggle else .only);
         }
         if (it.clicked or it.secondary_clicked) g.c.changed = true;
+        const drag_started = g.opts.drag_rows and it.pressed and g.pressDrags(i);
         const selected = g.isSelected(i);
         if (selected) {
             r = r.bg(t.primary.alpha(0.18));
@@ -352,7 +364,29 @@ pub const Grid = struct {
         g.row = r;
         g.row_hovered = it.hovered;
         g.column = 0;
-        return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = it.double_clicked or g.opened == i, .secondary_clicked = it.secondary_clicked };
+        return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = it.double_clicked or g.opened == i, .secondary_clicked = it.secondary_clicked, .drag_started = drag_started };
+    }
+
+    /// Follows row `i` held down: true once it has moved far enough to
+    /// drag, when the row is selected unless it is already.
+    fn pressDrags(g: *Grid, i: usize) bool {
+        const m = g.c.input.mouse;
+        if (g.press.row != i) {
+            g.press = .{ .row = i, .x = m.x, .y = m.y };
+            return false;
+        }
+        if (g.press.dragging or @abs(m.x - g.press.x) + @abs(m.y - g.press.y) < 4 * g.opts.scale) return false;
+        g.press.dragging = true;
+        if (!g.isSelected(i)) g.pick(i, .only);
+        g.c.changed = true;
+        return true;
+    }
+
+    /// Starts dragging `text` out of the grid, with the row being built as
+    /// what is seen dragged: in the frame `Row.drag_started` says so.
+    pub fn dragOut(g: *Grid, text: []const u8) void {
+        const r = g.row orelse return;
+        g.c.startDrag(r.index, text);
     }
 
     /// Selects row `i` alone, if rows select, and scrolls it into view:
@@ -455,36 +489,10 @@ pub const Grid = struct {
             widths[f] = @max(g.columns[f].min_width, @ceil(g.fit_w / g.opts.scale) + 1);
             g.c.changed = true;
         };
-        if (g.opts.scroll_x and g.lay.maxScroll() > 0) g.sideBar();
+        if (g.opts.scroll_x and g.lay.maxScroll() > 0) lay_mod.sideBar(g.c, g.opts, &g.lay);
         lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx };
+        lay_mod.state(g.c, Press).* = g.press;
         g.box.end();
-    }
-
-    /// A bar under the rows, its thumb as wide as the share of the columns
-    /// in view, dragged to scroll them sideways.
-    fn sideBar(g: *Grid) void {
-        const c = g.c;
-        const l = &g.lay;
-        const k = g.opts.scale;
-        const t = kit.tokens(c);
-        const track = ui.div(c).wFull().h(10 * k).pr(lay_mod.gutter(g.opts));
-        defer track.end();
-        const thumb_w = @max(24 * k, l.view * l.view / l.content);
-        const travel = @max(1, l.view - thumb_w);
-        const drag = lay_mod.state(c, BarDrag);
-        const thumb = ui.div(c).absolute().offset(l.sx / l.maxScroll() * travel, 2 * k).w(thumb_w).h(6 * k).rounded(3 * k).bg(t.muted.alpha(0.45)).control();
-        defer thumb.end();
-        const it = thumb.interaction();
-        if (!it.pressed) {
-            drag.on = false;
-            return;
-        }
-        if (!drag.on) {
-            drag.* = .{ .on = true, .x = c.input.mouse.x, .sx = l.sx };
-            return;
-        }
-        l.sx = std.math.clamp(drag.sx + (c.input.mouse.x - drag.x) / travel * l.maxScroll(), 0, l.maxScroll());
-        c.changed = true;
     }
 
     /// Ends the cell, measuring it for a fit, and showing its whole text on

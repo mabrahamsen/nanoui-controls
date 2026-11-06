@@ -16,6 +16,11 @@ pub const GridOptions = grid_mod.Options;
 pub const GridRow = grid_mod.Row;
 pub const GridTitleStyle = grid_mod.TitleStyle;
 
+const pager_mod = @import("pager.zig");
+pub const pager = pager_mod.pager;
+pub const PagerOptions = pager_mod.Options;
+
 test {
     _ = grid_mod;
+    _ = pager_mod;
 }

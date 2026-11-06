@@ -2,15 +2,17 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.3.0
 
-- Fixed: `grid` kept a pointer to its state, where Shift-selection starts, across the building of its rows. When widget state made meanwhile (a cell's, the column edges') grew nanoui's store of it, the grid wrote to freed memory: a crash in a debug build. It now copies its state in at the start of a frame and writes it back in `end`.
+- `pager`, a new control: numbered pages, "‹ 1 … 9 10 11 … 20 ›", with the page kept by the caller, clicked or moved with Left, Right, Home and End.
+- `grid` jumps to a row as you type: `typed` is the text typed while the grid has the keyboard (a pause of a second starts it afresh), the caller finds the first row it begins, and `jump` selects that row and scrolls to it.
 - `grid` columns fit their contents: a double click on the edge between two titles fits the column it resizes to its widest title or cell in view.
 - `grid` columns move: with `order`, kept by the caller, dragging a title moves its column; cells keep their column numbers.
 - `grid` columns scroll sideways: with `scroll_x`, columns that don't fit keep their widths and scroll with the wheel's or trackpad's sideways scroll or a bar under the rows, and `freeze_first` keeps the first in place.
 - `grid` draws lines: `row_lines` between rows, which then meet them square, and `column_lines` down the gaps between columns, through the titles. A frozen column has a line at its edge while the others are scrolled.
 - `grid` shows a cut-off cell's whole text in a tooltip when the pointer rests on it (`tooltips`, on by default).
-- `grid` jumps to a row as you type: `typed` is the text typed while the grid has the keyboard (a pause of a second starts it afresh), the caller finds the first row it begins, and `jump` selects that row and scrolls to it.
+- `grid` rows drag out: with `drag_rows`, a row held and moved reports `Row.drag_started`, and `dragOut` drags text out of the window for the selected rows. nanoui drags out on macOS so far.
+- Fixed: `grid` kept a pointer to its state, where Shift-selection starts, across the building of its rows. When widget state made meanwhile (a cell's, the column edges') grew nanoui's store of it, the grid wrote to freed memory: a crash in a debug build. It now copies its state in at the start of a frame and writes it back in `end`.
 
 ## 0.2.0
 

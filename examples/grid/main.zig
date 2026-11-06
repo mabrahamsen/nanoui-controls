@@ -9,7 +9,9 @@
 //! Down, Home and End, and open it with Enter or a double click. Cmd-click
 //! (Ctrl-click) and Shift select several, Cmd+A (Ctrl+A) all of them, and
 //! a right-click opens a menu to open, select or delete them. Typing a
-//! name's first letters jumps to it. "Load as it
+//! name's first letters jumps to it, and dragging files out of the window
+//! carries their names. "Pages" shows them a page at a time, with a
+//! pager under them. "Load as it
 //! scrolls" has rows arrive a page at a time, as from a server.
 const std = @import("std");
 const builtin = @import("builtin");
@@ -50,6 +52,8 @@ const all_columns = blk: {
 const page_rows = 50;
 const page_delay = 0.6;
 const file_count = 10_000;
+/// Files a page, with "Pages".
+const per_page = 10;
 
 const Browser = struct {
     files: []File,
@@ -69,8 +73,9 @@ const Browser = struct {
     loading: bool = false,
     /// When each page of rows arrives; 0 for one not asked for yet.
     arrives: [file_count / page_rows]f64 = @splat(0),
-    /// 0 shows every file, 1 the five largest.
+    /// 0 shows every file, 1 the five largest, 2 a page at a time.
     view_mode: usize = 0,
+    page: usize = 0,
     /// The selected row; sorting and searching find its file again.
     selected: ?usize = null,
     scroll_to: ?usize = null,
@@ -90,7 +95,7 @@ const Browser = struct {
             defer bar.end();
             ui.textf(c, .{ .size = 16, .weight = .semibold }, "{d} files", .{b.shown_len});
             ui.spacer(c);
-            if (ui.segmented(c, &.{ "All", "Largest five" }, &b.view_mode) and b.view_mode == 1) {
+            if (ui.segmented(c, &.{ "All", "Largest five", "Pages" }, &b.view_mode) and b.view_mode == 1) {
                 b.sort = .{ .column = 3, .descending = true };
                 b.resort();
             }
@@ -110,38 +115,55 @@ const Browser = struct {
         }
 
         const hidden = [columns.len]bool{ false, !b.show_kind, false, false };
+        // A page at a time: the grid's rows are the page's, from `base`,
+        // and so is the selection it is given.
+        const paged = b.view_mode == 2;
+        const pages = (b.shown_len + per_page - 1) / per_page;
+        if (b.page >= pages) b.page = pages -| 1;
+        const base = if (paged) b.page * per_page else 0;
+        const count = if (paged) @min(per_page, b.shown_len - base) else b.shown_len;
+        var selected: ?usize = if (b.selected) |s| (if (s >= base and s < base + count) s - base else null) else null;
+        const scroll_to: ?usize = if (b.scroll_to) |s| (if (s >= base and s < base + count) s - base else null) else null;
         var g = controls.grid(c, if (b.sideways) &all_columns else &columns, .{
-            .count = b.shown_len,
+            .count = count,
             .sort = &b.sort,
             .striped = b.striped,
             .hidden = &hidden,
-            .rows = if (b.view_mode == 1) 5 else null,
-            .selected = &b.selected,
-            .multi = b.marked[0..b.shown_len],
+            .rows = if (b.view_mode == 1) 5 else if (paged) per_page else null,
+            .selected = &selected,
+            .multi = b.marked[base..][0..count],
             .widths = &b.widths,
             .order = &b.order,
             .scroll_x = b.sideways,
             .freeze_first = b.sideways,
             .row_lines = b.lines,
             .column_lines = b.lines,
-            .scroll_to = b.scroll_to,
+            .scroll_to = scroll_to,
             .empty = "No files match the search.",
+            .drag_rows = true,
         });
         b.scroll_to = null;
         if (g.sorted) b.resort();
         // Typing jumps to the first file, in the grid's order, whose name
         // it begins.
         if (g.typed) |text| for (b.shown[0..b.shown_len], 0..) |file, i| {
-            if (std.ascii.startsWithIgnoreCase(b.files[file].name, text)) break g.jump(i);
+            if (!std.ascii.startsWithIgnoreCase(b.files[file].name, text)) continue;
+            // On another page, the pager turns to it.
+            if (paged) {
+                b.page = i / per_page;
+                b.selected = i;
+                c.changed = true;
+            } else g.jump(i);
+            break;
         };
-        if (b.loading) b.ask(c, g.first, g.last);
+        if (b.loading) b.ask(c, base + g.first, base + g.last);
         while (g.next()) |row| {
-            if (b.loading and !b.arrived(c, row.index)) {
+            if (b.loading and !b.arrived(c, base + row.index)) {
                 _ = g.cellAt(0);
                 ui.text(c, "Loading…", .{ .color = t.muted });
                 continue;
             }
-            const f = b.files[b.shown[row.index]];
+            const f = b.files[b.shown[base + row.index]];
             if (row.opened) b.say("Opened {s}.", .{f.name});
             if (row.clicked) b.note = "";
             if (row.secondary_clicked) {
@@ -149,6 +171,8 @@ const Browser = struct {
                 b.menu_open = true;
                 b.menu_at = .{ .x = c.input.mouse.x, .y = c.input.mouse.y, .w = 1, .h = 1 };
             }
+            // Dragged out of the window: the selected files' names.
+            if (row.drag_started) g.dragOut(b.selectedNames(c));
             _ = g.cellAt(0);
             ui.text(c, f.name, .{ .truncate = .ellipsis });
             if (g.cellAt(1)) ui.text(c, f.kind, .{ .color = t.muted, .truncate = .ellipsis });
@@ -157,6 +181,17 @@ const Browser = struct {
             ui.text(c, size(c, f.size), .{ .mono = true });
         }
         g.end();
+        if (selected) |s| {
+            b.selected = base + s;
+        } else if (b.selected) |s| if (s >= base and s < base + count) {
+            b.selected = null;
+        };
+        if (paged) {
+            const bar = ui.div(c).row().wFull().itemsCenter().gap(12);
+            defer bar.end();
+            if (controls.pager(c, &b.page, pages, .{})) b.note = "";
+            ui.textf(c, .{ .color = t.muted }, "Page {d} of {d}", .{ b.page + 1, pages });
+        }
 
         var marked: usize = 0;
         for (b.marked[0..b.shown_len]) |on| marked += @intFromBool(on);
@@ -180,6 +215,16 @@ const Browser = struct {
         } else if (b.selected) |i| {
             ui.textf(c, .{ .color = t.muted }, "Selected {s}: Enter or a double click opens it, a right-click shows a menu.", .{b.files[b.shown[i]].name});
         } else ui.text(c, "Click a row to select it, move with the arrow keys, or type a name to jump to it.", .{ .color = t.muted });
+    }
+
+    /// The selected files' names, a line each, for a drag out.
+    fn selectedNames(b: *Browser, c: *ui.Context) []const u8 {
+        var out: std.ArrayList(u8) = .empty;
+        for (b.shown[0..b.shown_len], b.marked[0..b.shown_len]) |file, on| if (on) {
+            if (out.items.len > 0) out.append(c.alloc(), '\n') catch break;
+            out.appendSlice(c.alloc(), b.files[file].name) catch break;
+        };
+        return out.items;
     }
 
     /// Says what an action did, under the grid, until the next.
