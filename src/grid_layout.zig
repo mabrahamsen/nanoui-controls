@@ -4,6 +4,7 @@
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
+const kit = nanoui.kit;
 const grid_mod = @import("grid.zig");
 const Column = grid_mod.Column;
 const Options = grid_mod.Options;
@@ -185,4 +186,33 @@ pub fn natural(c: *ui.Context, index: u32) f32 {
         };
     }
     return w + n.style.gap * @max(0, count - 1) + n.style.padding.horizontal();
+}
+
+/// The sideways scrollbar's thumb being dragged: where the pointer and
+/// the scroll started.
+const BarDrag = struct { on: bool = false, x: f32 = 0, sx: f32 = 0 };
+
+/// A bar under the rows, its thumb as wide as the share of the columns in
+/// view, dragged to scroll them sideways: changes `l.sx`.
+pub fn sideBar(c: *ui.Context, opts: Options, l: *Layout) void {
+    const k = opts.scale;
+    const t = kit.tokens(c);
+    const track = ui.div(c).wFull().h(10 * k).pr(gutter(opts));
+    defer track.end();
+    const thumb_w = @max(24 * k, l.view * l.view / l.content);
+    const travel = @max(1, l.view - thumb_w);
+    const drag = state(c, BarDrag);
+    const thumb = ui.div(c).absolute().offset(l.sx / l.maxScroll() * travel, 2 * k).w(thumb_w).h(6 * k).rounded(3 * k).bg(t.muted.alpha(0.45)).control();
+    defer thumb.end();
+    const it = thumb.interaction();
+    if (!it.pressed) {
+        drag.on = false;
+        return;
+    }
+    if (!drag.on) {
+        drag.* = .{ .on = true, .x = c.input.mouse.x, .sx = l.sx };
+        return;
+    }
+    l.sx = std.math.clamp(drag.sx + (c.input.mouse.x - drag.x) / travel * l.maxScroll(), 0, l.maxScroll());
+    c.changed = true;
 }

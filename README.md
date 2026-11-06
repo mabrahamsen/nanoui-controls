@@ -8,6 +8,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | Control | What it does |
 |---|---|
 | [`grid`](#grid) | Rows of cells under a header of column titles, with the columns lined up, sorting by a clicked title and building only the rows in view. |
+| [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
 
 ## Requirements
 
@@ -23,7 +24,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.2.0"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.3.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -84,6 +85,7 @@ g.end();
 - **Selection:** with `selected`, a click selects a row and it is drawn highlighted. While nothing else has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is a row index, so a caller that sorts finds its row again.
 - **Several rows:** with `multi` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
 - **Typing to jump:** typing while the grid has the keyboard gives `g.typed`, the text so far (a pause of a second starts it afresh). The caller finds the first row it begins, as only it knows what the rows hold, and `g.jump(i)` selects that row and scrolls to it.
+- **Dragging rows out:** with `drag_rows`, a row held and moved a few points reports `row.drag_started`, and `g.dragOut(text)` drags that text out of the window, for the rows selected (the row is selected first, unless it is already). nanoui drags text out on macOS so far.
 - **Context menus:** `row.secondary_clicked` is a right-click (or Control-click on the Mac) on a row, for the app's menu. It selects the row, unless the row is already selected, so the menu acts on the selection.
 - **Screen readers** hear the rows as rows, read as their cells' text, with the selected ones marked, and the sortable titles as buttons that say which way the rows are sorted.
 - **Long lists** cost what a screenful does: only the rows in view are built. The grid fills the room left in its parent, which needs a bounded height.
@@ -97,9 +99,25 @@ g.end();
 
 See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
+## pager
+
+Numbered pages: the first and the last, the ones around the current page, and an ellipsis for the rest. The caller keeps the page, counted from 0.
+
+```zig
+var page: usize = 0;
+
+// In the frame:
+if (controls.pager(c, &page, pages, .{})) loadPage(page);
+```
+
+- Clicking a number goes to its page, and the arrows to the page before or after; past the ends they are dimmed.
+- Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last.
+- `around` sets how many pages either side of the current one are numbered, and `scale` multiplies its lengths.
+- With a grid's `rows`, it shows a page at a time: the grid's rows are the page's.
+
 ## Example
 
-[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, move, resize and fit columns, scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, type a name to jump to it, and have rows arrive a page at a time as they scroll into view.
+[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, move, resize and fit columns, scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 
 ```sh
 zig build example
