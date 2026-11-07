@@ -428,6 +428,43 @@ const Sidebars = struct {
     }
 };
 
+/// The same sidebar narrowed to its icons and wide, a splitter between
+/// them: a pill count, a disabled row, a heading and a group.
+const Narrowed = struct {
+    open: bool = true,
+    width: f32 = 150,
+
+    fn view(x: *Narrowed, c: *ui.Context) void {
+        const root = ui.div(c).row().sizeFull().p(8);
+        defer root.end();
+        mail(x, c, true, 44);
+        _ = controls.splitter(c, &x.width, .{ .label = "Sidebar width" });
+        mail(x, c, false, x.width);
+    }
+
+    fn mail(x: *Narrowed, c: *ui.Context, icons_only: bool, w: f32) void {
+        ui.keyInt(c, @intFromBool(icons_only));
+        const col = ui.div(c).column().w(w).hFull();
+        defer col.end();
+        var sb = controls.sidebar(c, "mail", "inbox", .{ .icons_only = icons_only });
+        sb.heading("Mailboxes");
+        sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = 4, .count_style = .pill });
+        sb.item("sent", "Sent", .{ .icon = "arrow.up", .count = 2 });
+        sb.item("offline", "Offline", .{ .icon = "globe", .disabled = true });
+        if (sb.group("folders", "Folders", &x.open)) |g| {
+            sb.item("work", "Work", .{ .icon = "folder" });
+            g.end();
+        }
+        _ = sb.end();
+    }
+};
+
+test "a sidebar narrowed to its icons, and wide, light and dark" {
+    var x: Narrowed = .{};
+    try expectView("sidebar-icons", .init(&x, Narrowed.view), .{ .height = 230 });
+    try expectView("sidebar-icons-dark", .init(&x, Narrowed.view), .{ .height = 230, .dark = true });
+}
+
 test "sidebars at two sizes, light and dark" {
     var x: Sidebars = .{};
     try expectView("sidebar", .init(&x, Sidebars.view), .{ .height = 230 });

@@ -10,6 +10,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`grid`](#grid) | Rows of cells under a header of column titles, with the columns lined up, sorting by a clicked title and building only the rows in view. |
 | [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
 | [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings and in groups that fold, chosen by key, with the keyboard. |
+| [`splitter`](#splitter) | A handle between two panes that resizes one of them, by dragging or with the keys. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -34,7 +35,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.4.0"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.5.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -152,6 +153,28 @@ if (sb.end()) |key| selected = key;
 - **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; and group headings with whether they are open (`expanded_text`, `collapsed_text`).
 - `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
 - A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows.
+- **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots. With a `splitter`, an app can switch to it when the sidebar is dragged narrow.
+- **Rows** can be `disabled`: dimmed, not chosen by a click, passed by the keys, and said as disabled. A count can be a filled pill in the selection's tint (`count_style = .pill`), for what waits to be seen.
+- **Menus:** a right-click (Control-click on the Mac) on a row sets `secondary_clicked` to its key, for the app to open a menu, such as the kit's; it doesn't choose the row.
+
+## splitter
+
+A handle between two panes side by side that resizes one of them: the one before it (`pane = .start`, the default), or the one after it (`.end`). The caller keeps the width and draws the panes; the handle is as tall as its parent.
+
+```zig
+const row = ui.div(c).row().sizeFull();
+const side = ui.div(c).w(width).hFull();
+sidebar(c);
+side.end();
+_ = controls.splitter(c, &width, .{ .min = 160, .max = 400, .label = "Sidebar width" });
+content(c);
+row.end();
+```
+
+- Dragging it moves the width within `min` and `max`, with the resize cursor; it returns true when the width changed.
+- It takes the keyboard on a click or Tab: Left and Right move it by `step`, Home and End to the ends.
+- A screen reader hears a splitter called `label`, with the width as its value, and steps it.
+- `grab_width` is where the pointer can grab it, and `center_line` draws a line down its middle; `scale` is for apps that zoom their layout.
 
 ## Charts
 
@@ -291,7 +314,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and in a Charts group, a live Monitor and Every chart, each chart once with fixed figures.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Charts** is a system monitor whose readings change four times a second ([`charts.zig`](examples/gallery/charts.zig)): stats with their trends at the top, the CPU's load as a trend with a line at half, a meter, and bars up and down for how it changed; network traffic as a line chart to point at or step through with the keys; memory as a donut and a breakdown with a legend that runs on to new lines; disk use as a list of bars by folder to click; the fan as a glowing level; and the heat ramp as a strip. Pause it, switch the ramp, the glow and the fade, and set the meter's segments.

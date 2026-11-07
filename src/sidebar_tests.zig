@@ -323,3 +323,130 @@ test "having lost the keyboard, the keys start again from the selected row" {
     t.settle(1);
     try std.testing.expectEqualStrings("sent", m.selected.?);
 }
+
+/// Rows of each kind: a pill count, a disabled row, icons only or not.
+const Kinds = struct {
+    selected: ?[]const u8 = "inbox",
+    icons_only: bool = false,
+    secondary: ?[]const u8 = null,
+    started: bool = false,
+    start_focused: bool = false,
+    open: bool = true,
+
+    fn view(x: *Kinds, c: *ui.Context) void {
+        const root = ui.div(c).column().w(if (x.icons_only) 48 else 220).h(300);
+        defer root.end();
+        if (x.start_focused and !x.started) c.focusNext(false);
+        x.started = true;
+        var sb = sidebar(c, "kinds", x.selected, .{ .icons_only = x.icons_only });
+        sb.heading("Mailboxes");
+        sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = 4, .count_style = .pill });
+        sb.item("offline", "Offline", .{ .icon = "globe", .disabled = true });
+        sb.item("sent", "Sent", .{ .icon = "arrow.up", .count = 2 });
+        if (sb.group("folders", "Folders", &x.open)) |g| {
+            sb.item("work", "Work", .{ .icon = "folder" });
+            g.end();
+        }
+        if (sb.end()) |key| x.selected = key;
+        if (sb.secondary_clicked) |key| x.secondary = key;
+    }
+};
+
+fn elements(t: *ui.Tester, arena: std.mem.Allocator) ![]const ui.access.Element {
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena, &list);
+    return list.items;
+}
+
+test "a disabled row is dimmed, takes no click, is passed by the keys, and is said as disabled" {
+    var x: Kinds = .{ .start_focused = true };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Kinds.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    try t.clickText("Offline");
+    t.settle(1);
+    try std.testing.expectEqualStrings("inbox", x.selected.?);
+    t.ctx.focus = 0;
+    t.key(.tab);
+    t.settle(1);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqualStrings("sent", x.selected.?);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const list = try elements(&t, arena.allocator());
+    try std.testing.expectEqualStrings("Offline", list[2].label);
+    try std.testing.expect(!list[2].enabled);
+}
+
+test "a right-click on a row reports it, without choosing it" {
+    var x: Kinds = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Kinds.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    const r = t.findText("Sent").?;
+    t.secondaryClick(r.x + 2, r.y + r.h / 2);
+    t.settle(1);
+    try std.testing.expectEqualStrings("sent", x.secondary.?);
+    try std.testing.expectEqualStrings("inbox", x.selected.?);
+}
+
+test "a pill count stands out in the selection's tint" {
+    var x: Kinds = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Kinds.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    const four = t.findText("4").?;
+    var pill: ?ui.Color = null;
+    for (t.ctx.nodes.items) |node| {
+        const b = t.ctx.rects.get(node.id) orelse continue;
+        if (node.style.background == null or b.h > 30 or !b.contains(.{ .x = four.x + 1, .y = four.y + four.h / 2 })) continue;
+        pill = node.style.background;
+    }
+    try std.testing.expectEqual(nanoui.kit.tokens(&t.ctx).primary, pill.?);
+}
+
+test "icons only, rows show their icons, labels in tooltips and to a screen reader" {
+    var x: Kinds = .{ .icons_only = true };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Kinds.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    for ([_][]const u8{ "Inbox", "Sent", "Mailboxes", "Folders", "4", "2" }) |s| try std.testing.expect(!t.hasText(s));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const list = try elements(&t, arena.allocator());
+    try std.testing.expectEqualStrings("Mailboxes", list[0].label);
+    try std.testing.expectEqualStrings("Inbox", list[1].label);
+    try std.testing.expectEqualStrings("4", list[1].value);
+    // Under the pointer, a row says its label in a tooltip.
+    const sent = list[3].rect;
+    t.moveTo(sent.x + sent.w / 2, sent.y + sent.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText("Sent"));
+    // A click still chooses.
+    t.click(sent.x + sent.w / 2, sent.y + sent.h / 2);
+    t.settle(1);
+    try std.testing.expectEqualStrings("sent", x.selected.?);
+}
+
+test "icons only, a disabled row still says its label in a tooltip" {
+    var x: Kinds = .{ .icons_only = true };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Kinds.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const list = try elements(&t, arena.allocator());
+    const offline = list[2].rect;
+    t.moveTo(offline.x + offline.w / 2, offline.y + offline.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText("Offline"));
+    t.click(offline.x + offline.w / 2, offline.y + offline.h / 2);
+    t.settle(1);
+    try std.testing.expectEqualStrings("inbox", x.selected.?);
+}

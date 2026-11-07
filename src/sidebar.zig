@@ -14,7 +14,7 @@
 //!
 //!     var sb = controls.sidebar(c, "nav", selected, .{});
 //!     sb.heading("Mailboxes");
-//!     sb.item("inbox", "Inbox", .{ .icon = "tray", .count = unread });
+//!     sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = unread });
 //!     if (sb.group("folders", "Folders", &folders_open)) |g| {
 //!         for (folders) |f| sb.item(f.id, f.name, .{ .icon = "folder" });
 //!         g.end();
@@ -25,7 +25,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const motion = ui.motion;
-const keys_mod = @import("grid_keys.zig");
+const focus = @import("focus.zig");
 
 pub const Options = struct {
     /// The rows' height and text, as the kit's controls at this size.
@@ -37,6 +37,11 @@ pub const Options = struct {
     /// The keys move a highlight, and only Enter or Space chooses its
     /// row: for an app where showing another view is slow.
     choose_on_enter: bool = false,
+    /// Rows show only their icon, centered, for a sidebar narrowed to a
+    /// strip: the label shows in a tooltip and is still what a screen
+    /// reader says. Headings become lines, a group's heading a chevron
+    /// that folds it, and counts dots.
+    icons_only: bool = false,
     /// Between the rows.
     gap: f32 = 2,
     /// What a screen reader says of a group's heading while its rows show,
@@ -55,8 +60,17 @@ pub const Item = struct {
     icon: ?[]const u8 = null,
     /// A number at the end: how many there are.
     count: ?usize = null,
-    /// The count's color; null takes the theme's muted text.
+    /// The count's color; null takes the theme's muted text, or with
+    /// `.pill`, the selection's tint.
     count_color: ?ui.Color = null,
+    /// The count as muted text, or as a filled pill that stands out, for
+    /// what waits to be seen (unread mail).
+    count_style: CountStyle = .plain,
+    /// Shown dimmed, it can't be chosen, and the keys pass it by: a place
+    /// that is there but not now (an account offline).
+    disabled: bool = false,
+
+    pub const CountStyle = enum { plain, pill };
 };
 
 /// What a sidebar keeps between frames: where its selected row was, for
@@ -95,7 +109,7 @@ pub fn sidebar(c: *ui.Context, id: []const u8, selected: ?[]const u8, opts: Opti
     // Unkeyed, so `c.focusNext` just before names it.
     const outer = ui.div(c).column().wFull().grow().scrollY();
     c.node(outer.index).style.min_height = 0;
-    const own = keys_mod.take(c, outer, true);
+    const own = focus.take(c, outer);
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
     const kept = c.state(Kept, "sidebar");
@@ -131,6 +145,10 @@ fn radius(c: *ui.Context, k: f32) f32 {
 pub const Sidebar = struct {
     /// It has the keyboard.
     focused: bool,
+    /// The key of a row right-clicked (or Control-clicked on the Mac) this
+    /// frame, as `end` returns: open a menu for it, such as the kit's. It
+    /// doesn't choose the row.
+    secondary_clicked: ?[]const u8 = null,
 
     // The rest is the sidebar's own.
     c: *ui.Context,
@@ -161,18 +179,24 @@ pub const Sidebar = struct {
         const t = kit.tokens(c);
         const size = sb.opts.size;
         const text = size.text();
+        const narrow = sb.opts.icons_only;
         const on = if (sb.selected) |s| std.mem.eql(u8, s, key) else false;
         const hash = entryHash(false, key);
-        const at_cursor = sb.focused and sb.cursorIs(hash, on);
+        const at_cursor = sb.focused and !opts.disabled and sb.cursorIs(hash, on);
         const tint = sb.opts.color orelse t.primary;
         ui.key(c, key);
-        var row = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(@round(text * 0.8) * k).h(size.height() * k).rounded(radius(c, k));
-        const it = row.interaction();
-        if (it.hovered) c.cursor_hand = true;
-        if (!sb.folding) sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .group = sb.group_at, .index = row.index }) catch {};
+        var row = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(@round(text * @as(f32, if (narrow) 0.3 else 0.8)) * k).h(size.height() * k).rounded(radius(c, k));
+        if (narrow) row = row.justifyCenter();
+        // A disabled row still shows its tooltip, but takes no clicks.
+        var it = row.interaction();
+        if (opts.disabled) {
+            it.clicked = false;
+            it.secondary_clicked = false;
+        } else if (it.hovered) c.cursor_hand = true;
+        if (!sb.folding and !opts.disabled) sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .group = sb.group_at, .index = row.index }) catch {};
         // A wash eases in under the pointer, and on the row the keys are on
         // when they don't choose as they move.
-        const wash = motion.number(c, "wash", if (!on and (it.hovered or (at_cursor and sb.opts.choose_on_enter))) 1 else 0, .{ .tween = .{ .duration = 0.12 } });
+        const wash = motion.number(c, "wash", if (!on and !opts.disabled and (it.hovered or (at_cursor and sb.opts.choose_on_enter))) 1 else 0, .{ .tween = .{ .duration = 0.12 } });
         if (on and !sb.marked) {
             row = row.bg(tint.alpha(0.12));
         } else if (wash > 0.001) {
@@ -180,31 +204,49 @@ pub const Sidebar = struct {
             row = row.bg(base.mix(t.foreground.alpha(0.07), wash));
         } else if (sb.opts.background) |bg| row = row.bg(bg);
         if (at_cursor) row = row.border(tint.alpha(0.45));
+        if (opts.disabled) c.node(row.index).style.opacity = 0.45;
         defer row.end();
+        const pill = opts.count_style == .pill;
+        const count_col = opts.count_color orelse if (pill) tint else t.muted;
         {
-            const slot = ui.div(c).w(@round(text * 1.3) * k).center();
+            const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
             defer slot.end();
             if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = if (on) tint else t.muted.mix(t.foreground, wash * 0.5) });
+            // Narrowed, a count is a dot at the icon's corner.
+            if (narrow) if (opts.count) |n| if (n > 0) {
+                const dot = @round(text * 0.45) * k;
+                ui.div(c).absolute().offset(@round(text * 1.3) * k - dot * 0.6, -dot * 0.3).w(dot).h(dot).roundedFull().bg(count_col).end();
+            };
         }
-        ui.text(c, label, .{
-            .size = text,
-            .weight = if (on) .semibold else .regular,
-            .color = if (on) t.foreground else t.foreground.alpha(0.85).mix(t.foreground, wash),
-            .truncate = .ellipsis,
-        });
-        ui.spacer(c);
-        if (opts.count) |n| ui.textf(c, .{ .size = text - 2, .mono = true, .color = opts.count_color orelse t.muted }, "{d}", .{n});
+        if (narrow) {
+            kit.tooltip(c, it, label, .{ .placement = .right });
+        } else {
+            ui.text(c, label, .{
+                .size = text,
+                .weight = if (on) .semibold else .regular,
+                .color = if (on) t.foreground else t.foreground.alpha(0.85).mix(t.foreground, wash),
+                .truncate = .ellipsis,
+            });
+            ui.spacer(c);
+            if (opts.count) |n| if (pill) {
+                const p = ui.div(c).h(@round(text * 1.25) * k).px(@round(text * 0.45) * k).roundedFull().bg(count_col).center();
+                defer p.end();
+                ui.textf(c, .{ .size = text - 2, .weight = .semibold, .color = t.primary_foreground }, "{d}", .{n});
+            } else ui.textf(c, .{ .size = text - 2, .mono = true, .color = count_col }, "{d}", .{n});
+        }
         ui.access.describe(c, row.index, .{
             .role = .tab,
             .label = label,
             .value = if (opts.count) |n| c.print("{d}", .{n}) else "",
             .selected = on,
+            .enabled = !opts.disabled,
         });
         if (it.clicked) {
             c.focus = sb.own;
             sb.kept.cursor = hash;
             if (!on) sb.choose(key);
         }
+        if (it.secondary_clicked) sb.secondary_clicked = key;
         if (on and !sb.folding) {
             sb.found = true;
             if (it.rect) |r| if (sb.inner_rect) |br| {
@@ -220,10 +262,14 @@ pub const Sidebar = struct {
     pub fn heading(sb: *Sidebar, title: []const u8) void {
         const c = sb.c;
         const k = sb.opts.scale;
+        const t = kit.tokens(c);
         const text = sb.opts.size.text();
         const h = ui.div(c).row().wFull().px(@round(text * 0.8) * k).pt(@round(text * 0.7) * k).pb(@round(text * 0.2) * k);
         defer h.end();
-        ui.text(c, title, .{ .size = text - 1.5, .weight = .semibold, .color = kit.tokens(c).muted });
+        // Narrowed, a line where the heading was.
+        if (sb.opts.icons_only) {
+            ui.div(c).wFull().h(1).bg(t.border).end();
+        } else ui.text(c, title, .{ .size = text - 1.5, .weight = .semibold, .color = t.muted });
         ui.access.describe(c, h.index, .{ .role = .static_text, .label = title, .header = true });
     }
 
@@ -254,8 +300,14 @@ pub const Sidebar = struct {
             }
             sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .index = head.index }) catch {};
             const col = if (it.hovered) t.foreground else t.muted;
-            ui.text(c, title, .{ .size = text - 1.5, .weight = .semibold, .color = col });
-            ui.spacer(c);
+            // Narrowed, the chevron alone, centered, its title in a tooltip.
+            if (sb.opts.icons_only) {
+                _ = head.justifyCenter();
+                kit.tooltip(c, it, title, .{ .placement = .right });
+            } else {
+                ui.text(c, title, .{ .size = text - 1.5, .weight = .semibold, .color = col });
+                ui.spacer(c);
+            }
             ui.icon(c, if (open.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = col });
             ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text });
         }

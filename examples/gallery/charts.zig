@@ -238,6 +238,13 @@ pub const Monitor = struct {
         controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
     }
 
+    /// How many readings kept were over 80%: the alerts, for the sidebar.
+    pub fn alerts(m: *const Monitor) usize {
+        var n: usize = 0;
+        for (m.load.slice()) |v| n += @intFromBool(v > 0.8);
+        return n;
+    }
+
     /// A new reading for each chart, wandering from the last.
     fn tick(m: *Monitor) void {
         const r = m.random.random();

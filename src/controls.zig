@@ -79,6 +79,10 @@ pub const SidebarOptions = sidebar_mod.Options;
 pub const SidebarItem = sidebar_mod.Item;
 pub const SidebarGroup = sidebar_mod.Group;
 
+const splitter_mod = @import("splitter.zig");
+pub const splitter = splitter_mod.splitter;
+pub const SplitterOptions = splitter_mod.Options;
+
 const legend_mod = @import("legend.zig");
 pub const legend = legend_mod.legend;
 pub const Legend = legend_mod.Legend;
@@ -98,4 +102,6 @@ test {
     _ = stat_mod;
     _ = legend_mod;
     _ = sidebar_mod;
+    _ = splitter_mod;
+    _ = @import("focus.zig");
 }
