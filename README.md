@@ -103,6 +103,8 @@ See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
 Numbered pages: the first and the last, the ones around the current page, and an ellipsis for the rest. The caller keeps the page, counted from 0.
 
+It is made of the kit's buttons, as `kit.pagination` is, and looks and moves as it does. It adds the keyboard, a name for each button that a screen reader says ("Previous page", "Page 5", "Next page"), and `around`.
+
 ```zig
 var page: usize = 0;
 
@@ -110,9 +112,10 @@ var page: usize = 0;
 if (controls.pager(c, &page, pages, .{})) loadPage(page);
 ```
 
-- Clicking a number goes to its page, and the arrows to the page before or after; past the ends they are dimmed.
+- Clicking a number goes to its page, and the arrows to the page before or after; past the ends they are disabled.
 - Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last.
-- `around` sets how many pages either side of the current one are numbered, and `scale` multiplies its lengths.
+- It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
+- `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
 - With a grid's `rows`, it shows a page at a time: the grid's rows are the page's.
 
 ## Example
