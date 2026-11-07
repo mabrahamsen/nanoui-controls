@@ -2,6 +2,27 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- Charts, new controls for figures that change, which nanoui's kit only shows one at a time (`progress`, `ring`):
+  - `trend`: a history drawn as bars, right-aligned in its slots, scaled to its peak, the older bars fainter, in one color or by a ramp.
+  - `line`: histories drawn as lines with `ui.canvas`, each filled under as an area if wanted; a reading that is not a number breaks its line.
+  - `bars`: a row of slots for any bar chart, built with `next` as the grid's rows, each a bar of colored parts (`slot.bar`, `BarPart`), up from zero or, with room `below` it, down.
+  - `breakdown`: a bar across in parts: a total by kind, the whole bar by source (`whole`), or a level that can glow.
+  - `donut`: a ring of parts with a figure and a caption in its middle, drawn with `ui.canvas`.
+  - `barList`: rows of a label, a bar and a figure, scaled to the largest, which can be clicked, or reached with Tab and clicked with Enter.
+  - `meter`: a row of segments lit up to a value, in one color or by a ramp, that can glow; without gaps, a strip of colors in steps without seams.
+  - `stat`: a figure in a tile, with how it changed (a kit tag colored by its status) and a trend of its history.
+  - `legend`: what a chart's colors stand for, running on to new lines where its width ends, with a detail after a label (`itemDetail`) and text at the end (`trailing`).
+- What the charts share:
+  - Widths and heights are `ui.Length`, as `kit.progress`'s, colors come from the theme, and a `ramp` is a list of colors blended between (`rampColor`).
+  - Histories can be kept in a ring, read from their oldest reading with `head`, and scaled from `min` to `max` or to their peak above it (`fixed_max` keeps the top).
+  - `value_lines` draws lines across at values, with labels.
+  - `interactive` bars and lines follow the pointer and take the keyboard (Left, Right, Home, End): `current` is the slot pointed at, and `tooltip` says what it shows, there and to a screen reader.
+  - A chart with a `label` is one image to a screen reader, with its `value_text`; without one, it is left out as a decoration.
+  - `breakdown`, `donut` and `meter` ease to new values, as the kit's progress bar does.
+- The example is a gallery: a sidebar picks the grid of files or a system monitor of charts. `zig build example` runs it.
+
 ## 0.4.0
 
 - `pager` is made of the kit's buttons, as `kit.pagination` is: they ease on hover, give under a press, and fade when disabled. Screen readers still name each button.
