@@ -2,7 +2,7 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.4.0
 
 - `pager` is made of the kit's buttons, as `kit.pagination` is: they ease on hover, give under a press, and fade when disabled. Screen readers still name each button.
 - `pager` keeps its width from page to page, so its arrows stay under the pointer: it always shows as many numbers and ellipses, each as wide as the widest number. Near an end, it numbers more pages where an ellipsis would be.
@@ -10,6 +10,8 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - `grid` options renamed, to say what they are: `rows` is `max_rows`, `multi` is `selection`, `rule` is `header_line`, and `title` (the titles' look) is `title_style`. `Grid.shows` is `isShown`.
 - `grid` columns can sit in the center: `GridColumn.alignment = .center` centers a column's cells and its title.
 - `Grid` lists the fields callers read (`first`, `last`, `sorted`, `typed`) first, apart from its own.
+- `grid` takes the keyboard by focus, as the pager and text fields do: a click in it or Tab gives it the keyboard, and `c.focusNext` before `grid` does at the start. Its keys (arrows, Page Up and Down, Home, End, Enter, Cmd+A and typing) are its only while it has the keyboard, so two grids in a window, or a grid and a search field, no longer take the same keys. `Grid.focused` says it has it, and the selection is grey while it doesn't. A grid needs `selected` to take the keyboard.
+- `pager` returns true when it moves a page past the last back to the last, as when a search leaves fewer pages, so a caller that loads a page on a change loads it.
 
 ## 0.3.0
 

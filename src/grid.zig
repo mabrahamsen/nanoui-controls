@@ -12,9 +12,13 @@
 //! keep their numbers: build their cells with `cellAt`, which skips a
 //! hidden one.
 //!
-//! Given `selected`, a click selects a row, and while nothing else has
-//! the keyboard Up and Down move the selection a row, Page Up and Page
-//! Down a view, and Home and End to the ends, scrolling it into view.
+//! Given `selected`, a click selects a row, and the grid takes the
+//! keyboard as the pager does: a click in it or Tab gives it the keyboard
+//! (`focused`), and `c.focusNext` before `grid` does at the start. While
+//! it has it, Up and Down move the selection a row, Page Up and Page
+//! Down a view, and Home and End to the ends, scrolling it into view;
+//! the selection is grey while something else has it. Two grids in a
+//! window take the keys in turn.
 //! Enter or a double click opens the row (`Row.opened`). Given `selection`
 //! too, Cmd-click (Ctrl-click off the Mac) adds or takes away a row,
 //! Shift-click and Shift with the keys select a run of rows, and Cmd+A
@@ -203,36 +207,24 @@ pub const Row = struct {
 /// Opens the grid's box, which takes the room left in its parent, and
 /// draws the header: build the rows with `next` and `cell`, then `end`.
 pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
-    if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
-    if (opts.widths) |w| {
-        if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
-        for (w, columns) |*x, col| if (x.* == 0) if (col.width) |start| {
-            x.* = start;
-        };
-    }
-    if (opts.selection) |m| {
-        if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
-        if (opts.selected == null) @panic("grid: `selection` needs `selected`");
-    }
-    if (opts.order) |o| {
-        if (o.len != columns.len) @panic("grid: `order` needs one column a place");
-        for (o, 0..) |col, i| if (col >= columns.len or std.mem.indexOfScalar(usize, o[0..i], col) != null) @panic("grid: `order` needs each column once");
-    }
+    lay_mod.check(columns, opts);
     const t = kit.tokens(c);
     const k = opts.scale;
     if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
         s.* = if (opts.count > 0) opts.count - 1 else null;
+        c.changed = true;
     };
-    if (opts.selection) |m| if (c.focus == 0 and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
     var box = ui.div(c).column().wFull();
     if (opts.max_rows == null) box = box.grow();
+    const own = keys.take(c, box, opts.selected != null);
+    if (opts.selection) |m| if (own.focused and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;
     const press: Press = if (c.input.down) lay_mod.state(c, Press).* else .{};
     const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
     const head = header(c, columns, opts, lay);
     if (opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .fit = head.fit, .fit_w = head.fit_w };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .fit_w = head.fit_w };
     // Rows with lines between them meet the lines, without a gap.
     const row_gap = if (opts.row_lines) 0 else opts.gap;
     if (g.anchor) |a| if (a >= opts.count) {
@@ -243,14 +235,14 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     if (opts.max_rows) |n| {
         g.rows_end = @min(n, opts.count);
         g.last = g.rows_end;
-        g.useKeys(before, keys.useKeys(c, opts.selected, g.rows_end, n));
+        g.useKeys(before, keys.useKeys(c, own.focused, opts.selected, g.rows_end, n));
         g.plain = ui.div(c).column().wFull().gap(row_gap * k).pt(row_gap * k);
     } else {
         // The list's scroll and height as the last frame left them, to
         // page by a view, keep a row in it and say which rows it shows.
         const id = c.peekId(null);
         const view_h = if (c.rects.get(id)) |r| r.h else c.size.h;
-        g.useKeys(before, keys.useKeys(c, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
+        g.useKeys(before, keys.useKeys(c, own.focused, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
         var want = opts.scroll_to;
         if (kept.jump_to) |i| want = i;
         if (opts.selected) |s| if (s.* != before) if (s.*) |i| {
@@ -271,7 +263,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         g.last = @min(opts.count, @as(usize, @intFromFloat(@ceil(@max(0, offset + view_h - pad) / pitch))));
         g.list = ui.list(c, .{ .count = opts.count, .row_height = opts.row_height * k, .gap = row_gap * k, .padding = .{ .top = pad, .right = lay_mod.scrollbar_gutter }, .scroll_to = scroll_to });
     }
-    g.typed = keys.useTyping(c, lay_mod.state(c, keys.Typing), opts.count);
+    g.typed = keys.useTyping(c, own.focused, lay_mod.state(c, keys.Typing), opts.count);
     if (opts.count == 0) if (opts.empty) |text| {
         const d = ui.div(c).wFull().px(opts.padding * k).py(8 * k);
         defer d.end();
@@ -302,6 +294,10 @@ pub const Grid = struct {
     /// null when nothing was typed this frame. The caller finds the first
     /// row it begins (ignoring case, as Finder does) and `jump`s to it.
     typed: ?[]const u8 = null,
+    /// The grid has the keyboard: its arrows, Enter, Cmd+A and typing are
+    /// its. A click in it or Tab gives it the keyboard, and so does
+    /// `c.focusNext` called just before `grid`.
+    focused: bool,
 
     // The rest is the grid's own: callers read the fields above, and use
     // the methods.
@@ -309,6 +305,9 @@ pub const Grid = struct {
     box: ui.Div,
     columns: []const Column,
     opts: Options,
+    /// The id of the box that takes the keyboard for the grid; 0 without
+    /// `selected`.
+    own: u64,
     /// Where the columns go this frame.
     lay: Layout,
     /// Where Shift-click and Shift with the keys select from, and the row
@@ -354,6 +353,8 @@ pub const Grid = struct {
         if (!g.opts.row_lines) r = r.rounded(t.radius - 2);
         const it: ui.Interaction = if (g.opts.clickable) r.interaction() else .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
         if (it.secondary_clicked) {
+            // The menu's keys go to the grid, as a click's do.
+            if (g.own != 0) g.c.focus = g.own;
             if (!g.isSelected(i)) g.pick(i, .only);
         } else if (it.clicked) {
             const in = g.c.input;
@@ -363,11 +364,14 @@ pub const Grid = struct {
         if (it.clicked or it.secondary_clicked) g.c.changed = true;
         const drag_started = g.opts.drag_rows and it.pressed and g.pressDrags(i);
         const selected = g.isSelected(i);
+        // The selection is the accent's color while the grid has the
+        // keyboard, and grey while something else does.
+        const lit = g.focused or g.own == 0;
         if (selected) {
-            r = r.bg(t.primary.alpha(0.18));
+            r = r.bg(if (lit) t.primary.alpha(0.18) else t.muted.alpha(0.2));
         } else if (g.opts.striped and i % 2 == 1) r = r.bg(t.surface.alpha(0.35));
         // A selected row stays the selection's color under the pointer.
-        if (g.opts.hover and g.opts.clickable) r = r.hover(if (selected) t.primary.alpha(0.26) else t.surface_hover.alpha(0.6));
+        if (g.opts.hover and g.opts.clickable) r = r.hover(if (selected) (if (lit) t.primary.alpha(0.26) else t.muted.alpha(0.28)) else t.surface_hover.alpha(0.6));
         // A row to a screen reader, read as its cells' text.
         ui.access.describe(g.c, r.index, .{ .role = .row, .selected = selected });
         g.row = r;
@@ -505,6 +509,12 @@ pub const Grid = struct {
         if (g.opts.scroll_x and g.lay.maxScroll() > 0) lay_mod.sideBar(g.c, g.opts, &g.lay);
         lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx };
         lay_mod.state(g.c, Press).* = g.press;
+        // A press in the grid that left nothing with the keyboard (on a
+        // row, a title, the scrollbar) gives the keyboard to the grid.
+        const c = g.c;
+        if (g.own != 0 and c.input.pressed and c.focus == 0) if (c.rects.get(c.node(g.box.index).id)) |r| if (r.contains(c.input.mouse)) {
+            c.focus = g.own;
+        };
         g.box.end();
     }
 

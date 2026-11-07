@@ -16,6 +16,8 @@ const Names = struct {
     search: ui.TextBuffer = .{},
     first: usize = 0,
     last: usize = 0,
+    /// The grid was given the keyboard, in the first frame.
+    started: bool = false,
 
     const columns = [_]Column{.{ .title = "Name" }};
     const words = [_][]const u8{ "apple", "apricot", "banana", "blueberry", "cherry" };
@@ -30,6 +32,8 @@ const Names = struct {
         defer root.end();
         if (n.field) _ = ui.textField(c, &n.search, .{ .placeholder = "Search" });
         const count = words.len + 1000;
+        if (!n.started) c.focusNext(false);
+        n.started = true;
         var g = grid(c, &columns, .{ .count = count, .selected = &n.selected });
         if (g.typed) |text| {
             n.typed = text;
@@ -123,4 +127,116 @@ test "typing goes to a focused text field, and not with Cmd or Ctrl held" {
     t.typeText("c");
     t.settle(0.1);
     try std.testing.expectEqual(@as(?usize, 4), n.selected);
+}
+
+/// Two grids side by side, as a folder list and its files, under a
+/// search field.
+const Two = struct {
+    left: ?usize = null,
+    right: ?usize = null,
+    typed: [2]usize = .{ 0, 0 },
+    search: ui.TextBuffer = .{},
+
+    const columns = [_]Column{.{ .title = "Name" }};
+
+    fn view(w: *Two, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull();
+        defer root.end();
+        _ = ui.textField(c, &w.search, .{ .placeholder = "Search" });
+        const panes = ui.div(c).row().wFull().grow();
+        defer panes.end();
+        for ([_]*?usize{ &w.left, &w.right }, 0..) |sel, side| {
+            const pane = ui.div(c).column().w(200).hFull();
+            defer pane.end();
+            var g = grid(c, &columns, .{ .count = 100, .selected = sel });
+            if (g.typed != null) w.typed[side] += 1;
+            while (g.next()) |row| {
+                g.cell();
+                ui.text(c, c.print("{s} {d}", .{ if (side == 0) "folder" else "file", row.index }), .{});
+            }
+            g.end();
+        }
+    }
+};
+
+test "of two grids, only the one with the keyboard takes the keys" {
+    var w: Two = .{};
+    defer w.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&w, Two.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Neither has the keyboard yet: the keys are no grid's.
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, null), w.left);
+    try std.testing.expectEqual(@as(?usize, null), w.right);
+    // A click on a file gives its grid the keyboard.
+    try t.clickText("file 3");
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 3), w.right);
+    t.key(.down);
+    t.settle(1);
+    t.typeText("f");
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, null), w.left);
+    try std.testing.expectEqual(@as(?usize, 4), w.right);
+    try std.testing.expectEqual([2]usize{ 0, 1 }, w.typed);
+    // A click on a folder moves it there.
+    try t.clickText("folder 1");
+    t.settle(1);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 2), w.left);
+    try std.testing.expectEqual(@as(?usize, 4), w.right);
+    // The search field takes it from both.
+    try t.clickText("Search");
+    t.settle(1);
+    t.key(.down);
+    t.typeText("f");
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 2), w.left);
+    try std.testing.expectEqual(@as(?usize, 4), w.right);
+    try std.testing.expectEqual([2]usize{ 0, 1 }, w.typed);
+}
+
+test "Tab gives the grids the keyboard in turn, after the field" {
+    var w: Two = .{};
+    defer w.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&w, Two.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    for ([_]?usize{ null, 0, 0 }, [_]?usize{ null, null, 0 }) |left, right| {
+        // As the window does with Tab, whatever has the keyboard: the
+        // Tester only does when nothing has.
+        t.ctx.focusCycle(false);
+        t.settle(1);
+        t.key(.down);
+        t.settle(1);
+        try std.testing.expectEqual(left, w.left);
+        try std.testing.expectEqual(right, w.right);
+    }
+}
+
+test "a press on a grid's empty room or its title gives it the keyboard" {
+    var w: Two = .{};
+    defer w.search.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&w, Two.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    try t.clickText("Search");
+    t.settle(1);
+    // The right grid's title, then the left's.
+    t.click(300, t.findText("Name").?.y + 4);
+    t.settle(1);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 0), w.right);
+    t.click(100, t.findText("Name").?.y + 4);
+    t.settle(1);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 0), w.left);
 }

@@ -304,11 +304,15 @@ const Picker = struct {
     /// The rows the grid says are in view.
     first: usize = 0,
     last: usize = 0,
+    /// The grid was given the keyboard, in the first frame.
+    started: bool = false,
 
     fn view(p: *Picker, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
         if (p.field) _ = ui.textField(c, &p.search, .{ .placeholder = "Search" });
+        if (!p.started) c.focusNext(false);
+        p.started = true;
         var g = grid(c, &Fruit.columns, .{ .count = p.count, .selected = &p.selected, .max_rows = p.rows, .scroll_to = p.scroll_to });
         p.scroll_to = null;
         p.first = g.first;

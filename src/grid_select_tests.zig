@@ -161,11 +161,17 @@ test "Shift with the keys extends the selection, and the keys alone move it" {
     try m.expectRows(&.{1});
 }
 
-test "Cmd+A (Ctrl+A) selects every row, unless a text field has the keys" {
+test "Cmd+A (Ctrl+A) selects every row, once the grid has the keyboard" {
     var m: Many = .{};
     var t: ui.Tester = undefined;
     try start(&t, &m);
     defer t.deinit();
+    // Without the keyboard, the shortcut is someone else's.
+    try std.testing.expect(!t.shortcut(.{ .key = 'a', .cmd = true }));
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), m.count());
+    // A click on a row gives the grid the keyboard.
+    try clickRow(&t, 1, .{});
     try std.testing.expect(t.shortcut(.{ .key = 'a', .cmd = true }));
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 100), m.count());
