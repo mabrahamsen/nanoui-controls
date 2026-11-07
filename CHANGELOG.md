@@ -4,6 +4,9 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ## Unreleased
 
+- `sidebar`, a new control: rows to pick what a window shows, with an icon, a label and a count, under headings and in groups that fold. The selected row is named by a key the caller keeps. The selection slides from row to row, rows ease into a hover, and groups open and close as the kit's do. It takes the keyboard as the grid does: Up, Down, Home and End move between rows and group headings, Left and Right fold and open groups, and the keys choose as they go or, with `choose_on_enter`, on Enter or Space. A screen reader hears each row, the selected one selected, and whether a group is open.
+- The gallery's sidebar is the library's `sidebar`, with a Charts group of the live monitor and a page of every chart.
+
 - Charts, new controls for figures that change, which nanoui's kit only shows one at a time (`progress`, `ring`):
   - `trend`: a history drawn as bars, right-aligned in its slots, scaled to its peak, the older bars fainter, in one color or by a ramp.
   - `line`: histories drawn as lines with `ui.canvas`, each filled under as an area if wanted; a reading that is not a number breaks its line.

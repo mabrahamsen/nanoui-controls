@@ -9,6 +9,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 |---|---|
 | [`grid`](#grid) | Rows of cells under a header of column titles, with the columns lined up, sorting by a clicked title and building only the rows in view. |
 | [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
+| [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings and in groups that fold, chosen by key, with the keyboard. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -127,6 +128,30 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 - It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
 - `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
 - With a grid's `max_rows`, it shows a page at a time: the grid's rows are the page's.
+
+## sidebar
+
+Rows to pick what a window shows: a mail app's mailboxes, a settings window's panes. Each row has an optional icon, a label and an optional count, under headings and in groups that fold. One row is selected by a key the caller keeps, never by position, so the selection stays on its row as rows come and go.
+
+```zig
+var sb = controls.sidebar(c, "nav", selected, .{});
+sb.heading("Mailboxes");
+sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = unread });
+sb.item("sent", "Sent", .{ .icon = "arrow.up" });
+if (sb.group("folders", "Folders", &folders_open)) |g| {
+    for (folders) |f| sb.item(f.id, f.name, .{ .icon = "folder" });
+    g.end();
+}
+if (sb.end()) |key| selected = key;
+```
+
+- `end` returns the key chosen this frame, by a click or the keys. Keep it: it must outlive the frame, as the rows' keys usually do.
+- It takes the room left in its parent, and scrolls when its rows need more, keeping the keys' row in view.
+- **Motion,** as the kit's: the selection slides from row to row as `kit.tabs`' marker does, a row eases into a wash under the pointer, and a group opens to its rows' height and closes back as `kit.collapsible` does. Reduced motion moves at once.
+- **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows and group headings, past folded rows; Home and End go to the ends; Left folds a group (or goes from a row to its group's heading) and Right opens it. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow.
+- **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; and group headings with whether they are open (`expanded_text`, `collapsed_text`).
+- `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
+- A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows.
 
 ## Charts
 
@@ -266,7 +291,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window with a sidebar that picks a view for each kind of control.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and in a Charts group, a live Monitor and Every chart, each chart once with fixed figures.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Charts** is a system monitor whose readings change four times a second ([`charts.zig`](examples/gallery/charts.zig)): stats with their trends at the top, the CPU's load as a trend with a line at half, a meter, and bars up and down for how it changed; network traffic as a line chart to point at or step through with the keys; memory as a donut and a breakdown with a legend that runs on to new lines; disk use as a list of bars by folder to click; the fan as a glowing level; and the heat ramp as a strip. Pause it, switch the ramp, the glow and the fade, and set the meter's segments.
