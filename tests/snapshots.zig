@@ -401,6 +401,76 @@ test "a line chart pointed at, its reading marked and said, light and dark" {
     try expectView("charts-inspected-dark", .init(&x, Inspected.view), .{ .height = 170, .dark = true, .at = .{ 12 + 7.0 / 11.0 * 336, 70 } });
 }
 
+/// Two sidebars, at two sizes: headings, counts, a group open and one
+/// folded, a row selected.
+const Sidebars = struct {
+    open: bool = true,
+    folded: bool = false,
+
+    fn view(x: *Sidebars, c: *ui.Context) void {
+        const root = ui.div(c).row().sizeFull().p(8).gap(8);
+        defer root.end();
+        for ([_]kit.Size{ .sm, .md }, 0..) |size, i| {
+            ui.keyInt(c, i);
+            const col = ui.div(c).column().wFull().hFull();
+            defer col.end();
+            var sb = controls.sidebar(c, "mail", if (i == 0) "inbox" else "work", .{ .size = size });
+            sb.heading("Mailboxes");
+            sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = 12 });
+            sb.item("sent", "Sent", .{ .icon = "arrow.up" });
+            if (sb.group("folders", "Folders", if (i == 0) &x.folded else &x.open)) |g| {
+                sb.item("work", "Work", .{ .icon = "folder", .count = 3 });
+                sb.item("travel", "Travel", .{ .icon = "folder" });
+                g.end();
+            }
+            _ = sb.end();
+        }
+    }
+};
+
+/// The same sidebar narrowed to its icons and wide, a splitter between
+/// them: a pill count, a disabled row, a heading and a group.
+const Narrowed = struct {
+    open: bool = true,
+    width: f32 = 150,
+
+    fn view(x: *Narrowed, c: *ui.Context) void {
+        const root = ui.div(c).row().sizeFull().p(8);
+        defer root.end();
+        mail(x, c, true, 44);
+        _ = controls.splitter(c, &x.width, .{ .label = "Sidebar width" });
+        mail(x, c, false, x.width);
+    }
+
+    fn mail(x: *Narrowed, c: *ui.Context, icons_only: bool, w: f32) void {
+        ui.keyInt(c, @intFromBool(icons_only));
+        const col = ui.div(c).column().w(w).hFull();
+        defer col.end();
+        var sb = controls.sidebar(c, "mail", "inbox", .{ .icons_only = icons_only });
+        sb.heading("Mailboxes");
+        sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = 4, .count_style = .pill });
+        sb.item("sent", "Sent", .{ .icon = "arrow.up", .count = 2 });
+        sb.item("offline", "Offline", .{ .icon = "globe", .disabled = true });
+        if (sb.group("folders", "Folders", &x.open)) |g| {
+            sb.item("work", "Work", .{ .icon = "folder" });
+            g.end();
+        }
+        _ = sb.end();
+    }
+};
+
+test "a sidebar narrowed to its icons, and wide, light and dark" {
+    var x: Narrowed = .{};
+    try expectView("sidebar-icons", .init(&x, Narrowed.view), .{ .height = 230 });
+    try expectView("sidebar-icons-dark", .init(&x, Narrowed.view), .{ .height = 230, .dark = true });
+}
+
+test "sidebars at two sizes, light and dark" {
+    var x: Sidebars = .{};
+    try expectView("sidebar", .init(&x, Sidebars.view), .{ .height = 230 });
+    try expectView("sidebar-dark", .init(&x, Sidebars.view), .{ .height = 230, .dark = true });
+}
+
 test "lines, a donut, a list of bars and stats, light and dark" {
     var x: MoreCharts = .{};
     try expectView("charts-more", .init(&x, MoreCharts.view), .{ .height = 290 });

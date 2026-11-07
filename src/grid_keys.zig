@@ -3,22 +3,14 @@
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
+const focus = @import("focus.zig");
 
-/// The box that takes the keyboard for a grid with a selection, as the
-/// pager does: from a click in the grid (see `Grid.end`), or Tab. It has
-/// no size, as the grid's own box taking clicks would take them from its
-/// scrollbar. `c.focusNext` before `grid` focuses the grid's `box`, so the
-/// keyboard goes to it. Without a selection: nothing takes it, id 0.
+/// What takes the keyboard for a grid with a selection, as the pager
+/// does: from a click in the grid (see `Grid.end`), or Tab (`focus.take`).
+/// Without a selection: nothing takes it, id 0.
 pub fn take(c: *ui.Context, box: ui.Div, selects: bool) ui.Interaction {
     if (!selects) return .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
-    const taker = ui.div(c).absolute().w(0).h(0);
-    var own = c.interact(taker.index, .{ .focusable = true });
-    taker.end();
-    if (c.focus == c.node(box.index).id) {
-        c.focus = own.id;
-        own.focused = true;
-    }
-    return own;
+    return focus.take(c, box);
 }
 
 /// What the keys did this frame (`useKeys`).

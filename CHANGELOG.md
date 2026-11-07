@@ -2,8 +2,11 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.5.0
 
+- `sidebar`, a new control: rows to pick what a window shows, with an icon, a label and a count, under headings and in groups that fold. The selected row is named by a key the caller keeps. The selection slides from row to row, rows ease into a hover, and groups open and close as the kit's do. It takes the keyboard as the grid does: Up, Down, Home and End move between rows and group headings, Left and Right fold and open groups, and the keys choose as they go or, with `choose_on_enter`, on Enter or Space. A screen reader hears each row, the selected one selected, and whether a group is open.
+- `sidebar` rows can be shown as icons only (`icons_only`), their labels in tooltips, for a sidebar narrowed to a strip; be `disabled`; report a right-click (`secondary_clicked`) for a menu; and show a count as a pill (`count_style = .pill`).
+- `splitter`, a new control: a handle between two panes that resizes one of them, by dragging within `min` and `max` or with Left, Right, Home and End, heard by a screen reader as a splitter it can step.
 - Charts, new controls for figures that change, which nanoui's kit only shows one at a time (`progress`, `ring`):
   - `trend`: a history drawn as bars, right-aligned in its slots, scaled to its peak, the older bars fainter, in one color or by a ramp.
   - `line`: histories drawn as lines with `ui.canvas`, each filled under as an area if wanted; a reading that is not a number breaks its line.
@@ -21,7 +24,7 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
   - `interactive` bars and lines follow the pointer and take the keyboard (Left, Right, Home, End): `current` is the slot pointed at, and `tooltip` says what it shows, there and to a screen reader.
   - A chart with a `label` is one image to a screen reader, with its `value_text`; without one, it is left out as a decoration.
   - `breakdown`, `donut` and `meter` ease to new values, as the kit's progress bar does.
-- The example is a gallery: a sidebar picks the grid of files or a system monitor of charts. `zig build example` runs it.
+- The example is a gallery (`zig build example`): the library's `sidebar` picks the grid of files, a live system monitor of charts or a page of every chart. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow, and a right-click on a row opens a menu.
 
 ## 0.4.0
 

@@ -238,6 +238,13 @@ pub const Monitor = struct {
         controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
     }
 
+    /// How many readings kept were over 80%: the alerts, for the sidebar.
+    pub fn alerts(m: *const Monitor) usize {
+        var n: usize = 0;
+        for (m.load.slice()) |v| n += @intFromBool(v > 0.8);
+        return n;
+    }
+
     /// A new reading for each chart, wandering from the last.
     fn tick(m: *Monitor) void {
         const r = m.random.random();
@@ -267,4 +274,69 @@ pub fn init() Monitor {
     var m: Monitor = .{};
     for (0..capacity / 2) |_| m.tick();
     return m;
+}
+
+/// Each chart once, as figures that don't change: what each looks like,
+/// side by side, in the theme's colors.
+pub fn catalog(c: *ui.Context) void {
+    const t = kit.tokens(c);
+    const history = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75, 0.6, 0.7, 0.5, 0.65 };
+    const other = [_]f32{ 0.1, 0.15, 0.2, 0.15, 0.3, 0.25, 0.4, 0.35, 0.3, 0.45, 0.4, 0.5, 0.45, 0.4, 0.35, 0.45 };
+    const change = [_]f32{ 0.3, -0.2, 0.5, 0.1, -0.35, 0.2, -0.1, 0.4, -0.25, 0.15, 0.35, -0.05 };
+    const scroll = ui.div(c).column().sizeFull().scrollY();
+    defer scroll.end();
+    const root = ui.div(c).column().wFull().p(16).gap(12);
+    defer root.end();
+    ui.text(c, "Every chart", .{ .size = 16, .weight = .semibold });
+    {
+        const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+        defer row.end();
+        controls.stat(c, "stat", "12,480", .{ .change = "+8%", .status = .success, .history = &history, .size = .sm });
+        controls.stat(c, "stat, without a history", "37", .{ .change = "+3", .status = .danger, .size = .sm });
+    }
+    section(c, "trend", "a history as bars");
+    controls.trend(c, &history, .{ .capacity = 24, .height = .{ .px = 40 }, .ramp = &heat, .value_lines = &.{.{ .value = 0.5, .label = "50%" }} });
+    section(c, "line", "histories as lines, filled under");
+    {
+        var l = controls.line(c, &.{ .{ .values = &history, .area = 0.15 }, .{ .values = &other, .color = t.success } }, .{ .capacity = 16, .height = .{ .px = 64 }, .interactive = true, .label = "Two histories" });
+        if (l.current) |i| l.tooltip(c.print("{d:.0}% and {d:.0}%", .{ history[i] * 100, other[i] * 100 }));
+        l.end();
+    }
+    section(c, "bars", "slots of parts, up from zero and down below it");
+    {
+        var b = controls.bars(c, .{ .count = change.len, .height = .{ .px = 48 }, .gap = 3, .below = 0.4, .interactive = true, .label = "Change" });
+        while (b.next()) |slot| slot.bar(&.{.{ .value = change[slot.index], .color = if (change[slot.index] < 0) t.danger else t.success }});
+        if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{change[i] * 100}));
+        b.end();
+    }
+    section(c, "breakdown", "a total by kind, a whole by source, a level");
+    const parts = [_]controls.BarPart{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.warning }, .{ .value = 0.1, .color = t.info } };
+    controls.breakdown(c, &parts, .{ .height = 8 });
+    controls.breakdown(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.warning }, .{ .value = 1, .color = t.info } }, .{ .height = 8, .whole = true });
+    controls.breakdown(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
+    {
+        var l = controls.legend(c, .{});
+        l.item(t.primary, "App");
+        l.itemDetail(t.warning, "Wired", "▲4.2");
+        l.item(t.info, "Compressed");
+        l.trailing("legend");
+        l.end();
+    }
+    section(c, "donut and barList", "a ring of parts, and rows of bars");
+    {
+        const row = ui.div(c).row().wFull().gap(20).itemsCenter();
+        defer row.end();
+        controls.donut(c, &parts, .{ .size = 96, .text = "70%", .caption = "used" });
+        const right = ui.div(c).column().wFull();
+        defer right.end();
+        _ = controls.barList(c, &.{
+            .{ .label = "Photos", .value = 41.2, .value_text = "41.2 GB" },
+            .{ .label = "Music", .value = 12.9, .value_text = "12.9 GB" },
+            .{ .label = "Documents", .value = 4.4, .value_text = "4.4 GB" },
+        }, .{});
+    }
+    section(c, "meter", "segments lit to a value, and a strip without gaps");
+    controls.meter(c, 0.62, .{});
+    controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
+    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
 }
