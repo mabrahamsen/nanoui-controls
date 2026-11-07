@@ -108,6 +108,8 @@ const Setup = struct {
     /// title) of this row (by its first cell's text).
     over: ?[]const u8 = null,
     cell: ?[2][]const u8 = null,
+    /// The pointer rests here.
+    at: ?[2]f32 = null,
     /// The columns scrolled sideways this far.
     scroll_x: f32 = 0,
     height: f32 = 240,
@@ -141,6 +143,10 @@ fn expectView(name: []const u8, view: ui.View, setup: Setup) !void {
     if (setup.over) |text| {
         const r = t.findText(text).?;
         t.moveTo(r.x + r.w / 2, r.y + r.h / 2);
+        t.settle(1);
+    }
+    if (setup.at) |p| {
+        t.moveTo(p[0], p[1]);
         t.settle(1);
     }
     if (setup.cell) |cell| {
@@ -295,12 +301,8 @@ const Charts = struct {
     const history = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75 };
     const read = [_]f32{ 0.3, 0.5, 0.2, 0.6, 0.4, 0.35, 0.5, 0.25 };
     const write = [_]f32{ 0.2, 0.1, 0.3, 0.2, 0.35, 0.1, 0.2, 0.3 };
-
-    fn heat(at: f32) ui.Color {
-        const cool: ui.Color = .hex(0x22d3ee);
-        const hot: ui.Color = .hex(0xfb7185);
-        return cool.mix(hot, at);
-    }
+    const change = [_]f32{ 0.3, -0.2, 0.5, 0.1, -0.35, 0.2, -0.1, 0.4 };
+    const heat = [_]ui.Color{ .hex(0x22d3ee), .hex(0xfbbf24), .hex(0xfb7185) };
 
     fn view(_: *Charts, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -309,24 +311,59 @@ const Charts = struct {
         {
             const row = ui.div(c).row().wFull().gap(10).h(40);
             defer row.end();
-            controls.trend(c, &history, .{ .capacity = 16, .height = .fill });
+            controls.trend(c, &history, .{ .capacity = 16, .height = .fill, .value_lines = &.{.{ .value = 0.5 }} });
             var b = controls.bars(c, .{ .count = read.len, .height = .fill, .gap = 2 });
-            while (b.next()) |slot| controls.stack(c, &.{ .{ .value = read[slot.index], .color = t.primary }, .{ .value = write[slot.index], .color = t.success } });
+            while (b.next()) |slot| slot.bar(&.{ .{ .value = read[slot.index], .color = t.primary }, .{ .value = write[slot.index], .color = t.success } });
             b.end();
+            var d = controls.bars(c, .{ .count = change.len, .height = .fill, .gap = 2, .below = 0.4 });
+            while (d.next()) |slot| slot.bar(&.{.{ .value = change[slot.index], .color = if (change[slot.index] < 0) t.danger else t.success }});
+            d.end();
         }
-        controls.split(c, &.{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.1, .color = t.warning } }, .{});
-        controls.split(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.success }, .{ .value = 1, .color = t.warning } }, .{ .whole = true });
-        controls.split(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
+        controls.breakdown(c, &.{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.1, .color = t.warning } }, .{});
+        controls.breakdown(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.success }, .{ .value = 1, .color = t.warning } }, .{ .whole = true });
+        controls.breakdown(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
         controls.meter(c, 0.62, .{});
-        controls.meter(c, 0.8, .{ .ramp = heat, .glow = 0.6 });
-        controls.meter(c, 1, .{ .ramp = heat, .gap = 0, .radius = 0, .height = 6 });
+        controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
+        controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
         var l = controls.legend(c, .{});
         l.item(t.primary, "Read");
         l.item(t.success, "Write");
-        const peak = l.itemOpen(t.warning, "Other");
-        ui.text(c, "▲4.2", .{ .size = 10, .color = t.muted });
-        peak.end();
+        l.itemDetail(t.warning, "Other", "▲4.2");
+        l.trailing("Free 7.0 GB");
         l.end();
+    }
+};
+
+/// The charts drawn with nanoui's canvas, a list of bars and stats.
+const MoreCharts = struct {
+    const cpu = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75 };
+    const gpu = [_]f32{ 0.1, 0.15, 0.2, 0.15, 0.3, 0.25, 0.4, 0.35, 0.3, 0.45, 0.4, 0.5 };
+    const folders = [_]controls.BarListItem{
+        .{ .label = "Photos", .value = 41.2, .value_text = "41.2 GB" },
+        .{ .label = "Music", .value = 12.9, .value_text = "12.9 GB" },
+        .{ .label = "Documents", .value = 4.4, .value_text = "4.4 GB" },
+    };
+
+    fn view(_: *MoreCharts, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(12).gap(10);
+        defer root.end();
+        var l = controls.line(c, &.{ .{ .values = &cpu, .area = 0.15 }, .{ .values = &gpu, .color = t.success } }, .{ .capacity = 12, .height = .{ .px = 56 }, .value_lines = &.{.{ .value = 0.5, .label = "50%" }} });
+        l.end();
+        {
+            const row = ui.div(c).row().wFull().gap(12).itemsCenter();
+            defer row.end();
+            controls.donut(c, &.{ .{ .value = 0.45, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.06, .color = t.warning } }, .{ .size = 84, .text = "71%", .caption = "used" });
+            const right = ui.div(c).column().wFull().gap(2);
+            defer right.end();
+            _ = controls.barList(c, &folders, .{ .label_width = 74, .value_width = 54, .size = .xs });
+        }
+        {
+            const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+            defer row.end();
+            controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .history = &cpu, .size = .sm });
+            controls.stat(c, "Errors", "37", .{ .change = "+3", .status = .danger, .size = .sm });
+        }
     }
 };
 
@@ -334,6 +371,40 @@ test "the charts, light and dark" {
     var x: Charts = .{};
     try expectView("charts", .init(&x, Charts.view), .{ .height = 200 });
     try expectView("charts-dark", .init(&x, Charts.view), .{ .height = 200, .dark = true });
+}
+
+/// Interactive charts with the pointer on one: its marker and tooltip.
+const Inspected = struct {
+    const read = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75 };
+
+    fn view(_: *Inspected, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(12).gap(16);
+        defer root.end();
+        ui.div(c).h(24).end();
+        var l = controls.line(c, &.{.{ .values = &read, .area = 0.15 }}, .{ .capacity = 12, .height = .{ .px = 56 }, .interactive = true });
+        if (l.current) |i| l.tooltip(c.print("{d:.0}%", .{read[i] * 100}));
+        l.end();
+        var b = controls.bars(c, .{ .count = read.len, .height = .{ .px = 40 }, .gap = 2, .interactive = true });
+        while (b.next()) |slot| {
+            if (slot.current) _ = slot.box.bg(t.surface_hover);
+            slot.bar(&.{.{ .value = read[slot.index], .color = t.success }});
+        }
+        b.end();
+    }
+};
+
+test "a line chart pointed at, its reading marked and said, light and dark" {
+    var x: Inspected = .{};
+    // The pointer on the line's eighth reading, 336 points across.
+    try expectView("charts-inspected", .init(&x, Inspected.view), .{ .height = 170, .at = .{ 12 + 7.0 / 11.0 * 336, 70 } });
+    try expectView("charts-inspected-dark", .init(&x, Inspected.view), .{ .height = 170, .dark = true, .at = .{ 12 + 7.0 / 11.0 * 336, 70 } });
+}
+
+test "lines, a donut, a list of bars and stats, light and dark" {
+    var x: MoreCharts = .{};
+    try expectView("charts-more", .init(&x, MoreCharts.view), .{ .height = 290 });
+    try expectView("charts-more-dark", .init(&x, MoreCharts.view), .{ .height = 290, .dark = true });
 }
 
 test "an empty grid says so under its titles" {

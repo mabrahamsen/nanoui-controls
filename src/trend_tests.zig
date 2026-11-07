@@ -79,37 +79,43 @@ test "fuzz: level and opacity stay in range" {
     try std.testing.fuzz({}, fuzzLevel, .{});
 }
 
-/// The levels the ramp was asked for, bar by bar.
-var ramped: [64]f32 = undefined;
-var ramped_len: usize = 0;
+/// The levels a trend's bars were drawn at, oldest first.
+var drawn_levels: [64]f32 = undefined;
 
-fn recordRamp(v: f32) Color {
-    ramped[ramped_len] = v;
-    ramped_len += 1;
-    return .hex(0x22d3ee);
-}
-
-/// Draws `values` as a trend of `capacity` slots, `max` at the top, and
-/// returns the levels its bars were drawn at, oldest first.
-fn levels(values: []const f32, capacity: usize, max: f32) ![]const f32 {
+/// Draws `values` as a trend of `capacity` slots, as `opts` says, 100
+/// points tall, and returns the levels its bars were drawn at, oldest
+/// first: their heights, as the baseline is 0.
+fn levelsWith(values: []const f32, capacity: usize, opts: trend_mod.Options) ![]const f32 {
     const T = struct {
         var vs: []const f32 = &.{};
-        var cap: usize = 0;
-        var top: f32 = 1;
+        var o: trend_mod.Options = .{ .capacity = 0 };
         fn view(_: *@This(), c: *ui.Context) void {
-            trend(c, vs, .{ .capacity = cap, .max = top, .ramp = recordRamp });
+            trend(c, vs, o);
         }
     };
     T.vs = values;
-    T.cap = capacity;
-    T.top = max;
+    T.o = opts;
+    T.o.capacity = capacity;
+    T.o.height = .{ .px = 100 };
+    T.o.baseline = 0;
+    T.o.fade = null;
     var x: T = .{};
     var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 80 });
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 120 });
     defer t.deinit();
-    ramped_len = 0;
-    t.frame();
-    return ramped[0..ramped_len];
+    t.settle(1);
+    var n: usize = 0;
+    // The first box is the window's.
+    for (t.ctx.nodes.items[1..]) |node| {
+        if (node.style.background == null) continue;
+        drawn_levels[n] = t.ctx.rects.get(node.id).?.h / 100;
+        n += 1;
+    }
+    return drawn_levels[0..n];
+}
+
+fn levels(values: []const f32, capacity: usize, max: f32) ![]const f32 {
+    return levelsWith(values, capacity, .{ .capacity = capacity, .max = max });
 }
 
 test "a trend scales to its max, or to its peak above it" {
@@ -124,8 +130,42 @@ test "a trend leaves a slot empty for no reading, which doesn't count toward the
     try std.testing.expectEqualSlices(f32, &.{ 0.5, 1 }, try levels(&.{ nan, 2, inf, 4, -inf }, 10, 1));
 }
 
-test "a trend of zeros on a scale with no room stays at its baseline" {
-    try std.testing.expectEqualSlices(f32, &.{ 0, 0, 0 }, try levels(&.{ 0, 0, 0 }, 10, 0));
+test "a trend of zeros on a scale with no room draws no bar above its baseline" {
+    try std.testing.expectEqualSlices(f32, &.{}, try levels(&.{ 0, 0, 0 }, 10, 0));
+}
+
+test "a trend with a fixed max cuts readings above it off at the top" {
+    try std.testing.expectEqualSlices(f32, &.{ 0.5, 1 }, try levelsWith(&.{ 2, 8 }, 10, .{ .capacity = 10, .max = 4, .fixed_max = true }));
+}
+
+test "a trend reads a ring from its head, oldest first" {
+    // The ring holds 4, 1, 2, 3 with the oldest at 1: 1 2 3 4.
+    try std.testing.expectEqualSlices(f32, &.{ 0.25, 0.5, 0.75, 1 }, try levelsWith(&.{ 4, 1, 2, 3 }, 10, .{ .capacity = 10, .max = 4, .head = 1 }));
+    // With fewer slots, the newest of the ring: 3 4.
+    try std.testing.expectEqualSlices(f32, &.{ 0.75, 1 }, try levelsWith(&.{ 4, 1, 2, 3 }, 2, .{ .capacity = 2, .max = 4, .head = 1 }));
+}
+
+test "a trend's ramp colors each bar by its height" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            trend(c, &.{ 0, 1 }, .{ .capacity = 2, .fade = null, .ramp = &.{ .hex(0x000000), .hex(0xffffff) } });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 100, .height = 40 });
+    defer t.deinit();
+    t.settle(1);
+    var colors: [2]Color = undefined;
+    var n: usize = 0;
+    for (t.ctx.nodes.items[1..]) |node| {
+        const bg = node.style.background orelse continue;
+        colors[n] = bg;
+        n += 1;
+    }
+    try std.testing.expectEqual(@as(usize, 2), n);
+    try std.testing.expectEqual(Color.hex(0x000000), colors[0]);
+    try std.testing.expectEqual(Color.hex(0xffffff), colors[1]);
 }
 
 test "a trend with more values than slots shows the newest, scaled to them" {
@@ -188,7 +228,7 @@ test "a trend's baseline shows a reading at its min, and no fade keeps bars opaq
 test "a trend with a label is one image to a screen reader, with its value" {
     const T = struct {
         fn view(_: *@This(), c: *ui.Context) void {
-            trend(c, &.{ 1, 2, 3 }, .{ .capacity = 10, .label = "Temperature", .value = "62 °C, peak 81 °C" });
+            trend(c, &.{ 1, 2, 3 }, .{ .capacity = 10, .label = "Temperature", .value_text = "62 °C, peak 81 °C" });
             trend(c, &.{ 1, 2, 3 }, .{ .capacity = 10 });
         }
     };

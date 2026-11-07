@@ -23,7 +23,7 @@ Controls follow the conventions of `nanoui.kit`, so any of them could move into 
 
 ### Naming
 
-- **nanoui's names where it has one:** `count`, `row_height`, `gap` and `scroll_to` as `ui.list` has them, `scroll_x` as `ui.Style`, `secondary_clicked` as `ui.Interaction`, `size` as the kit's controls, `min` and `max` as `ui.slider`, `width` and `height` as a `ui.Length` where a box takes one, and `start`, `center` and `end` for where things sit.
+- **nanoui's names where it has one:** `count`, `row_height`, `gap` and `scroll_to` as `ui.list` has them, `scroll_x` as `ui.Style`, `secondary_clicked` as `ui.Interaction`, `size` as the kit's controls, `min` and `max` as `ui.slider`, `label` for what a screen reader calls a control and `value_text` for what it says it shows (as the web's `aria-valuetext`), `width` and `height` as a `ui.Length` where a box takes one, and `start`, `center` and `end` for where things sit.
 - **What happened this frame in the past tense:** `clicked`, `opened`, `sorted`, `drag_started`.
 - **Null switches a feature off:** an option the caller keeps (`sort`, `selected`, `widths`) is a pointer or a slice that is null when the feature isn't wanted, so a plain control needs only what it can't do without.
 - **Say what it is:** a look is `*_style` (`title_style`), a limit `max_*` (`max_rows`), a line `*_line` or `*_lines` (`header_line`, `row_lines`); a method that answers a question reads as one (`isShown`).
