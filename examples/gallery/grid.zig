@@ -1,4 +1,4 @@
-//! The grid with ten thousand files. Click a column's title to sort by
+//! The gallery's grid, of ten thousand files. Click a column's title to sort by
 //! it, drag it to move the column, drag the edge between two titles to
 //! resize a column or double-click it to fit, rest on a cut-off name to
 //! read it whole, narrow the window to hide the kind and modified columns
@@ -64,7 +64,7 @@ const file_count = 10_000;
 /// Files a page, with "Pages".
 const per_page = 10;
 
-const Browser = struct {
+pub const Browser = struct {
     files: []File,
     /// The files the search matches, in order: the grid's rows.
     shown: []u32,
@@ -97,7 +97,7 @@ const Browser = struct {
     /// The grid was given the keyboard, in the first frame.
     started: bool = false,
 
-    fn view(b: *Browser, c: *ui.Context) void {
+    pub fn view(b: *Browser, c: *ui.Context) void {
         const t = kit.tokens(c);
         const page = ui.div(c).column().wFull().hFull().p(16).gap(12);
         defer page.end();
@@ -387,20 +387,11 @@ fn makeFiles(gpa: std.mem.Allocator) ![]File {
     return files;
 }
 
-pub fn main(init: std.process.Init) !void {
-    const app = try nanoui.App.create(init, .{ .name = "Grid" });
-    defer app.destroy();
-    const arena = init.arena.allocator();
-    const files = try makeFiles(arena);
-    var state: Browser = .{ .files = files, .shown = try arena.alloc(u32, files.len), .marked = try arena.alloc(bool, files.len) };
-    @memset(state.marked, false);
-    defer state.search.deinit();
-    state.resort();
-    _ = try app.newWindow(.{
-        .title = "Grid",
-        .width = 760,
-        .height = 520,
-        .content = .{ .view = .init(&state, Browser.view) },
-    });
-    try app.run();
+/// The browser of ten thousand files, made with `gpa`, which must outlive it.
+pub fn init(gpa: std.mem.Allocator) !Browser {
+    const files = try makeFiles(gpa);
+    var b: Browser = .{ .files = files, .shown = try gpa.alloc(u32, files.len), .marked = try gpa.alloc(bool, files.len) };
+    @memset(b.marked, false);
+    b.resort();
+    return b;
 }

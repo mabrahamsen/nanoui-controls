@@ -46,7 +46,7 @@ pub fn build(b: *std.Build) void {
     run_snapshots.setCwd(b.path("."));
     // The PNGs are read at run time: a changed one runs the tests again.
     run_snapshots.has_side_effects = true;
-    b.step("test-snapshots", "Compare the grid's drawings with tests/snapshots").dependOn(&run_snapshots.step);
+    b.step("test-snapshots", "Compare the controls' drawings with tests/snapshots").dependOn(&run_snapshots.step);
 
     const docs = b.addObject(.{ .name = "nanoui_controls", .root_module = controls });
     const install_docs = b.addInstallDirectory(.{
@@ -56,11 +56,12 @@ pub fn build(b: *std.Build) void {
     });
     b.step("docs", "Build the API docs into zig-out/docs").dependOn(&install_docs.step);
 
-    // The example: `zig build` builds it, `zig build example` runs it.
+    // The example, a gallery of the controls: `zig build` builds it,
+    // `zig build example` runs it.
     const example = b.addExecutable(.{
-        .name = "grid-example",
+        .name = "gallery",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("examples/grid/main.zig"),
+            .root_source_file = b.path("examples/gallery/main.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
@@ -70,5 +71,5 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(example);
-    b.step("example", "Run the grid example").dependOn(&b.addRunArtifact(example).step);
+    b.step("example", "Run the example, a gallery of the controls").dependOn(&b.addRunArtifact(example).step);
 }

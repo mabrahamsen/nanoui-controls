@@ -1,6 +1,7 @@
-//! The grid drawn as an app sees it, compared with the PNGs in
-//! `tests/snapshots`: what the behaviour tests can't see, its colors,
-//! stripes, selection and titles, in light and dark.
+//! The controls drawn as an app sees them, compared with the PNGs in
+//! `tests/snapshots`: what the behaviour tests can't see, such as the
+//! grid's colors, stripes, selection and titles, and the charts' colors,
+//! in light and dark.
 //!
 //! nanoui draws them itself (`-Dportable=true`) in the DejaVu fonts in
 //! `tests/fonts`, so a drawing doesn't depend on the fonts installed. A
@@ -287,6 +288,52 @@ test "a pager, light and dark" {
     var p: Pages = .{};
     try expectView("pager", .init(&p, Pages.view), .{ .height = 60 });
     try expectView("pager-dark", .init(&p, Pages.view), .{ .height = 60, .dark = true });
+}
+
+/// Each chart, drawn from fixed readings in the theme's colors.
+const Charts = struct {
+    const history = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75 };
+    const read = [_]f32{ 0.3, 0.5, 0.2, 0.6, 0.4, 0.35, 0.5, 0.25 };
+    const write = [_]f32{ 0.2, 0.1, 0.3, 0.2, 0.35, 0.1, 0.2, 0.3 };
+
+    fn heat(at: f32) ui.Color {
+        const cool: ui.Color = .hex(0x22d3ee);
+        const hot: ui.Color = .hex(0xfb7185);
+        return cool.mix(hot, at);
+    }
+
+    fn view(_: *Charts, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(12).gap(10);
+        defer root.end();
+        {
+            const row = ui.div(c).row().wFull().gap(10).h(40);
+            defer row.end();
+            controls.trend(c, &history, .{ .capacity = 16, .height = .fill });
+            var b = controls.bars(c, .{ .count = read.len, .height = .fill, .gap = 2 });
+            while (b.next()) |slot| controls.stack(c, &.{ .{ .value = read[slot.index], .color = t.primary }, .{ .value = write[slot.index], .color = t.success } });
+            b.end();
+        }
+        controls.split(c, &.{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.1, .color = t.warning } }, .{});
+        controls.split(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.success }, .{ .value = 1, .color = t.warning } }, .{ .whole = true });
+        controls.split(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
+        controls.meter(c, 0.62, .{});
+        controls.meter(c, 0.8, .{ .ramp = heat, .glow = 0.6 });
+        controls.meter(c, 1, .{ .ramp = heat, .gap = 0, .radius = 0, .height = 6 });
+        var l = controls.legend(c, .{});
+        l.item(t.primary, "Read");
+        l.item(t.success, "Write");
+        const peak = l.itemOpen(t.warning, "Other");
+        ui.text(c, "▲4.2", .{ .size = 10, .color = t.muted });
+        peak.end();
+        l.end();
+    }
+};
+
+test "the charts, light and dark" {
+    var x: Charts = .{};
+    try expectView("charts", .init(&x, Charts.view), .{ .height = 200 });
+    try expectView("charts-dark", .init(&x, Charts.view), .{ .height = 200, .dark = true });
 }
 
 test "an empty grid says so under its titles" {

@@ -1,8 +1,8 @@
 # Checks the formatting, runs the tests in Debug and ReleaseSafe, and
 # builds the docs and the example on macOS, Linux and Windows on every
 # push to main and every pull request. On macOS it also compares the
-# grid's drawings with tests/snapshots, keeping the ones that differ, and
-# draws the example.
+# controls' drawings with tests/snapshots, keeping the ones that differ,
+# and draws the example's views.
 name: CI
 
 on:
@@ -34,7 +34,8 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           zig build test-snapshots --summary all
-          zig-out/bin/grid-example --nanoui-snapshot=zig-out/example.png
+          zig-out/bin/gallery --nanoui-snapshot=zig-out/example-grid.png
+          zig-out/bin/gallery --nanoui-snapshot=zig-out/example-charts.png --nanoui-script="click:Charts"
       - name: Keep the drawings that differ
         if: failure() && runner.os == 'macOS'
         uses: actions/upload-artifact@v4

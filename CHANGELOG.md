@@ -2,6 +2,17 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- Charts, new controls for figures that change, which nanoui's kit only shows one at a time (`progress`, `ring`):
+  - `trend`: a history drawn as bars, right-aligned in its slots, scaled to its peak, the older bars fainter, in one color or by a ramp. A reading that is not a number leaves its slot empty.
+  - `bars` and `stack`: a row of slots for any bar chart, built with `next` as the grid's rows, which can follow the pointer (`hover`); and a bar of colored parts (`ChartPart`) stacked in a slot.
+  - `split`: a bar across, split into parts: a total by kind, the whole bar by source (`whole`), or a level that can glow.
+  - `meter`: a row of segments lit up to a value, in one color or by a ramp, that can glow; without gaps, a strip of colors in steps.
+  - `legend`: what a chart's colors stand for, in a row in wide windows and a column in narrow ones (`row_from`).
+  - A chart with a `label` is one image to a screen reader, with its `value`; without one, it is left out as a decoration.
+- The example is a gallery: a sidebar picks the grid of files or a system monitor of charts. `zig build example` runs it.
+
 ## 0.4.0
 
 - `pager` is made of the kit's buttons, as `kit.pagination` is: they ease on hover, give under a press, and fade when disabled. Screen readers still name each button.
