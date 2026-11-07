@@ -1,8 +1,10 @@
 # Checks the formatting, runs the tests in Debug and ReleaseSafe, and
 # builds the docs and the example on macOS, Linux and Windows on every
-# push to main and every pull request. On macOS it also compares the
-# controls' drawings with tests/snapshots, keeping the ones that differ,
-# and draws the example's views.
+# push to main and every pull request. On Windows the tests run in
+# ReleaseSafe only: Zig builds Debug there with LLVM, which is no faster
+# than a release build, and the safety checks are the same. On macOS it
+# also compares the controls' drawings with tests/snapshots, keeping the
+# ones that differ, and draws the example's views.
 name: CI
 
 on:
@@ -26,7 +28,8 @@ jobs:
         with:
           version: 0.17.1
       - run: zig fmt --check build.zig build.zig.zon src examples tests
-      - run: zig build test --summary all
+      - if: runner.os != 'Windows'
+        run: zig build test --summary all
       - run: zig build test -Doptimize=ReleaseSafe --summary all
       - run: zig build docs
       - run: zig build
