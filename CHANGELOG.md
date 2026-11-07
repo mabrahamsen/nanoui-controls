@@ -2,6 +2,10 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- Pins nanoui 0.13.0; an app using these controls pins the same release.
+
 ## 0.5.0
 
 - `sidebar`, a new control: rows to pick what a window shows, with an icon, a label and a count, under headings and in groups that fold. The selected row is named by a key the caller keeps. The selection slides from row to row, rows ease into a hover, and groups open and close as the kit's do. It takes the keyboard as the grid does: Up, Down, Home and End move between rows and group headings, Left and Right fold and open groups, and the keys choose as they go or, with `choose_on_enter`, on Enter or Space. A screen reader hears each row, the selected one selected, and whether a group is open.
