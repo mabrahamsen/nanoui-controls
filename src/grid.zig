@@ -5,7 +5,7 @@
 //!
 //! The grid fills the room left in its parent, which needs a bounded
 //! height: a pane in a window, not something that scrolls itself. Given
-//! `rows`, it shows that many instead, without scrolling, and takes only
+//! `max_rows`, it shows at most that many instead, without scrolling, and takes only
 //! their height.
 //!
 //! Columns can hide, in narrow windows or when the caller says so, and
@@ -15,7 +15,7 @@
 //! Given `selected`, a click selects a row, and while nothing else has
 //! the keyboard Up and Down move the selection a row, Page Up and Page
 //! Down a view, and Home and End to the ends, scrolling it into view.
-//! Enter or a double click opens the row (`Row.opened`). Given `multi`
+//! Enter or a double click opens the row (`Row.opened`). Given `selection`
 //! too, Cmd-click (Ctrl-click off the Mac) adds or takes away a row,
 //! Shift-click and Shift with the keys select a run of rows, and Cmd+A
 //! (Ctrl+A) selects them all.
@@ -63,7 +63,8 @@ pub const Column = struct {
     flex: f32 = 1,
     /// The narrowest it gets, taking room or resized, in points.
     min_width: f32 = 40,
-    /// Where its cells' contents sit: numbers line up at the end.
+    /// Where its cells' contents and its title sit: numbers line up at
+    /// the end, a mark or a short status may sit in the center.
     alignment: Alignment = .start,
     /// Clicking its title sorts by it.
     sortable: bool = false,
@@ -72,7 +73,8 @@ pub const Column = struct {
     /// Shown only in windows at least this wide, in points before `scale`.
     min_window_width: f32 = 0,
 
-    pub const Alignment = enum { start, end };
+    /// As nanoui's names for where a row's contents go.
+    pub const Alignment = enum { start, center, end };
 };
 
 /// The column the rows are sorted by, and which way.
@@ -90,7 +92,9 @@ pub const Options = struct {
     column_gap: f32 = 10,
     /// The order the rows are in, which the header shows and changes.
     sort: ?*Sort = null,
-    /// Rows light up under the pointer.
+    /// Rows light up under the pointer, when they are `clickable`; false
+    /// keeps them still, for a grid whose rows take clicks but would
+    /// rather not show it.
     hover: bool = true,
     /// Rows take clicks: they report them, select, light up under the
     /// pointer and show the pointing hand. False makes a table to read,
@@ -108,7 +112,7 @@ pub const Options = struct {
     column_lines: bool = false,
     /// Shows this many rows at most, without scrolling, and takes only
     /// their height; null fills the room left and scrolls.
-    rows: ?usize = null,
+    max_rows: ?usize = null,
     /// Columns the caller hides, one flag a column, on top of their
     /// `min_window_width`.
     hidden: ?[]const bool = null,
@@ -123,7 +127,7 @@ pub const Options = struct {
     /// Mac) adds or takes it away, Shift-click and Shift with the keys
     /// select every row from where the selection started, and Cmd+A
     /// (Ctrl+A) selects them all. Null: only `selected` is.
-    multi: ?[]bool = null,
+    selection: ?[]bool = null,
     /// Column widths the caller keeps, one a column, which dragging the
     /// edge between two titles changes: the column on its left if it has
     /// a `width`, else the one on its right. A 0 starts at the column's
@@ -155,13 +159,15 @@ pub const Options = struct {
     /// Shown under the titles when there are no rows.
     empty: ?[]const u8 = null,
     /// Multiplies the grid's lengths (widths, heights, gaps), for an app
-    /// that zooms its layout along with `c.setZoom`, which zooms text.
+    /// that zooms its layout along with `c.setZoom`, which zooms text. The
+    /// kit sizes its controls with a `kit.Size`, as the pager does, but
+    /// has no sizes for a grid.
     scale: f32 = 1,
     /// How far the header and the rows start their cells in.
     padding: f32 = 10,
     /// A line under the header.
-    rule: bool = true,
-    title: TitleStyle = .{},
+    header_line: bool = true,
+    title_style: TitleStyle = .{},
 };
 
 /// The look of the column titles; null takes the theme's.
@@ -204,9 +210,9 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
             x.* = start;
         };
     }
-    if (opts.multi) |m| {
-        if (m.len != opts.count) @panic("grid: `multi` needs one flag a row");
-        if (opts.selected == null) @panic("grid: `multi` needs `selected`");
+    if (opts.selection) |m| {
+        if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
+        if (opts.selected == null) @panic("grid: `selection` needs `selected`");
     }
     if (opts.order) |o| {
         if (o.len != columns.len) @panic("grid: `order` needs one column a place");
@@ -217,15 +223,15 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
         s.* = if (opts.count > 0) opts.count - 1 else null;
     };
-    if (opts.multi) |m| if (c.focus == 0 and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
+    if (opts.selection) |m| if (c.focus == 0 and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
     var box = ui.div(c).column().wFull();
-    if (opts.rows == null) box = box.grow();
+    if (opts.max_rows == null) box = box.grow();
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;
     const press: Press = if (c.input.down) lay_mod.state(c, Press).* else .{};
     const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
     const head = header(c, columns, opts, lay);
-    if (opts.rule) ui.div(c).wFull().h(1).bg(t.border).end();
+    if (opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .fit = head.fit, .fit_w = head.fit_w };
     // Rows with lines between them meet the lines, without a gap.
     const row_gap = if (opts.row_lines) 0 else opts.gap;
@@ -234,7 +240,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     };
     const pitch = (opts.row_height + row_gap) * k;
     const before = if (opts.selected) |s| s.* else null;
-    if (opts.rows) |n| {
+    if (opts.max_rows) |n| {
         g.rows_end = @min(n, opts.count);
         g.last = g.rows_end;
         g.useKeys(before, keys.useKeys(c, opts.selected, g.rows_end, n));
@@ -284,6 +290,21 @@ const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null, sx: f32 = 0
 const Press = struct { row: ?usize = null, x: f32 = 0, y: f32 = 0, dragging: bool = false };
 
 pub const Grid = struct {
+    /// The rows in view this frame, from `first` up to but not including
+    /// `last`: a caller that loads rows as they come into view fetches
+    /// these, and the ones around them.
+    first: usize = 0,
+    last: usize = 0,
+    /// The header changed the sort this frame: sort the rows before
+    /// building them.
+    sorted: bool,
+    /// What has been typed to jump to a row, with this frame's typing;
+    /// null when nothing was typed this frame. The caller finds the first
+    /// row it begins (ignoring case, as Finder does) and `jump`s to it.
+    typed: ?[]const u8 = null,
+
+    // The rest is the grid's own: callers read the fields above, and use
+    // the methods.
     c: *ui.Context,
     box: ui.Div,
     columns: []const Column,
@@ -294,26 +315,14 @@ pub const Grid = struct {
     /// held down, kept by `end` for the next frame.
     anchor: ?usize,
     press: Press,
-    /// The rows in view this frame, from `first` up to but not including
-    /// `last`: a caller that loads rows as they come into view fetches
-    /// these, and the ones around them.
-    first: usize = 0,
-    last: usize = 0,
-    /// The rows built; null with `opts.rows`, which builds them in
+    /// The rows built; null with `opts.max_rows`, which builds them in
     /// `plain` from `next` up to `rows_end`.
     list: ?ui.ListRows = null,
     plain: ?ui.Div = null,
     next_row: usize = 0,
     rows_end: usize = 0,
-    /// The header changed the sort this frame: sort the rows before
-    /// building them.
-    sorted: bool,
     /// The row Enter opened this frame.
     opened: ?usize = null,
-    /// What has been typed to jump to a row, with this frame's typing;
-    /// null when nothing was typed this frame. The caller finds the first
-    /// row it begins (ignoring case, as Finder does) and `jump`s to it.
-    typed: ?[]const u8 = null,
     /// The row `jump` scrolls to, in the next frame.
     jump_to: ?usize = null,
     /// The column a double-click on an edge fits, and the widest of its
@@ -398,21 +407,21 @@ pub const Grid = struct {
         g.c.changed = true;
     }
 
-    /// Row `i` is selected: among `multi`'s, or `selected` without it.
+    /// Row `i` is selected: among `selection`'s, or `selected` without it.
     fn isSelected(g: *const Grid, i: usize) bool {
-        if (g.opts.multi) |m| return m[i];
+        if (g.opts.selection) |m| return m[i];
         return if (g.opts.selected) |s| s.* == i else false;
     }
 
     const Pick = enum { only, toggle, extend };
 
-    /// Makes row `i` the selected one, and changes `multi` as `how` says:
+    /// Makes row `i` the selected one, and changes `selection` as `how` says:
     /// `i` alone, `i` added or taken away, or every row from the anchor
     /// to `i`.
     fn pick(g: *Grid, i: usize, how: Pick) void {
         const s = g.opts.selected orelse return;
         s.* = i;
-        const m = g.opts.multi orelse return;
+        const m = g.opts.selection orelse return;
         switch (how) {
             .only => {
                 @memset(m, false);
@@ -432,7 +441,7 @@ pub const Grid = struct {
         }
     }
 
-    /// Follows the keys with `multi`: the row they moved to alone, or with
+    /// Follows the keys with `selection`: the row they moved to alone, or with
     /// Shift the rows from the anchor to it.
     fn useKeys(g: *Grid, before: ?usize, k: keys.Keys) void {
         g.opened = k.opened;
@@ -455,7 +464,7 @@ pub const Grid = struct {
         g.endCell();
         std.debug.assert(g.row != null and i >= g.column and i < g.columns.len);
         g.column = i + 1;
-        if (!g.shows(i)) return false;
+        if (!g.isShown(i)) return false;
         const c = g.c;
         const l = g.lay;
         const k = g.opts.scale;
@@ -470,14 +479,18 @@ pub const Grid = struct {
             origin = l.clip_x;
         }
         var d = ui.div(c).absolute().offset(l.at(i) - origin, 0).w(l.w[i]).h(h).row().itemsCenter().gap(g.opts.column_gap * k / 2);
-        if (g.columns[i].alignment == .end) d = d.justifyEnd();
+        d = switch (g.columns[i].alignment) {
+            .start => d,
+            .center => d.justifyCenter(),
+            .end => d.justifyEnd(),
+        };
         g.cell_box = d;
         g.cell_column = i;
         return true;
     }
 
     /// Column `i` is shown this frame.
-    pub fn shows(g: *const Grid, i: usize) bool {
+    pub fn isShown(g: *const Grid, i: usize) bool {
         return lay_mod.shown(g.c, g.columns, g.opts, i);
     }
 

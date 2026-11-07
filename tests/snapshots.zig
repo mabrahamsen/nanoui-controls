@@ -21,9 +21,9 @@ const Files = struct {
     sort: controls.GridSort = .{ .column = 2, .descending = true },
     selected: ?usize = 1,
     hidden: [3]bool = .{ false, false, false },
-    rows: ?usize = null,
-    title: controls.GridTitleStyle = .{},
-    rule: bool = true,
+    max_rows: ?usize = null,
+    title_style: controls.GridTitleStyle = .{},
+    header_line: bool = true,
     count: usize = files.len,
     order: [3]usize = .{ 0, 1, 2 },
     /// Wide columns that scroll sideways past a frozen name.
@@ -67,9 +67,9 @@ const Files = struct {
             .selected = &f.selected,
             .striped = true,
             .hidden = &f.hidden,
-            .rows = f.rows,
-            .title = f.title,
-            .rule = f.rule,
+            .max_rows = f.max_rows,
+            .title_style = f.title_style,
+            .header_line = f.header_line,
             .order = &f.order,
             .scroll_x = f.wide,
             .freeze_first = f.wide,
@@ -285,13 +285,13 @@ test "an empty grid says so under its titles" {
     try expectSnapshot("grid-empty", &f, false);
 }
 
-test "a grid of three rows with styled titles, a hidden column and no rule" {
+test "a grid of three rows with styled titles, a hidden column and no header line" {
     var f: Files = .{
-        .rows = 3,
+        .max_rows = 3,
         .hidden = .{ false, true, false },
-        .rule = false,
+        .header_line = false,
         .selected = null,
-        .title = .{ .size = 12, .mono = true, .weight = .bold, .color = .{ .r = 0.2, .g = 0.4, .b = 0.8 }, .sorted_color = .{ .r = 0.8, .g = 0.3, .b = 0.1 } },
+        .title_style = .{ .size = 12, .mono = true, .weight = .bold, .color = .{ .r = 0.2, .g = 0.4, .b = 0.8 }, .sorted_color = .{ .r = 0.8, .g = 0.3, .b = 0.1 } },
     };
     try expectSnapshot("grid-styled", &f, false);
 }

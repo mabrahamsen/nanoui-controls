@@ -7,6 +7,9 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - `pager` is made of the kit's buttons, as `kit.pagination` is: they ease on hover, give under a press, and fade when disabled. Screen readers still name each button.
 - `pager` keeps its width from page to page, so its arrows stay under the pointer: it always shows as many numbers and ellipses, each as wide as the widest number. Near an end, it numbers more pages where an ellipsis would be.
 - `pager` takes `size`, a `kit.Size` as the kit's buttons do, in place of `scale`.
+- `grid` options renamed, to say what they are: `rows` is `max_rows`, `multi` is `selection`, `rule` is `header_line`, and `title` (the titles' look) is `title_style`. `Grid.shows` is `isShown`.
+- `grid` columns can sit in the center: `GridColumn.alignment = .center` centers a column's cells and its title.
+- `Grid` lists the fields callers read (`first`, `last`, `sorted`, `typed`) first, apart from its own.
 
 ## 0.3.0
 

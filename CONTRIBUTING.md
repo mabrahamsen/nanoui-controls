@@ -21,6 +21,14 @@ Controls follow the conventions of `nanoui.kit`, so any of them could move into 
 - **Drawn in a snapshot test** (`tests/snapshots.zig`), in light and dark, so a change to how it looks shows up in review.
 - **Documented:** doc comments on every public declaration, and a row in the README's table of controls.
 
+### Naming
+
+- **nanoui's names where it has one:** `count`, `row_height`, `gap` and `scroll_to` as `ui.list` has them, `scroll_x` as `ui.Style`, `secondary_clicked` as `ui.Interaction`, `size` as the kit's controls, and `start`, `center` and `end` for where things sit.
+- **What happened this frame in the past tense:** `clicked`, `opened`, `sorted`, `drag_started`.
+- **Null switches a feature off:** an option the caller keeps (`sort`, `selected`, `widths`) is a pointer or a slice that is null when the feature isn't wanted, so a plain control needs only what it can't do without.
+- **Say what it is:** a look is `*_style` (`title_style`), a limit `max_*` (`max_rows`), a line `*_line` or `*_lines` (`header_line`, `row_lines`); a method that answers a question reads as one (`isShown`).
+- **Fields callers read come first** in a control's struct; its own follow, under a comment saying so.
+
 ## Snapshot tests
 
 `zig build test-snapshots` draws the controls with nanoui's own text and CPU renderer, in the DejaVu fonts in `tests/fonts`, and compares the drawings with the PNGs in `tests/snapshots`. A drawing that differs is written to `zig-out/snapshots`, and CI keeps those as an artifact of the run.

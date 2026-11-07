@@ -1,5 +1,5 @@
 //! A pager: "‹ 1 … 9 10 11 … 20 ›", for an app that shows numbered pages,
-//! as a grid's `rows` does a page at a time. The caller keeps the page,
+//! as a grid's `max_rows` does a page at a time. The caller keeps the page,
 //! counted from 0; the pager shows it counted from 1. Clicking a number
 //! goes to it and the arrows to the page before or after; once the pager
 //! has the keyboard (a click on it, or Tab), Left and Right do too, and
