@@ -92,7 +92,11 @@ fn title(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, i: u
     ui.key(c, c.print("grid-column-{d}", .{i}));
     const sort = if (col.sortable) opts.sort else null;
     var box = ui.div(c).row().itemsCenter().gap(opts.column_gap * k / 2).w(l.w[i]);
-    if (col.alignment == .end) box = box.justifyEnd();
+    box = switch (col.alignment) {
+        .start => box,
+        .center => box.justifyCenter(),
+        .end => box.justifyEnd(),
+    };
     if (sort != null or opts.order != null) box = box.control();
     const it = box.interaction();
     defer box.end();
@@ -117,7 +121,7 @@ fn title(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, i: u
         .value = if (!on) "" else if (s.descending) "sorted descending" else "sorted ascending",
         .hint = "Sorts the rows by this column",
     });
-    const ts = opts.title;
+    const ts = opts.title_style;
     const muted = ts.color orelse t.muted;
     const fg = if (on) ts.sorted_color orelse t.foreground else if (sort != null and it.hovered) muted.mix(t.foreground, 0.5) else muted;
     const arrow = if (sort) |s| (if (s.descending) "chevron.down" else "chevron.up") else "";
@@ -126,7 +130,7 @@ fn title(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, i: u
     // at the end, so the title lines up with them.
     if (on and col.alignment == .end) ui.icon(c, arrow, .{ .size = 8 * k, .color = fg });
     ui.text(c, col.title, .{ .size = ts.size, .weight = weight, .mono = ts.mono, .color = fg, .truncate = .ellipsis });
-    if (on and col.alignment == .start) ui.icon(c, arrow, .{ .size = 8 * k, .color = fg });
+    if (on and col.alignment != .end) ui.icon(c, arrow, .{ .size = 8 * k, .color = fg });
     return box.index;
 }
 

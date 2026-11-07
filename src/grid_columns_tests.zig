@@ -352,3 +352,35 @@ test "rows with lines between them meet, without a gap" {
     t.settle(1);
     try std.testing.expectApproxEqAbs(@as(f32, 28), t.findText("banana").?.y - t.findText("apple").?.y, 0.5);
 }
+
+/// A column whose cells and title sit in its center.
+const Centered = struct {
+    const columns = [_]Column{
+        .{ .title = "Name" },
+        .{ .title = "Mid", .width = 120, .alignment = .center },
+    };
+    fn view(_: *Centered, c: *ui.Context) void {
+        var g = grid(c, &columns, .{ .count = 2 });
+        while (g.next()) |row| {
+            g.cell();
+            ui.text(c, c.print("file {d}", .{row.index}), .{});
+            g.cell();
+            ui.text(c, "x", .{});
+        }
+        g.end();
+    }
+};
+
+test "a centered column's cells and title sit in its center" {
+    var s: Centered = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Centered.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Mid ends at the padding and the scrollbar's gutter: from
+    // 400 - 10 - 10 - 120 to 380, its center at 320.
+    const cell = t.findText("x").?;
+    const title = t.findText("Mid").?;
+    try std.testing.expectApproxEqAbs(@as(f32, 320), cell.x + cell.w / 2, 1);
+    try std.testing.expectApproxEqAbs(@as(f32, 320), title.x + title.w / 2, 1);
+}

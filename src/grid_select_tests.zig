@@ -31,7 +31,7 @@ const Many = struct {
     fn view(m: *Many, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
-        var g = grid(c, &Fruit.columns, .{ .count = m.marked.len, .sort = &m.sort, .selected = &m.selected, .multi = &m.marked, .drag_rows = m.drag_rows });
+        var g = grid(c, &Fruit.columns, .{ .count = m.marked.len, .sort = &m.sort, .selected = &m.selected, .selection = &m.marked, .drag_rows = m.drag_rows });
         m.frames += 1;
         // In the frame a click lands, more new state than the store has
         // room for, twice as much each time, so it grows then.
@@ -259,7 +259,7 @@ test "a grid whose rows aren't clickable is a table to read" {
         clicked: usize = 0,
         selected: ?usize = null,
         fn view(tb: *@This(), c: *ui.Context) void {
-            var g = grid(c, &Fruit.columns, .{ .count = 3, .rows = 3, .clickable = tb.clickable, .selected = &tb.selected });
+            var g = grid(c, &Fruit.columns, .{ .count = 3, .max_rows = 3, .clickable = tb.clickable, .selected = &tb.selected });
             while (g.next()) |row| {
                 if (row.clicked) tb.clicked += 1;
                 g.cell();

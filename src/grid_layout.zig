@@ -19,7 +19,7 @@ pub const scrollbar_gutter = 10;
 /// The room left for the scrollbar: none in a grid of a set number of
 /// rows, which doesn't scroll.
 pub fn gutter(opts: Options) f32 {
-    return if (opts.rows == null) scrollbar_gutter else 0;
+    return if (opts.max_rows == null) scrollbar_gutter else 0;
 }
 
 /// Column `i` is shown: the caller doesn't hide it, and the window is

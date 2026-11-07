@@ -76,14 +76,14 @@ while (g.next()) |row| {
 g.end();
 ```
 
-- **Columns** are fixed-width (`width`) or share the room the fixed ones leave (`width = null`), by their `flex` and never narrower than their `min_width`. Their contents sit at the `start` or the `end`, where numbers line up.
+- **Columns** are fixed-width (`width`) or share the room the fixed ones leave (`width = null`), by their `flex` and never narrower than their `min_width`. Their contents and titles sit at the `start`, in the `center`, or at the `end`, where numbers line up.
 - **Resizing:** with `widths`, an array the caller keeps (one width a column, starting at 0), dragging the edge between two titles resizes the column on its left if it has a width, else the one on its right, and a double click fits that column to its widest title or cell in view.
 - **Reordering:** with `order`, an array the caller keeps (the column numbers in the order they show), dragging a title moves its column. Cells keep their column numbers, so the code that builds them doesn't change.
 - **Scrolling sideways:** with `scroll_x`, columns that don't fit keep their widths and scroll sideways, with the wheel's or trackpad's sideways scroll or the bar under the rows; `freeze_first` keeps the first column in place, as a spreadsheet's names are.
 - **Tooltips:** a cell whose text is cut off shows all of it when the pointer rests on it (`tooltips`, on by default).
 - **Sorting:** clicking a `sortable` column's title sorts by it, and clicking again reverses it. `g.sorted` says the sort changed this frame, so the caller sorts its rows before building them.
 - **Selection:** with `selected`, a click selects a row and it is drawn highlighted. While nothing else has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is a row index, so a caller that sorts finds its row again.
-- **Several rows:** with `multi` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
+- **Several rows:** with `selection` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
 - **Typing to jump:** typing while the grid has the keyboard gives `g.typed`, the text so far (a pause of a second starts it afresh). The caller finds the first row it begins, as only it knows what the rows hold, and `g.jump(i)` selects that row and scrolls to it.
 - **Dragging rows out:** with `drag_rows`, a row held and moved a few points reports `row.drag_started`, and `g.dragOut(text)` drags that text out of the window, for the rows selected (the row is selected first, unless it is already). nanoui drags text out on macOS so far.
 - **Context menus:** `row.secondary_clicked` is a right-click (or Control-click on the Mac) on a row, for the app's menu. It selects the row, unless the row is already selected, so the menu acts on the selection.
@@ -91,11 +91,11 @@ g.end();
 - **Long lists** cost what a screenful does: only the rows in view are built. The grid fills the room left in its parent, which needs a bounded height.
 - **Loading as it scrolls:** `g.first` and `g.last` are the rows in view, so a caller whose rows come from a server fetches those pages, and the ones around them, and draws placeholders until they arrive. `scroll_to` brings a row into view.
 - **Empty:** `empty` is text shown under the titles when there are no rows.
-- **A set number of rows:** `rows = 5` shows at most five, without scrolling, and takes only their height.
+- **A set number of rows:** `max_rows = 5` shows at most five, without scrolling, and takes only their height.
 - **Tables to read:** `clickable = false` makes rows that take no clicks, don't light up and show no pointing hand, for a summary or comparison; a screen reader still hears them as rows.
 - **Hiding columns:** a column with `min_window_width` hides in narrower windows, and `hidden` hides columns on the caller's say. Build cells with `g.cellAt(i)`, which returns false for a hidden column, so columns keep their numbers.
 - **Lines:** `row_lines` draws a line between rows, which then meet it square, and `column_lines` one down the middle of each gap between columns, through the titles. With `freeze_first`, the frozen column has a line at its edge while the others are scrolled.
-- **Look:** `striped`, `hover`, `padding`, `rule`, `row_height` and the gaps, `title` (`GridTitleStyle`) for the column titles, and `scale` for apps that zoom their layout with `c.setZoom`. Colors come from the theme unless set.
+- **Look:** `striped`, `hover`, `padding`, `header_line`, `row_height` and the gaps, `title_style` (`GridTitleStyle`) for the column titles, and `scale` for apps that zoom their layout with `c.setZoom`. The grid takes `scale` rather than the kit's `size`, as the pager does, because the kit has no sizes for a grid: `scale` multiplies all its lengths. Colors come from the theme unless set.
 
 See the doc comments in [`src/grid.zig`](src/grid.zig), or build the API docs.
 
@@ -116,7 +116,7 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 - Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last.
 - It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
 - `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
-- With a grid's `rows`, it shows a page at a time: the grid's rows are the page's.
+- With a grid's `max_rows`, it shows a page at a time: the grid's rows are the page's.
 
 ## Example
 

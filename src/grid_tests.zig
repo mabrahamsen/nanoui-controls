@@ -118,7 +118,7 @@ const Basket = struct {
     fn view(b: *Basket, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
-        var g = grid(c, &columns, .{ .count = b.count, .sort = &b.sort, .hidden = &b.hidden, .rows = b.rows, .scale = b.scale });
+        var g = grid(c, &columns, .{ .count = b.count, .sort = &b.sort, .hidden = &b.hidden, .max_rows = b.rows, .scale = b.scale });
         while (g.next()) |row| {
             b.built += 1;
             if (g.cellAt(0)) ui.text(c, c.print("fruit {d}", .{row.index}), .{});
@@ -309,7 +309,7 @@ const Picker = struct {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
         if (p.field) _ = ui.textField(c, &p.search, .{ .placeholder = "Search" });
-        var g = grid(c, &Fruit.columns, .{ .count = p.count, .selected = &p.selected, .rows = p.rows, .scroll_to = p.scroll_to });
+        var g = grid(c, &Fruit.columns, .{ .count = p.count, .selected = &p.selected, .max_rows = p.rows, .scroll_to = p.scroll_to });
         p.scroll_to = null;
         p.first = g.first;
         p.last = g.last;
