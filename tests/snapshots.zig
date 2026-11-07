@@ -32,6 +32,8 @@ const Files = struct {
     narrow: bool = false,
     /// Lines between the rows and the columns.
     lines: bool = false,
+    /// The grid has the keyboard, so its selection is the accent's color.
+    focused: bool = true,
 
     const columns = [_]controls.GridColumn{
         .{ .title = "Name", .sortable = true },
@@ -60,6 +62,7 @@ const Files = struct {
         const root = ui.div(c).column().sizeFull().p(12);
         defer root.end();
         const cols: []const controls.GridColumn = if (f.wide) &wide_columns else if (f.narrow) &narrow_columns else &columns;
+        if (f.focused) c.focusNext(false);
         var g = controls.grid(c, cols, .{
             .count = f.count,
             .empty = "No files here.",
@@ -234,6 +237,12 @@ test "a sorted, striped grid with a selected row, light" {
 test "a sorted, striped grid with a selected row, dark" {
     var f: Files = .{};
     try expectSnapshot("grid-dark", &f, true);
+}
+
+test "a grid without the keyboard, its selection grey, light and dark" {
+    var f: Files = .{ .focused = false };
+    try expectSnapshot("grid-unfocused", &f, false);
+    try expectSnapshot("grid-unfocused-dark", &f, true);
 }
 
 test "the selected row keeps its color under the pointer, and another row lights up" {

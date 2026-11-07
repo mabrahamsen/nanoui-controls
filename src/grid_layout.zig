@@ -1,4 +1,4 @@
-//! Where the grid's columns go: their widths, shared and kept, their order,
+//! The grid's options checked, and where its columns go: their widths, shared and kept, their order,
 //! how far they scroll sideways and which one stays in place, and how wide
 //! a cell's contents would be uncut.
 const std = @import("std");
@@ -20,6 +20,26 @@ pub const scrollbar_gutter = 10;
 /// rows, which doesn't scroll.
 pub fn gutter(opts: Options) f32 {
     return if (opts.max_rows == null) scrollbar_gutter else 0;
+}
+
+/// Panics on options that don't match the columns or the rows, and starts
+/// the caller's `widths` at the columns' own.
+pub fn check(columns: []const Column, opts: Options) void {
+    if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
+    if (opts.widths) |w| {
+        if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
+        for (w, columns) |*x, col| if (x.* == 0) if (col.width) |start| {
+            x.* = start;
+        };
+    }
+    if (opts.selection) |m| {
+        if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
+        if (opts.selected == null) @panic("grid: `selection` needs `selected`");
+    }
+    if (opts.order) |o| {
+        if (o.len != columns.len) @panic("grid: `order` needs one column a place");
+        for (o, 0..) |col, i| if (col >= columns.len or std.mem.indexOfScalar(usize, o[0..i], col) != null) @panic("grid: `order` needs each column once");
+    }
 }
 
 /// Column `i` is shown: the caller doesn't hide it, and the window is

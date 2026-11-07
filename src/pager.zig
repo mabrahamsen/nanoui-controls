@@ -28,12 +28,15 @@ pub const Options = struct {
 };
 
 /// Draws the pager for `pages` pages, the current one `page.*`, and
-/// returns whether the user changed it.
+/// returns whether it changed: the user moved it, or it was past the last
+/// page and moved back to it.
 pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     const t = kit.tokens(c);
     if (pages == 0) return false;
-    if (page.* >= pages) page.* = pages - 1;
+    // A page past the end, as when the pages grow fewer, moves to the last:
+    // a change, as a click is.
     const before = page.*;
+    if (page.* >= pages) page.* = pages - 1;
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
     const it = c.interact(box.index, .{ .focusable = true });
     if (it.focused) c.node(box.index).style.border = t.primary.alpha(0.6);
@@ -210,6 +213,21 @@ fn clickLabel(t: *ui.Tester, label: []const u8) !void {
         return;
     };
     return error.NoSuchButton;
+}
+
+test "a pager reports a page past the end, moved back to the last, as a change" {
+    var p: Pages = .{ .page = 19 };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Pages.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), p.changed);
+    // Fewer pages, as after a search: the app that loads a page on a
+    // change loads the last.
+    p.pages = 5;
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 4), p.page);
+    try std.testing.expectEqual(@as(usize, 1), p.changed);
 }
 
 test "a pager with the keyboard moves with Left, Right, Home and End" {

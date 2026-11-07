@@ -2,11 +2,14 @@
 //! it, drag it to move the column, drag the edge between two titles to
 //! resize a column or double-click it to fit, rest on a cut-off name to
 //! read it whole, narrow the window to hide the kind and modified columns
-//! or, with "Sideways", to scroll them past the names, draw lines between
+//! or, with "Sideways", to show Created and Folder too and scroll the
+//! columns past the names, draw lines between
 //! the rows and columns, switch on stripes, or
 //! show only the five largest files. Search to filter them. Click a row
 //! to select it, move the selection with the arrow keys, Page Up and Page
-//! Down, Home and End, and open it with Enter or a double click. Cmd-click
+//! Down, Home and End, and open it with Enter or a double click; the keys
+//! are the grid's while it has the keyboard, its selection grey while the
+//! search field does. Cmd-click
 //! (Ctrl-click) and Shift select several, Cmd+A (Ctrl+A) all of them, and
 //! a right-click opens a menu to open, select or delete them. Typing a
 //! name's first letters jumps to it, and dragging files out of the window
@@ -24,8 +27,10 @@ const File = struct {
     name: []const u8,
     kind: []const u8,
     size: u64,
-    /// Days since it was last changed.
+    /// Days since it was last changed, and since it was made.
     age: u32,
+    created: u32,
+    folder: []const u8,
     /// Selected, kept here while the rows are sorted or searched anew.
     marked: bool = false,
     /// Deleted from its menu: no longer shown.
@@ -37,13 +42,17 @@ const columns = [_]controls.GridColumn{
     .{ .title = "Kind", .width = 90, .sortable = true, .min_window_width = 560 },
     .{ .title = "Modified", .width = 110, .alignment = .end, .sortable = true, .min_window_width = 680 },
     .{ .title = "Size", .width = 90, .alignment = .end, .sortable = true, .descending_first = true },
+    // Shown only with "Sideways" (see `hidden`), where they make the
+    // columns wider than the window.
+    .{ .title = "Created", .width = 120, .alignment = .end, .sortable = true },
+    .{ .title = "Folder", .width = 200, .sortable = true },
 };
 
 /// The same, none hiding in a narrow window, for scrolling sideways.
 const all_columns = blk: {
     var all = columns;
     for (&all) |*col| col.min_window_width = 0;
-    all[0].min_width = 160;
+    all[0].min_width = 200;
     break :blk all;
 };
 
@@ -65,7 +74,7 @@ const Browser = struct {
     search: ui.TextBuffer = .{},
     sort: controls.GridSort = .{},
     widths: [columns.len]f32 = @splat(0),
-    order: [columns.len]usize = .{ 0, 1, 2, 3 },
+    order: [columns.len]usize = .{ 0, 1, 2, 3, 4, 5 },
     sideways: bool = false,
     lines: bool = false,
     striped: bool = false,
@@ -85,6 +94,8 @@ const Browser = struct {
     /// What the last action did, said under the grid.
     note: []const u8 = "",
     note_buf: [160]u8 = undefined,
+    /// The grid was given the keyboard, in the first frame.
+    started: bool = false,
 
     fn view(b: *Browser, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -114,7 +125,7 @@ const Browser = struct {
             _ = ui.toggle(c, "Lines", &b.lines);
         }
 
-        const hidden = [columns.len]bool{ false, !b.show_kind, false, false };
+        const hidden = [columns.len]bool{ false, !b.show_kind, false, false, !b.sideways, !b.sideways };
         // A page at a time: the grid's rows are the page's, from `base`,
         // and so is the selection it is given.
         const paged = b.view_mode == 2;
@@ -124,6 +135,11 @@ const Browser = struct {
         const count = if (paged) @min(per_page, b.shown_len - base) else b.shown_len;
         var selected: ?usize = if (b.selected) |s| (if (s >= base and s < base + count) s - base else null) else null;
         const scroll_to: ?usize = if (b.scroll_to) |s| (if (s >= base and s < base + count) s - base else null) else null;
+        // The keys are the grid's from the start, as the window opens on it;
+        // a click on the search field takes them, and one on the grid or
+        // Tab gives them back.
+        if (!b.started) c.focusNext(false);
+        b.started = true;
         var g = controls.grid(c, if (b.sideways) &all_columns else &columns, .{
             .count = count,
             .sort = &b.sort,
@@ -179,6 +195,8 @@ const Browser = struct {
             if (g.cellAt(2)) ui.text(c, ago(c, f.age), .{ .color = t.muted, .truncate = .ellipsis });
             _ = g.cellAt(3);
             ui.text(c, size(c, f.size), .{ .mono = true });
+            if (g.cellAt(4)) ui.text(c, ago(c, f.created), .{ .color = t.muted, .truncate = .ellipsis });
+            if (g.cellAt(5)) ui.text(c, f.folder, .{ .color = t.muted, .truncate = .ellipsis });
         }
         g.end();
         if (selected) |s| {
@@ -320,7 +338,9 @@ fn sortFiles(files: []File, sort: controls.GridSort) void {
                 1 => std.mem.order(u8, a.kind, b.kind),
                 // Newest first is the smallest age.
                 2 => std.math.order(b.age, a.age),
-                else => std.math.order(a.size, b.size),
+                3 => std.math.order(a.size, b.size),
+                4 => std.math.order(b.created, a.created),
+                else => std.mem.order(u8, a.folder, b.folder),
             };
             return if (s.descending) order == .gt else order == .lt;
         }
@@ -342,11 +362,12 @@ fn ago(c: *ui.Context, days: u32) []const u8 {
     };
 }
 
-/// `file_count` files with made-up names, kinds, sizes and ages, the same
-/// on every run.
+/// `file_count` files with made-up names, kinds, sizes, ages and folders,
+/// the same on every run.
 fn makeFiles(gpa: std.mem.Allocator) ![]File {
     const words = [_][]const u8{ "report", "invoice", "photo", "notes", "budget", "draft", "summary", "backup", "design", "readme" };
     const kinds = [_][2][]const u8{ .{ "pdf", "PDF" }, .{ "png", "Image" }, .{ "txt", "Text" }, .{ "csv", "Table" }, .{ "zip", "Archive" } };
+    const folders = [_][]const u8{ "Documents", "Downloads", "Desktop", "Projects/Reports", "Archive/2025" };
     var prng: std.Random.DefaultPrng = .init(1);
     const r = prng.random();
     const files = try gpa.alloc(File, file_count);
@@ -356,8 +377,12 @@ fn makeFiles(gpa: std.mem.Allocator) ![]File {
             .name = try std.fmt.allocPrint(gpa, "{s}-{d:0>5}.{s}", .{ words[r.uintLessThan(usize, words.len)], i, kind[0] }),
             .kind = kind[1],
             .size = r.uintLessThan(u64, @as(u64, 1) << r.intRangeAtMost(u6, 8, 28)),
-            .age = r.uintLessThan(u32, 400),
+            .age = undefined,
+            .created = undefined,
+            .folder = folders[r.uintLessThan(usize, folders.len)],
         };
+        f.age = r.uintLessThan(u32, 400);
+        f.created = f.age + r.uintLessThan(u32, 1500);
     }
     return files;
 }

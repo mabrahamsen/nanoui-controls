@@ -1,8 +1,25 @@
-//! The grid's keyboard: the keys that move its selection, and the text
-//! typed to jump to a row.
+//! The grid's keyboard: what takes it, the keys that move its selection,
+//! and the text typed to jump to a row.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
+
+/// The box that takes the keyboard for a grid with a selection, as the
+/// pager does: from a click in the grid (see `Grid.end`), or Tab. It has
+/// no size, as the grid's own box taking clicks would take them from its
+/// scrollbar. `c.focusNext` before `grid` focuses the grid's `box`, so the
+/// keyboard goes to it. Without a selection: nothing takes it, id 0.
+pub fn take(c: *ui.Context, box: ui.Div, selects: bool) ui.Interaction {
+    if (!selects) return .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
+    const taker = ui.div(c).absolute().w(0).h(0);
+    var own = c.interact(taker.index, .{ .focusable = true });
+    taker.end();
+    if (c.focus == c.node(box.index).id) {
+        c.focus = own.id;
+        own.focused = true;
+    }
+    return own;
+}
 
 /// What the keys did this frame (`useKeys`).
 pub const Keys = struct {
@@ -12,11 +29,12 @@ pub const Keys = struct {
     extend: bool = false,
 };
 
-/// Moves the selection by the keys pressed this frame, while nothing else
-/// has the keyboard, among `count` rows of which `page` fit in a view.
-pub fn useKeys(c: *ui.Context, selected: ?*?usize, count: usize, page: usize) Keys {
+/// Moves the selection by the keys pressed this frame, while the grid has
+/// the keyboard (`focused`), among `count` rows of which `page` fit in a
+/// view.
+pub fn useKeys(c: *ui.Context, focused: bool, selected: ?*?usize, count: usize, page: usize) Keys {
     const s = selected orelse return .{};
-    if (c.focus != 0 or count == 0) return .{};
+    if (!focused or count == 0) return .{};
     const last = count - 1;
     const i = s.*;
     const down = if (i) |n| @min(n + 1, last) else 0;
@@ -65,12 +83,12 @@ pub const Typing = struct {
     at: f64 = 0,
 };
 
-/// The text typed so far, with what was typed this frame, while nothing
-/// else has the keyboard; null when nothing was typed this frame. A
-/// pause of `type_pause` starts it afresh.
-pub fn useTyping(c: *ui.Context, typing: *Typing, count: usize) ?[]const u8 {
+/// The text typed so far, with what was typed this frame, while the grid
+/// has the keyboard (`focused`); null when nothing was typed this frame.
+/// A pause of `type_pause` starts it afresh.
+pub fn useTyping(c: *ui.Context, focused: bool, typing: *Typing, count: usize) ?[]const u8 {
     const chars = c.input.chars;
-    if (c.focus != 0 or count == 0 or chars.len == 0 or c.input.cmd or c.input.ctrl) return null;
+    if (!focused or count == 0 or chars.len == 0 or c.input.cmd or c.input.ctrl) return null;
     if (c.time - typing.at > type_pause) typing.len = 0;
     const n = @min(chars.len, typing.buf.len - typing.len);
     @memcpy(typing.buf[typing.len..][0..n], chars[0..n]);

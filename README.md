@@ -24,7 +24,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.3.0"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.4.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -82,7 +82,7 @@ g.end();
 - **Scrolling sideways:** with `scroll_x`, columns that don't fit keep their widths and scroll sideways, with the wheel's or trackpad's sideways scroll or the bar under the rows; `freeze_first` keeps the first column in place, as a spreadsheet's names are.
 - **Tooltips:** a cell whose text is cut off shows all of it when the pointer rests on it (`tooltips`, on by default).
 - **Sorting:** clicking a `sortable` column's title sorts by it, and clicking again reverses it. `g.sorted` says the sort changed this frame, so the caller sorts its rows before building them.
-- **Selection:** with `selected`, a click selects a row and it is drawn highlighted. While nothing else has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is a row index, so a caller that sorts finds its row again.
+- **Selection:** with `selected`, a click selects a row and it is drawn highlighted. The grid takes the keyboard as a text field does: a click in it or Tab gives it the keyboard (`g.focused`), and `c.focusNext(false)` just before `grid` gives it the keyboard at the start. While it has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is grey while something else has the keyboard, so two grids in a window, or a grid under a search field, take the keys in turn. The selection is a row index, so a caller that sorts finds its row again.
 - **Several rows:** with `selection` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
 - **Typing to jump:** typing while the grid has the keyboard gives `g.typed`, the text so far (a pause of a second starts it afresh). The caller finds the first row it begins, as only it knows what the rows hold, and `g.jump(i)` selects that row and scrolls to it.
 - **Dragging rows out:** with `drag_rows`, a row held and moved a few points reports `row.drag_started`, and `g.dragOut(text)` drags that text out of the window, for the rows selected (the row is selected first, unless it is already). nanoui drags text out on macOS so far.
@@ -114,13 +114,14 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 
 - Clicking a number goes to its page, and the arrows to the page before or after; past the ends they are disabled.
 - Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last.
+- When the pages grow fewer than the current page, as after a search, the pager moves it to the last and returns true, so a caller that loads a page on a change loads that one.
 - It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
 - `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
 - With a grid's `max_rows`, it shows a page at a time: the grid's rows are the page's.
 
 ## Example
 
-[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, move, resize and fit columns, scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
+[`examples/grid`](examples/grid/main.zig) is a window with a grid of ten thousand files: sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 
 ```sh
 zig build example
