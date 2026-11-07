@@ -58,16 +58,45 @@ pub fn track(c: *ui.Context) ui.Color {
 }
 
 /// The size of box `index` as the last frame laid it out, or null in its
-/// first frame. When it changed, another frame is drawn with the new one,
-/// as the grid does with its width.
+/// first frame. Then, or when it changed, another frame is drawn with the
+/// new one, as the grid does with its width.
 pub fn lastSize(c: *ui.Context, index: u32) ?ui.Size {
-    const r = c.rects.get(c.node(index).id) orelse return null;
+    const r = c.rects.get(c.node(index).id) orelse {
+        c.frameIn(0);
+        return null;
+    };
     const last = c.state(struct { w: f32 = 0, h: f32 = 0 }, "chart-size");
     if (last.w != r.w or last.h != r.h) {
         last.* = .{ .w = r.w, .h = r.h };
         c.frameIn(0);
     }
     return .{ .w = r.w, .h = r.h };
+}
+
+/// A part of the ring between `r_in` and `r_out`, from angle `a0` to `a1`
+/// clockwise from the top, in `color`: in pieces of at most half a turn,
+/// each a little over the next, so a whole ring has no seam.
+pub fn arc(c: *ui.Context, cv: *ui.Canvas, center: ui.Point, r_out: f32, r_in: f32, a0: f32, a1: f32, color: ui.Color) void {
+    var from = a0;
+    while (from < a1) {
+        const to = @min(a1, from + std.math.pi);
+        piece(c, cv, center, r_out, r_in, from, if (to < a1) to + 0.01 else to, color);
+        from = to;
+    }
+}
+
+fn piece(c: *ui.Context, cv: *ui.Canvas, center: ui.Point, r_out: f32, r_in: f32, a0: f32, a1: f32, color: ui.Color) void {
+    // About a step every 4 degrees, at least two.
+    const steps: usize = @max(2, @as(usize, @intFromFloat(@ceil((a1 - a0) / 0.07))));
+    const pts = c.alloc().alloc(ui.Point, 2 * (steps + 1)) catch return;
+    for (0..steps + 1) |i| {
+        const a = a0 + (a1 - a0) * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(steps));
+        const dx = @sin(a);
+        const dy = -@cos(a);
+        pts[i] = .{ .x = center.x + dx * r_out, .y = center.y + dy * r_out };
+        pts[pts.len - 1 - i] = .{ .x = center.x + dx * r_in, .y = center.y + dy * r_in };
+    }
+    cv.fill(pts, color);
 }
 
 /// Draws `lines` across the open box, `h` points tall, behind what

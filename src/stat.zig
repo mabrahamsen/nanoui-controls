@@ -25,6 +25,9 @@ pub const Options = struct {
     history_capacity: usize = 0,
     /// The trend's color; null takes the theme's accent.
     color: ?ui.Color = null,
+    /// The figure's color, for one that says how something stands
+    /// ("Nominal" in the success color); null takes the theme's text.
+    value_color: ?ui.Color = null,
     /// The figure's size, as the kit's: `.md` draws it at twice the kit's
     /// text at that size.
     size: kit.Size = .md,
@@ -52,7 +55,7 @@ pub fn stat(c: *ui.Context, label: []const u8, value: []const u8, opts: Options)
     {
         const row = ui.div(c).row().itemsCenter().gap(8);
         defer row.end();
-        ui.text(c, value, .{ .size = opts.size.text() * 2, .weight = .semibold, .color = t.foreground });
+        ui.text(c, value, .{ .size = opts.size.text() * 2, .weight = .semibold, .color = opts.value_color orelse t.foreground });
         if (opts.change.len > 0) kit.tag(c, opts.change, .{ .status = opts.status, .size = .xs, .pill = true });
     }
     if (opts.history.len > 0) {
@@ -105,4 +108,29 @@ test "a stat without a change or a history draws neither" {
     var backgrounds: usize = 0;
     for (t.ctx.nodes.items[1..]) |node| backgrounds += @intFromBool(node.style.background != null);
     try std.testing.expectEqual(@as(usize, 0), backgrounds);
+}
+
+test "a stat's figure takes value_color, and the theme's text without it" {
+    const T = struct {
+        color: ?ui.Color = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            stat(c, "Thermal", "Nominal", .{ .card = false, .value_color = x.color });
+        }
+        fn figure(t: *ui.Tester) ui.Color {
+            for (t.ctx.nodes.items) |node| switch (node.content) {
+                .text => |tx| if (std.mem.eql(u8, tx.str, "Nominal")) return tx.style.color.?,
+                else => {},
+            };
+            unreachable;
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 120 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(kit.tokens(&t.ctx).foreground, T.figure(&t));
+    x.color = kit.tokens(&t.ctx).success;
+    t.settle(1);
+    try std.testing.expectEqual(kit.tokens(&t.ctx).success, T.figure(&t));
 }

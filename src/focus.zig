@@ -1,5 +1,6 @@
 //! Taking the keyboard for a control whose own box mustn't take clicks,
-//! shared by the grid and the sidebar. Not a control of its own.
+//! shared by the grid, the sidebar and the swatches. Not a control of its
+//! own.
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 

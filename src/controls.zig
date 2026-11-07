@@ -23,7 +23,7 @@ pub const pager = pager_mod.pager;
 pub const PagerOptions = pager_mod.Options;
 
 // The charts: bars, a history as bars or lines, a bar across, a donut, a
-// list of bars, a meter, a stat and a legend.
+// list of bars, a meter, a gauge, a stat and a legend.
 
 const chart_mod = @import("chart.zig");
 /// A part of a bar, for `Slot.bar`, `breakdown` and `donut`: a share and
@@ -68,6 +68,10 @@ const meter_mod = @import("meter.zig");
 pub const meter = meter_mod.meter;
 pub const MeterOptions = meter_mod.Options;
 
+const gauge_mod = @import("gauge.zig");
+pub const gauge = gauge_mod.gauge;
+pub const GaugeOptions = gauge_mod.Options;
+
 const stat_mod = @import("stat.zig");
 pub const stat = stat_mod.stat;
 pub const StatOptions = stat_mod.Options;
@@ -88,6 +92,28 @@ pub const legend = legend_mod.legend;
 pub const Legend = legend_mod.Legend;
 pub const LegendOptions = legend_mod.Options;
 
+// Forms, pickers and layout: labels beside their controls, colors to
+// pick, and cells that wrap.
+
+const form_mod = @import("form.zig");
+pub const form = form_mod.form;
+pub const Form = form_mod.Form;
+pub const FormOptions = form_mod.Options;
+pub const FormRow = form_mod.Row;
+pub const FormRowOptions = form_mod.RowOptions;
+pub const FormPropertyOptions = form_mod.PropertyOptions;
+pub const FormHeadingOptions = form_mod.HeadingOptions;
+
+const swatches_mod = @import("swatches.zig");
+pub const swatches = swatches_mod.swatches;
+pub const Swatch = swatches_mod.Swatch;
+pub const SwatchesOptions = swatches_mod.Options;
+
+const flow_mod = @import("flow.zig");
+pub const flow = flow_mod.flow;
+pub const Flow = flow_mod.Flow;
+pub const FlowOptions = flow_mod.Options;
+
 test {
     _ = grid_mod;
     _ = pager_mod;
@@ -103,5 +129,9 @@ test {
     _ = legend_mod;
     _ = sidebar_mod;
     _ = splitter_mod;
+    _ = form_mod;
+    _ = swatches_mod;
+    _ = flow_mod;
+    _ = gauge_mod;
     _ = @import("focus.zig");
 }

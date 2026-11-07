@@ -2,6 +2,16 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- `form`, a new control: rows with a label beside a control (`row`) or a value (`property`), the labels in one column as wide as the widest, so what follows lines up. Rows are the kit's controls' height for the form's `size`; a row can have a hint or an error under its control and mark its label as required, as the kit's `field`; `heading` heads the rows after it, with a description under its title if wanted; `grouped` puts each heading's rows in a card under it; and `row_lines` draws lines between rows. A row's label names its control to a screen reader. A row can say more in a tooltip on an ⓘ (`info`) and be dimmed (`disabled`); a property's value can be selectable, or kept to a line with the whole in a tooltip; and with `stack_below`, a narrow form puts its labels above their controls. A screen reader hears a property as one.
+- `swatches`, a new control: a row of round colors to pick one from, by click or with Left, Right, Home and End once it has the keyboard, each named in a tooltip and to a screen reader as a radio button.
+- `gauge`, a new chart: a ring of ticks lit up to a value, in one color or a ramp's, with a figure and a caption in its middle. It eases to a new value, and its ticks keep within its box at any size.
+- `flow`, a new control: cells of one width, as many to a row as fit the parent's width, wrapping onto more rows as the window narrows.
+- `stat` takes `value_color`, for a figure whose color says how something stands.
+- Charts, flows and legends that measure their box ask for the frame that lays it out, instead of waiting for something else to draw one; a donut and a gauge draw in it as soon as they have a size.
+- `sidebar` no longer crashes when what its rows draw, such as a row's tooltip, makes enough new state to move nanoui's store while the sidebar is open: it looks its state up when it needs it, as the grid does.
+
 ## 0.5.1
 
 - Pins nanoui 0.13.0; an app using these controls pins the same release.

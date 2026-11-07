@@ -339,4 +339,22 @@ pub fn catalog(c: *ui.Context) void {
     controls.meter(c, 0.62, .{});
     controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
     controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
+    section(c, "gauge and flow", "ticks lit to a value, in cells that wrap to the width");
+    {
+        var f = controls.flow(c, 110, .{ .gap = 16 });
+        for ([_]struct { f32, []const u8, []const u8 }{ .{ 0.62, "B", "62 bits" }, .{ 0.25, "25%", "battery" }, .{ 0.9, "A", "strong" }, .{ 0.45, "45°", "heat" } }, 0..) |g, i| {
+            const cell = f.cell();
+            controls.gauge(c, g[0], .{ .size = 110, .ramp = if (i == 1) &.{} else if (i == 3) &heat else &strength, .text = g[1], .caption = g[2], .label = g[2] });
+            cell.end();
+        }
+        {
+            const cell = f.cell();
+            controls.stat(c, "Thermal", "Nominal", .{ .card = false, .size = .xs, .value_color = t.success });
+            cell.end();
+        }
+        f.end();
+    }
 }
+
+/// From weak to strong.
+const strength = [_]ui.Color{ .hex(0xf43f5e), .hex(0xfb923c), .hex(0xfacc15), .hex(0xa3e635), .hex(0x34d399) };

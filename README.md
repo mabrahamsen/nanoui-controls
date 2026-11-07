@@ -11,6 +11,9 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
 | [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings and in groups that fold, chosen by key, with the keyboard. |
 | [`splitter`](#splitter) | A handle between two panes that resizes one of them, by dragging or with the keys. |
+| [`form`](#form) | Rows with a label beside a control or a value, the labels in one column, for a settings pane or an inspector. |
+| [`swatches`](#swatches) | A row of round colors to pick one from, with the mouse or the keys. |
+| [`flow`](#flow) | Cells of one width, as many to a row as fit, wrapping onto more rows. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -18,6 +21,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`donut`](#donut) | A ring split into colored parts, with a figure in its middle. |
 | [`barList`](#barlist) | Rows of a label, a bar and a figure, scaled to the largest: the busiest processes, disk use by folder. |
 | [`meter`](#meter) | A row of segments, like LEDs, lit up to a value; without gaps, a strip of colors in steps. |
+| [`gauge`](#gauge) | A ring of ticks lit up to a value, with a figure in its middle: a score, a level. |
 | [`stat`](#stat) | A figure in a tile, with how it changed and a trend of its history. |
 | [`legend`](#legend) | What a chart's colors stand for, running on to new lines where its width ends. |
 
@@ -176,6 +180,58 @@ row.end();
 - A screen reader hears a splitter called `label`, with the width as its value, and steps it.
 - `grab_width` is where the pointer can grab it, and `center_line` draws a line down its middle; `scale` is for apps that zoom their layout.
 
+## form
+
+Rows with a label beside a control or a value, the labels in one column, so what follows them lines up row under row. The kit's `field` puts its label above its control, which suits a dialog of a few fields; a form suits a settings pane or an inspector of many rows.
+
+```zig
+var f = controls.form(c, .{ .row_lines = true });
+f.heading("Snapshots", .{ .description = "How often, and how many to keep." });
+{
+    const r = f.row("Keep latest", .{ .hint = "Snapshots to keep, newest first." });
+    _ = kit.numberInput(c, &keep, .{});
+    r.end();
+}
+f.property("Hostname", host, .{ .mono = true });
+f.end();
+```
+
+- `row` puts its label in the column and leaves the row open for a control. A `hint` sits under the control, muted, or an `err` in its place in the theme's danger color, and `required` marks the label with "*", as the kit's field has them. `info` adds an ⓘ after the label that says more in a tooltip; `disabled` dims the label and hint beside a control the caller disables; `label_top` puts the label at the top, beside a control taller than a line. An empty label leaves just the control column, for a checkbox with its own title or buttons under the controls.
+- A row's label names its control to a screen reader, whole even when it is cut short, as nanoui names a control by the text before it on its line.
+- `property` shows a label and a value that wraps within the room left, the label beside its first line; a screen reader hears them as one ("Hostname, studio.local"). With `selectable`, the value can be selected and copied; with `wrap = false`, it keeps to a line, ends in "…" and shows whole in a tooltip.
+- `heading` titles the rows after it, with a muted `description` under the title if wanted. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them. `row_lines` draws a line between rows.
+- The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls.
+- Every row is at least the height of the kit's controls at its `size`, so selects, inputs and toggles keep one rhythm; `gap` is the room after the labels and `row_gap` between rows.
+- With `stack_below`, a form narrower than that puts its labels above what they name, as the kit's field has them, for a narrow pane; `stacked` says it did.
+
+## swatches
+
+A row of round colors (`Swatch`, a color and its name) to pick one from. The caller keeps the one chosen as an index, as the kit's `radioGroup` keeps its option, and it is ringed.
+
+```zig
+if (controls.swatches(c, &colors, &chosen, .{})) apply(colors[chosen.?].color);
+```
+
+- A click chooses one, and so do Left, Right, Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent.
+- Each is named in a tooltip and to a screen reader, as a radio button, the chosen one selected.
+- `size` is a `kit.Size`, in step with the kit's controls; `border` and `selected_border` color the edges.
+
+## flow
+
+Cells of one width, as many to a row as fit its parent, wrapping onto more rows instead of running off, as nanoui's rows would. It takes its parent's width as the last frame laid it out, as the legend does, so it wraps anew when the window is resized.
+
+```zig
+var f = controls.flow(c, 180, .{ .gap = 16 });
+for (readings) |r| {
+    const cell = f.cell();
+    controls.stat(c, r.label, r.value, .{});
+    cell.end();
+}
+f.end();
+```
+
+- `breakRow` starts the next cell on a new row; `per_row` and `rows` say how it laid them out.
+
 ## Charts
 
 The charts draw what the caller keeps, a history or a few figures. What they share:
@@ -186,8 +242,8 @@ The charts draw what the caller keeps, a history or a few figures. What they sha
 - **Scale:** `min` is the value at the bottom and `max` at the top, unless a reading goes higher: then the top rises to it, so a quiet history doesn't fill the chart and a loud one isn't cut off. `fixed_max` keeps the top at `max`.
 - **Lines at values:** `value_lines` (`ValueLine`) draws lines across at values, such as half or a limit, with a label each, behind the bars or lines.
 - **Inspecting:** an `interactive` chart (`bars`, `line`) follows the pointer, and takes the keyboard on a click or Tab: Left, Right, Home and End move on from the slot pointed at, until the pointer moves again. `current` is the slot it points at; call `tooltip` with what it shows, and the chart says it in a tooltip there and to a screen reader.
-- **Screen readers:** with a `label` ("CPU history"), a chart is one image, and its `value_text` ("62 °C, peak 81 °C") is what it shows; a meter says its value as a percentage unless given one. Without a label, a chart is a decoration and is left out, unless it is interactive: then it is called "Chart", so give it a label.
-- **Motion:** `breakdown`, `donut` and `meter` ease to new values, as the kit's progress bar does, unless the system asks for reduced motion.
+- **Screen readers:** with a `label` ("CPU history"), a chart is one image, and its `value_text` ("62 °C, peak 81 °C") is what it shows; a meter and a gauge say their value as a percentage unless given one. Without a label, a chart is a decoration and is left out, unless it is interactive: then it is called "Chart", so give it a label.
+- **Motion:** `breakdown`, `donut`, `gauge` and `meter` ease to new values, as the kit's progress bar does, unless the system asks for reduced motion.
 - **Bad figures:** a part that is negative (where there is no room below zero) or not a number counts as nothing, a reading that is not a number or is infinite leaves its slot empty or breaks its line, and parts that add up to more than their bar are squeezed to fit.
 - **`scale`** multiplies a chart's lengths for apps that zoom their layout with `c.setZoom`, as the grid's does: the kit has no sizes for charts. Charts with text (`legend`, `barList`, `stat`) take the kit's `size` for it.
 
@@ -285,6 +341,18 @@ controls.meter(c, 1, .{ .ramp = &hues, .gap = 0, .radius = 0, .segments = 48 });
 - Lit segments take `color`, or `ramp` by their place, and `glow` in it; unlit ones are the `track`.
 - With a `gap` of 0, lit all the way, it is a strip of colors in steps, for the gradients nanoui can't fill, such as under a slider. Its segments overlap by a point, so no seams show.
 
+## gauge
+
+A ring of ticks from the bottom left round to the bottom right, lit up to a value from 0 to 1, with a figure (`text`) and a word under it (`caption`) in its middle, as the donut has. It is drawn with `ui.canvas`.
+
+```zig
+controls.gauge(c, score, .{ .ramp = &strength, .text = "B", .caption = "62 bits", .label = "Strength" });
+```
+
+- Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them; unlit ones are the `track`. The figure is in the value's color.
+- `size` is its width across and `ticks` how many; their length, width and glow keep in proportion to the size, within its box. `inner_line` draws a thin circle inside them.
+- A screen reader hears its value as a percentage, unless given a `value_text`.
+
 ## stat
 
 A figure to read at a glance, in a tile: its label, the figure large, how it changed in a kit tag colored by its `status`, and a trend of its `history` under it.
@@ -294,6 +362,7 @@ controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .
 ```
 
 - `size` (`.md` by default) sizes the figure at twice the kit's text at that size; `card = false` leaves out the tile.
+- `value_color` colors the figure, for one that says how something stands: with `card = false`, a reading such as "Thermal: Nominal" in the success color.
 - A row of stats shares it, each `.fill` wide; with the row's `itemsStretch`, the tiles are one height.
 
 ## legend
@@ -314,9 +383,10 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, Form, and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
+- **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)): a text field, swatches, a number input, a select and toggles in rows under headings, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, and properties to read, copy, or read whole in a tooltip. Narrow the window and its labels go above their controls; switch them to the end of their column, and the lines between rows.
 - **Charts** is a system monitor whose readings change four times a second ([`charts.zig`](examples/gallery/charts.zig)): stats with their trends at the top, the CPU's load as a trend with a line at half, a meter, and bars up and down for how it changed; network traffic as a line chart to point at or step through with the keys; memory as a donut and a breakdown with a legend that runs on to new lines; disk use as a list of bars by folder to click; the fan as a glowing level; and the heat ramp as a strip. Pause it, switch the ramp, the glow and the fade, and set the meter's segments.
 
 ```sh
