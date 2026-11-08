@@ -5,6 +5,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 const form_mod = @import("form.zig");
 const Form = form_mod.Form;
 const HeadingOptions = form_mod.HeadingOptions;
@@ -74,7 +75,7 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
         const it = c.interact(h.index, .{ .focusable = true });
         hovered = it.hovered;
         if (it.hovered) c.cursor_hand = true;
-        if (it.focused) h = h.border(t.primary.alpha(0.6)).rounded(@max(0, t.radius - 2) * k);
+        if (it.focused) h = h.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
         if (it.clicked or activated(c, it.focused)) {
             o.* = !o.*;
             c.changed = true;

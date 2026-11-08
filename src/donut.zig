@@ -56,21 +56,14 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     if (r_out > 0) {
         const center: ui.Point = .{ .x = cv.size.w / 2, .y = cv.size.h / 2 };
         const r_in = r_out - thick;
-        var sum: f32 = 0;
-        // The first parts ease to new values; any after them move at once.
-        var eased: [32]f32 = undefined;
-        for (parts, 0..) |p, i| {
-            const v = chart.partShare(p.value);
-            const e = if (i < eased.len) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
-            if (i < eased.len) eased[i] = e;
-            sum += e;
-        }
+        var eased: [chart.max_eased]f32 = undefined;
+        const sum = chart.easeParts(c, parts, &eased);
         const whole = if (opts.whole) sum else @max(sum, 1);
         const gap = opts.gap * k / (r_out - thick / 2);
         var from: f32 = 0;
         var drawn: usize = 0;
         if (whole > 0) for (parts, 0..) |p, i| {
-            const sweep = (if (i < eased.len) eased[i] else chart.partShare(p.value)) / whole * std.math.tau;
+            const sweep = chart.eased(parts, &eased, i) / whole * std.math.tau;
             defer from += sweep;
             if (sweep <= gap) continue;
             drawn += 1;

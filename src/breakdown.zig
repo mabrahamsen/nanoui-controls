@@ -54,16 +54,10 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     defer r.end();
     // Every part eases first, while the keys they ease under are the same
     // each frame: the boxes after skip parts that are nothing.
-    var eased: [max_eased]f32 = undefined;
-    var used: f32 = 0;
+    var eased: [chart.max_eased]f32 = undefined;
+    const used = chart.easeParts(c, parts, &eased);
     for (parts, 0..) |p, i| {
-        const v = chart.partShare(p.value);
-        const e = if (i < max_eased) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
-        if (i < max_eased) eased[i] = e;
-        used += e;
-    }
-    for (parts, 0..) |p, i| {
-        const v = if (i < max_eased) eased[i] else chart.partShare(p.value);
+        const v = chart.eased(parts, &eased, i);
         if (!(v > 0)) continue;
         var d = ui.div(c).hFull();
         if (opts.part_radius > 0) d = d.rounded(opts.part_radius * k);
@@ -73,9 +67,6 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     }
     if (!opts.whole and used < 1) chart.weighted(ui.div(c).hFull(), 1 - used).end();
 }
-
-/// How many parts ease to new values; any after them move at once.
-const max_eased = 32;
 
 const Color = ui.Color;
 const cyan: Color = .hex(0x22d3ee);

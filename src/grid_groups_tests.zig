@@ -86,3 +86,50 @@ test "a row folded away is found at the nearest heading over it" {
     // A group that is gone is found nowhere.
     try std.testing.expectEqual(@as(?usize, null), gs.locate(row(7, 0)));
 }
+
+test "every row in view is what a plain listing of the groups says, however they fold" {
+    var t: ui.Tester = undefined;
+    const c = try context(&t);
+    defer t.deinit();
+    const groups = [_]groups_mod.Group{ .{ .size = 2 }, .{ .size = 3, .depth = 1 }, .{ .size = 1, .depth = 2 }, .{ .size = 1 }, .{ .size = 0 }, .{ .size = 4, .depth = 1 } };
+    var open: [groups.len]bool = undefined;
+    // Every way of folding them, with and without singles.
+    for (0..(1 << groups.len)) |mask| for ([_]bool{ true, false }) |singles| {
+        for (&open, 0..) |*o, i| o.* = mask & (@as(usize, 1) << @intCast(i)) != 0;
+        const gs = Groups.init(c, &groups, &open, .{ .singles = singles });
+        // The listing, built the plain way: a heading, then its rows
+        // while open, skipping groups in a folded one.
+        var want: [64]Item = undefined;
+        var n: usize = 0;
+        var folded: ?u8 = null;
+        for (groups, 0..) |gr, i| {
+            if (folded) |d| {
+                if (gr.depth > d) continue;
+                folded = null;
+            }
+            const inner = i + 1 < groups.len and groups[i + 1].depth > gr.depth;
+            if (!singles and gr.size == 1 and !inner) {
+                want[n] = .{ .row = .{ .group = i, .index = 0, .depth = gr.depth } };
+                n += 1;
+                continue;
+            }
+            want[n] = .{ .heading = .{ .group = i, .depth = gr.depth } };
+            n += 1;
+            if (!open[i]) {
+                folded = gr.depth;
+                continue;
+            }
+            for (0..gr.size) |j| {
+                want[n] = .{ .row = .{ .group = i, .index = j, .depth = gr.depth + 1 } };
+                n += 1;
+            }
+        }
+        try std.testing.expectEqual(n, gs.count());
+        for (want[0..n], 0..) |w, i| {
+            const got = gs.at(i);
+            try std.testing.expect(got.eql(w));
+            try std.testing.expectEqual(w.depth(), got.depth());
+            try std.testing.expectEqual(@as(?usize, i), gs.locate(w));
+        }
+    };
+}

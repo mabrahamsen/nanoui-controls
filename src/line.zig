@@ -86,10 +86,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
     const in: chart.Inspect = if (opts.interactive) .beginFrom(c, box.index, opts.capacity, opts.capacity - longest, true) else .{};
     // The value lines first, so the canvas draws over them.
     if (opts.value_lines.len > 0) {
-        const lines_h = switch (opts.height) {
-            .px => |v| v * k,
-            else => if (chart.lastSize(c, box.index)) |sz| sz.h else 0,
-        };
+        const lines_h = chart.linesHeight(c, opts.height, k, box.index);
         chart.valueLines(c, opts.value_lines, lines_h, pad, opts.min, peak, opts.axis == .none);
     }
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
@@ -112,7 +109,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
         while (i <= n) : (i += 1) {
             const v = if (i < n) readingOf(s, n, i) else null;
             if (v) |r| {
-                const f = trend_mod.level(r, opts.min, peak) orelse 0;
+                const f = chart.level(r, opts.min, peak) orelse 0;
                 pts.append(c.alloc(), .{ .x = at.x(i, n, w, pad), .y = at.y(f, h, pad) }) catch break;
                 continue;
             }
@@ -135,7 +132,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
         cv.line(.{ .x = x, .y = 0 }, .{ .x = x, .y = h }, .{ .width = 1, .color = t.muted.alpha(0.6) });
         for (series) |s| {
             const r = readingOf(s, n, i) orelse continue;
-            const f = trend_mod.level(r, opts.min, peak) orelse continue;
+            const f = chart.level(r, opts.min, peak) orelse continue;
             cv.circle(.{ .x = x, .y = at.y(f, h, pad) }, 3.5 * k, t.background);
             cv.circle(.{ .x = x, .y = at.y(f, h, pad) }, 2.5 * k, s.color orelse t.primary);
         }
@@ -152,11 +149,7 @@ fn inset(opts: Options) f32 {
 /// Series `s`'s reading in slot `i` of `n`, right-aligned; null where it
 /// has none, or one that is not a number.
 fn readingOf(s: Series, n: usize, i: usize) ?f32 {
-    const shown = @min(s.values.len, n);
-    if (i < n - shown or i >= n) return null;
-    const skip = s.values.len - shown;
-    const v = s.values[(s.head % s.values.len + skip + i - (n - shown)) % s.values.len];
-    return if (std.math.isFinite(v)) v else null;
+    return chart.slotReading(s.values, s.head, n, i);
 }
 
 pub const Line = struct {

@@ -13,7 +13,7 @@
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
-const chart = @import("chart.zig");
+const measure = @import("measure.zig");
 
 pub const Options = struct {
     /// Between the cells in a row, and between the rows, in points before
@@ -31,7 +31,7 @@ pub fn flow(c: *ui.Context, cell_width: f32, opts: Options) Flow {
     const k = opts.scale;
     const box = ui.div(c).column().wFull().gap(opts.row_gap * k);
     // The width as the last frame laid it out; until then, the window's.
-    const width = if (chart.lastSize(c, box.index)) |s| s.w else c.size.w;
+    const width = if (measure.lastSize(c, box.index)) |s| s.w else c.size.w;
     // A cell and its gap take at least a point, so a row holds a finite
     // number of them.
     const fit = @floor(@max(0, width + opts.gap * k) / @max(1, (cell_width + opts.gap) * k));

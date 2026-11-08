@@ -109,7 +109,7 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     for (opts.zones[0..zones], 0..) |label, z| {
         const cell = chart.weighted(ui.div(c).w(0).row().justifyCenter(), @floatFromInt(zoneSize(z, zones, opts.segments)));
         defer cell.end();
-        ui.text(c, label, .{ .size = 9.5, .mono = true, .color = t.muted });
+        ui.text(c, label, .{ .size = chart.axis_text_size, .mono = true, .color = t.muted });
     }
 }
 

@@ -6,6 +6,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 
 /// One part of a bar: `value` its share, and its color. A part that is
 /// negative or not a number counts as 0, unless the chart has room below
@@ -58,25 +59,67 @@ pub fn track(c: *ui.Context) ui.Color {
     return t.surface_hover.mix(t.border, 0.5);
 }
 
-/// The size of box `index` as the last frame laid it out, or null in its
-/// first frame. Then, or when it changed, another frame is drawn with the
-/// new one, as the grid does with its width.
-pub fn lastSize(c: *ui.Context, index: u32) ?ui.Size {
-    const id = c.node(index).id;
-    const r = c.rects.get(id) orelse {
-        c.frameIn(0);
-        return null;
+/// The size of box `index` as the last frame laid it out (`measure.zig`).
+pub const lastSize = @import("measure.zig").lastSize;
+
+/// The height of a chart's box `index`, `height` before `scale` `k`: its
+/// points, or for one that fills, as the last frame laid it out (0 in its
+/// first). For lines across it at values.
+pub fn linesHeight(c: *ui.Context, height: ui.Length, k: f32, index: u32) f32 {
+    return switch (height) {
+        .px => |v| v * k,
+        else => if (lastSize(c, index)) |sz| sz.h else 0,
     };
-    // Kept by the box's own id, not by where the lookup happens.
-    ui.key(c, c.print("chart-size-{x}", .{id}));
-    defer c.next_key = null;
-    const last = c.state(struct { w: f32 = 0, h: f32 = 0 }, "chart-size");
-    if (last.w != r.w or last.h != r.h) {
-        last.* = .{ .w = r.w, .h = r.h };
-        c.frameIn(0);
-    }
-    return .{ .w = r.w, .h = r.h };
 }
+
+/// Where `x` falls between `min` and `max`, from 0 to 1; null for no
+/// reading (not a number, or infinite). A scale with no room between
+/// `min` and `max` puts every reading at 0.
+pub fn level(x: f32, min: f32, max: f32) ?f32 {
+    if (!std.math.isFinite(x)) return null;
+    const range = max - min;
+    if (!std.math.isFinite(range) or !(range > 0)) return 0;
+    return std.math.clamp((x - min) / range, 0, 1);
+}
+
+/// The reading in slot `i` of `n`, for readings kept oldest first from
+/// `head` (a ring once full) and shown right-aligned, the newest in the
+/// last slot; with more readings than slots, the newest. Null where there
+/// is none, or one that is not a number.
+pub fn slotReading(values: []const f32, head: usize, n: usize, i: usize) ?f32 {
+    const shown = @min(values.len, n);
+    if (i < n - shown or i >= n) return null;
+    const skip = values.len - shown;
+    const v = values[(head % values.len + skip + i - (n - shown)) % values.len];
+    return if (std.math.isFinite(v)) v else null;
+}
+
+/// How many parts of a bar ease to new values; any after them move at
+/// once.
+pub const max_eased = 32;
+
+/// Eases each of the first `max_eased` parts' shares to its new value,
+/// into `out`, in an order kept from frame to frame; the rest as they
+/// are. Returns their sum.
+pub fn easeParts(c: *ui.Context, parts: []const Part, out: *[max_eased]f32) f32 {
+    var sum: f32 = 0;
+    for (parts, 0..) |p, i| {
+        const v = partShare(p.value);
+        const e = if (i < max_eased) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
+        if (i < max_eased) out[i] = e;
+        sum += e;
+    }
+    return sum;
+}
+
+/// Part `i`'s share as `easeParts` left it.
+pub fn eased(parts: []const Part, out: *const [max_eased]f32, i: usize) f32 {
+    return if (i < max_eased) out[i] else partShare(parts[i].value);
+}
+
+/// The size of the small figures charts set beside or under them: value
+/// lines' labels, an axis, zones.
+pub const axis_text_size = 9.5;
 
 /// A part of the ring between `r_in` and `r_out`, from angle `a0` to `a1`
 /// clockwise from the top, in `color`: in pieces of at most half a turn,
@@ -122,7 +165,7 @@ pub fn valueLines(c: *ui.Context, lines: []const ValueLine, h: f32, top: f32, lo
         if (labels and l.label.len > 0) {
             const d = ui.div(c).absolute().offset(2, @max(0, y - 13)).h(12);
             defer d.end();
-            ui.text(c, l.label, .{ .size = 9.5, .mono = true, .color = t.muted });
+            ui.text(c, l.label, .{ .size = axis_text_size, .mono = true, .color = t.muted });
         }
     }
 }
@@ -148,7 +191,7 @@ pub const FrameSpec = struct {
     }
 };
 
-const axis_style: ui.TextStyle = .{ .size = 9.5, .mono = true };
+const axis_style: ui.TextStyle = .{ .size = axis_text_size, .mono = true };
 
 /// A chart's frame, with an axis beside it or texts under it: open it
 /// before the chart, which then takes its width, and close it after.
@@ -290,7 +333,7 @@ pub const Inspect = struct {
         if (kept.slot) |s| if (s >= count) {
             kept.slot = count - 1;
         };
-        if (it.focused) c.node(index).style.border = kit.tokens(c).primary.alpha(0.6);
+        if (it.focused) c.node(index).style.border = focus.ring(c);
         if (!it.hovered) kept.x = null;
         if (it.hovered) {
             c.wants_moves = true;

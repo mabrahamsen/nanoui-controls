@@ -18,6 +18,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 
 pub const Options = struct {
     /// How many pages either side of the current one are numbered, besides
@@ -44,7 +45,7 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     if (page.* >= pages) page.* = pages - 1;
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
     const it = c.interact(box.index, .{ .focusable = true });
-    if (it.focused) c.node(box.index).style.border = t.primary.alpha(0.6);
+    if (it.focused) c.node(box.index).style.border = focus.ring(c);
     {
         defer box.end();
         if (it.focused) keys(c, page, pages);

@@ -14,6 +14,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 const breakdown_mod = @import("breakdown.zig");
 const meter_mod = @import("meter.zig");
 const chart = @import("chart.zig");
@@ -90,13 +91,6 @@ pub const Options = struct {
     scale: f32 = 1,
 };
 
-/// Where `v` falls between `min` and `max`, from 0 to 1; 0 for a value
-/// that is not a number, or a scale with no room.
-fn level(v: f32, min: f32, max: f32) f32 {
-    if (!std.math.isFinite(v) or !(max > min)) return 0;
-    return std.math.clamp((v - min) / (max - min), 0, 1);
-}
-
 /// Draws a row for each of `items`, and returns the one clicked this
 /// frame, with `clickable`.
 pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
@@ -131,7 +125,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 row = row.bg(t.surface_hover);
                 c.cursor_hand = true;
             }
-            if (in.focused) row = row.border(t.primary.alpha(0.6));
+            if (in.focused) row = row.border(focus.ring(c));
             // Enter or Space clicks the row that has the keyboard, and is
             // the list's: nothing after it sees it.
             const pressed = in.focused and (c.input.key == .enter or c.shortcut(.{ .key = ' ' }) or std.mem.eql(u8, c.input.chars, " "));
@@ -150,7 +144,8 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             defer slot.end();
             if (it.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = t.muted });
         }
-        const share = level(it.value, opts.min, max);
+        // A value that is not a number draws no bar.
+        const share = chart.level(it.value, opts.min, max) orelse 0;
         const bar_color = it.color orelse if (opts.ramp.len > 0) chart.rampColor(opts.ramp, share) else opts.color orelse t.primary;
         {
             const l = ui.div(c).w(opts.label_width * k).row().itemsCenter().gap(@round(text * 0.4) * k);

@@ -19,7 +19,8 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
-const chart = @import("chart.zig");
+const focus = @import("focus.zig");
+const measure = @import("measure.zig");
 const sections = @import("form_sections.zig");
 
 pub const Options = struct {
@@ -111,7 +112,7 @@ pub const PropertyOptions = struct {
 pub fn form(c: *ui.Context, opts: Options) Form {
     const box = ui.div(c).column().wFull().gap(opts.row_gap * opts.scale);
     // Its width as the last frame laid it out, only when it matters.
-    const stacked = if (opts.stack_below) |below| if (chart.lastSize(c, box.index)) |s| s.w < below * opts.scale else false else false;
+    const stacked = if (opts.stack_below) |below| if (measure.lastSize(c, box.index)) |s| s.w < below * opts.scale else false else false;
     return .{ .stacked = stacked, .c = c, .opts = opts, .box = box, .measured = state(c).width };
 }
 
@@ -211,12 +212,12 @@ pub const Form = struct {
         const it = c.interact(r.index, .{ .focusable = !opts.disabled });
         const live = !opts.disabled;
         if (live and it.hovered) c.cursor_hand = true;
-        if (it.focused) r = r.border(t.primary.alpha(0.6)).rounded(@max(0, t.radius - 2) * k);
+        if (it.focused) r = r.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
         f.drawLabel(label, .{ .disabled = opts.disabled });
         {
             var v = ui.div(c).wFull().row().itemsCenter().justifyEnd().gap(4 * k);
-            if (opts.disabled) v = v.opacity(0.45);
+            if (opts.disabled) v = v.opacity(focus.dimmed);
             defer v.end();
             const col = if (live and it.hovered) t.foreground else t.muted;
             ui.text(c, value, .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis });
@@ -311,7 +312,7 @@ pub const Form = struct {
         var col = ui.div(c).row().itemsCenter().gap(2 * k).clip().pt(l.top);
         col = if (f.stacked) col.wFull() else col.w(f.columnWidth());
         if (f.opts.label_align == .end and !f.stacked) col = col.justifyEnd();
-        if (l.disabled) col = col.opacity(0.45);
+        if (l.disabled) col = col.opacity(focus.dimmed);
         defer col.end();
         // One element, so the mark isn't what names the control.
         if (l.names) {
@@ -391,7 +392,7 @@ pub const Row = struct {
         const t = kit.tokens(r.c);
         var under = ui.div(r.c).row().wFull().pl(r.indent);
         if (r.at_end) under = under.justifyEnd();
-        if (r.opts.disabled) under = under.opacity(0.45);
+        if (r.opts.disabled) under = under.opacity(focus.dimmed);
         defer under.end();
         endText(r.c, msg, .{ .size = r.size.text() - 1, .color = if (r.opts.err.len > 0) t.danger else t.muted, .wrap = true }, r.at_end, under.index, r.indent);
     }

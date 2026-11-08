@@ -15,6 +15,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 
 pub const Options = struct {
     /// The narrowest and widest the pane may be.
@@ -50,7 +51,7 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
     const lit = it.hovered or it.pressed or drag.on;
     if (lit) c.cursor = .resize_left_right;
     if (opts.center_line or lit or it.focused) {
-        const col = if (it.focused) t.primary.alpha(0.7) else if (lit) t.muted else t.border;
+        const col = if (it.focused) focus.ring(c) else if (lit) t.muted else t.border;
         ui.div(c).w(if (lit or it.focused) 2 else 1).hFull().bg(col).end();
     }
     const way: f32 = if (opts.pane == .start) 1 else -1;

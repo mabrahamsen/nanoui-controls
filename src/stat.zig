@@ -14,6 +14,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 const trend_mod = @import("trend.zig");
 
 pub const Options = struct {
@@ -75,7 +76,7 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
         box = box.bg(if (opts.card) t.surface_hover else t.surface_hover.alpha(0.6));
     }
     if (it.focused) {
-        box = box.border(t.primary.alpha(0.6));
+        box = box.border(focus.ring(c));
         if (c.input.key == .enter or (c.input.chars.len == 1 and c.input.chars[0] == ' ')) {
             it.clicked = true;
             c.input.key = null;

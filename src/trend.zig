@@ -77,31 +77,18 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
         .value_text = opts.value_text,
         .scale = opts.scale,
     });
-    if (opts.value_lines.len > 0) {
-        const h = switch (opts.height) {
-            .px => |v| v * opts.scale,
-            else => if (chart.lastSize(c, b.row.index)) |sz| sz.h else 0,
-        };
-        chart.valueLines(c, opts.value_lines, h, 0, opts.min, peak, true);
-    }
+    if (opts.value_lines.len > 0) chart.valueLines(c, opts.value_lines, chart.linesHeight(c, opts.height, opts.scale, b.row.index), 0, opts.min, peak, true);
     defer b.end();
     while (b.next()) |slot| {
         if (slot.index < empty) continue;
-        const v = level(values[(head + skip + slot.index - empty) % values.len], opts.min, peak) orelse continue;
+        const v = chart.level(chart.slotReading(values, opts.head, opts.capacity, slot.index) orelse continue, opts.min, peak) orelse continue;
         const base = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, v) else col;
         slot.bar(&.{.{ .value = @max(baseline, v), .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
     }
 }
 
-/// Where `x` falls between `min` and `peak`, from 0 to 1; null for no
-/// reading (not a number, or infinite). A scale with no room between
-/// `min` and `peak` puts every reading at 0.
-pub fn level(x: f32, min: f32, peak: f32) ?f32 {
-    if (!std.math.isFinite(x)) return null;
-    const range = peak - min;
-    if (!std.math.isFinite(range) or !(range > 0)) return 0;
-    return std.math.clamp((x - min) / range, 0, 1);
-}
+/// Where `x` falls between `min` and `peak`, as the charts share it.
+pub const level = chart.level;
 
 /// Slot `i` of `n`'s opacity: `fade` at the oldest, rising to 1 at the
 /// newest; 1 without a fade, or with one slot.

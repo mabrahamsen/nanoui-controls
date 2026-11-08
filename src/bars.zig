@@ -186,11 +186,7 @@ pub fn bars(c: *ui.Context, opts: Options) Bars {
     frame.size(c, row.index, .fill, if (framed) opts.height else .fill);
     const in: chart.Inspect = if (opts.interactive) .beginFrom(c, row.index, opts.count, empty, false) else .{};
     if (opts.value_lines.len > 0) {
-        const h = switch (opts.height) {
-            .px => |v| v * k,
-            else => if (chart.lastSize(c, row.index)) |sz| sz.h else 0,
-        };
-        chart.valueLines(c, opts.value_lines, h, 0, sc.lo, sc.hi, opts.axis == .none);
+        chart.valueLines(c, opts.value_lines, chart.linesHeight(c, opts.height, k, row.index), 0, sc.lo, sc.hi, opts.axis == .none);
     }
     const current = if (in.current) |s| (if (opts.readings != null) s - empty else s) else null;
     return .{ .current = current, .focused = in.focused, .c = c, .holder = holder, .frame = frame, .row = row, .opts = opts, .inspect = in, .scale = sc, .empty = empty, .current_slot = in.current, .last_peak = peak };
