@@ -99,15 +99,15 @@ g.end();
 - **Sorting:** clicking a `sortable` column's title sorts by it, and clicking again reverses it. `g.sorted` says the sort changed this frame, so the caller sorts its rows before building them.
 - **Selection:** with `selected`, a click selects a row and it is drawn highlighted. The grid takes the keyboard as a text field does: a click in it or Tab gives it the keyboard (`g.focused`), and `c.focusNext(false)` just before `grid` gives it the keyboard at the start. While it has the keyboard, Up and Down move the selection a row, Page Up and Page Down a view, and Home and End to the ends, scrolling it into view. Enter or a double click opens it (`row.opened`). The selection is grey while something else has the keyboard, so two grids in a window, or a grid under a search field, take the keys in turn. The selection is a row index, so a caller that sorts finds its row again.
 - **Several rows:** with `selection` too, one flag a row kept by the caller, Cmd-click (Ctrl-click on Windows and Linux) adds or takes away a row, Shift-click and Shift with the keys select a run of rows, and Cmd+A (Ctrl+A) selects them all.
-- **Typing to jump:** typing while the grid has the keyboard gives `g.typed`, the text so far (a pause of a second starts it afresh). The caller finds the first row it begins, as only it knows what the rows hold, and `g.jump(i)` selects that row and scrolls to it.
+- **Typing to jump:** typing while the grid has the keyboard gives `g.typed`, the text so far (a pause of a second starts it afresh), for this frame only: copy it to keep it. The caller finds the first row it begins, as only it knows what the rows hold, and `g.jump(i)` selects that row and scrolls to it.
 - **Dragging rows out:** with `drag_rows`, a row held and moved a few points reports `row.drag_started`, and `g.dragOut(text)` drags that text out of the window, for the rows selected (the row is selected first, unless it is already). nanoui drags text out on macOS so far.
 - **Context menus:** `row.secondary_clicked` is a right-click (or Control-click on the Mac) on a row, for the app's menu. It selects the row, unless the row is already selected, so the menu acts on the selection.
-- **Screen readers** hear the rows as rows, read as their cells' text, with the selected ones marked, and the sortable titles as buttons that say which way the rows are sorted.
+- **Screen readers** hear the rows as rows, read as their cells' text, with the selected ones marked, and the column titles as headers, the sortable ones saying which way the rows are sorted and what a click does, in the caller's words if wanted (`ascending_text`, `descending_text`, `sort_hint_text`).
 - **Long lists** cost what a screenful does: only the rows in view are built. The grid fills the room left in its parent, which needs a bounded height, and can be shorter than its rows, which then scroll. In a row beside another pane, put it in a column that shares the row and is as tall as it (`.w(0).grow().hFull()`).
 - **Loading as it scrolls:** `g.first` and `g.last` are the rows in view, so a caller whose rows come from a server fetches those pages, and the ones around them, and draws placeholders until they arrive. `scroll_to` brings a row into view.
 - **Empty:** `empty` is text shown under the titles when there are no rows, once they have loaded.
 - **Loading:** `loading` (`GridLoading`: a `label`, and `done` of `total` pages or sources) tells loading apart from empty. With no rows yet, the grid shows a spinner, the label and a progress bar over rows sketched in its columns, which pulse gently (still with reduced motion); with rows in, a thin progress line under the titles that doesn't move them. While `total` is 0 the bars sweep, as how far along isn't known. A screen reader hears the label as loading starts.
-- **Groups that fold:** with `groups`, a `GridGroups` made each frame from the groups' sizes (`GridGroup`, with a `depth` for a group in a group) and their open flags, kept by the caller, rows sit under headings. `groups.at(i)` says whether row `i` in view is a heading or which group's row it is, and `count` is `groups.count()`. Draw a heading's row with `g.heading(.{ .title, .detail })`: a chevron, the title and a muted detail across the columns, or with `cells` the title in the first column's cell and the caller's `cellAt` in the others, for a group's totals. Rows step in a level in the first column. A click on a heading folds or opens it, and its rows fade in as it opens; Left on an open heading folds it, and on a row goes to its heading; Right opens a folded heading, and on an open one goes to its first row; Enter or Space folds or opens one. The selection stays on its row as groups above it fold, and goes to the nearest heading over it when it is folded away. `singles = false` shows a group of one row without its heading. A screen reader hears a heading with its detail and whether it is open (`expanded_text`, `collapsed_text`).
+- **Groups that fold:** with `groups`, a `GridGroups` made each frame from the groups' sizes (`GridGroup`, with a `depth` for a group in a group) and their open flags, kept by the caller, rows sit under headings. `groups.at(i)` says whether row `i` in view is a heading or which group's row it is, and `count` is `groups.count()`. Draw a heading's row with `g.heading(.{ .title, .detail })`: a chevron, the title and a muted detail across the columns, or with `cells` the title in the first column's cell and the caller's `cellAt` in the others, for a group's totals. Rows step in a level in the first column. A click on a heading folds or opens it, and its rows fade in as it opens; Left on an open heading folds it, and on a row goes to its heading; Right opens a folded heading, and on an open one goes to its first row; Enter or Space folds or opens one. The selection stays on its row as groups above it fold, and goes to the nearest heading over it when it is folded away; `selection`, one flag a row in view, doesn't go with `groups`, and the grid says so. A grid of many grouped rows costs what its groups do. `singles = false` shows a group of one row without its heading. A screen reader hears a heading with its detail and whether it is open (`expanded_text`, `collapsed_text`).
 - **Two lines:** `lines = 2` makes rows tall enough for two lines of text, and `g.twoLines(title, detail, .{})` draws a title over a muted detail in a cell, each cut short with an ellipsis and whole in the cell's tooltip.
 - **Cards:** `rows = .cards` draws each row as a card, in the theme's surface with a border and its corners and room between them, the selected one tinted in the accent. `header = false` leaves out the column titles. `row.status(.danger)` tints a row's edge in a status's color: a card's border, or a bar at a plain row's leading edge.
 - **Back and Escape:** while the grid has the keyboard, Backspace or Cmd+Up (Alt+Up on Windows and Linux) sets `g.back`, for a browser to go to the parent folder, and Escape sets `g.escaped`, for an app that clears a search or closes a pane.
@@ -133,7 +133,8 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 ```
 
 - Clicking a number goes to its page, and the arrows to the page before or after; past the ends they are disabled.
-- Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last.
+- Once the pager has the keyboard (a click on it, or Tab), Left and Right move a page, and Home and End go to the first and last; the keys it moves by are its own.
+- `previous_text`, `next_text` and `page_text` are what a screen reader calls its buttons, in English by default.
 - When the pages grow fewer than the current page, as after a search, the pager moves it to the last and returns true, so a caller that loads a page on a change loads that one.
 - It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
 - `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
@@ -164,12 +165,12 @@ if (sb.end()) |key| selected = key;
 - **Branches:** `branch` is a row with rows under it, as `group` is a heading with rows under it: draw them, then `end` the group it returns. It has an `item`'s options, can be chosen and selected, and has a chevron at its end; its rows are indented a step, so their icons sit under its label, and can be branches, headings or groups in turn. The caller keeps whether it is open. A click on the chevron folds or opens it without choosing it; a click elsewhere on it chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint, so the selection can be found. A disabled branch can't be chosen, but still folds.
 - **Fixed trees:** with `null` for `open`, a branch is fixed: its rows always show, it has no chevron, and it doesn't fold, so there is nothing for the caller to keep. A tree of only fixed branches is a fixed tree, such as a docs site's contents; fixed and folding branches can also be mixed. Right and Left still move into and out of a fixed branch.
 - **Motion,** as the kit's: the selection slides from row to row as `kit.tabs`' marker does, a row eases into a wash under the pointer, and a group opens to its rows' height and closes back as `kit.collapsible` does. Reduced motion moves at once.
-- **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows, branches and group headings, past folded rows; Home and End go to the ends. Left folds an open group or branch, or goes to the group or branch a row is in; Right opens a folded one, or goes from an open branch to its first row. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow.
+- **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows, branches and group headings, past folded rows; Home and End go to the ends. Left folds an open group or branch, or goes to the group or branch a row is in; Right opens a folded one, or goes from an open branch to its first row. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow. With nothing selected, the first row shows where the keys start. Typing a row's first letters moves to it, and a letter typed again to the next that begins with it. The keys it acts on are its own, so an app's Enter doesn't fire too. A sidebar with no rows doesn't take Tab.
 - **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; group headings with whether they are open (`expanded_text`, `collapsed_text`), and branches as rows whose value is their count and whether they are open.
 - `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
 - A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows; in a folded branch, the branch shows it.
 - **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots; a branch's rows aren't indented, and only the keys fold it. With a `splitter`, an app can switch to it when the sidebar is dragged narrow.
-- **Rows** can be `disabled`: dimmed, not chosen by a click, passed by the keys, and said as disabled. A count can be a filled pill in the selection's tint (`count_style = .pill`), for what waits to be seen.
+- **Rows** can be `disabled`: dimmed, not chosen by a click, passed by the keys, and said as disabled. A label cut short shows whole in a tooltip. A count can be a filled pill in the selection's tint (`count_style = .pill`), for what waits to be seen.
 - **Menus:** a right-click (Control-click on the Mac) on a row sets `secondary_clicked` to its key, for the app to open a menu, such as the kit's; it doesn't choose the row.
 
 ## splitter
@@ -187,9 +188,11 @@ row.end();
 ```
 
 - Dragging it moves the width within `min` and `max`, with the resize cursor; it returns true when the width changed.
-- It takes the keyboard on a click or Tab: Left and Right move it by `step`, Home and End to the ends.
+- It takes the keyboard on a click or Tab: Left and Right move it by `step`, or with Shift by `big_step`, and Home and End to the ends; the keys it moves by are its own. A double click puts it back at `default`, if given.
+- `stacked` is for panes above and below each other: the handle runs across, the width is the pane's height, and Up and Down move it.
+- `disabled` dims it: it doesn't move, take the keyboard, or say it can.
 - A screen reader hears a splitter called `label`, with the width as its value, and steps it.
-- `grab_width` is where the pointer can grab it, and `center_line` draws a line down its middle; `scale` is for apps that zoom their layout.
+- `grab_width` is where the pointer can grab it, and `center_line` draws a line down its middle; `scale` is for apps that zoom their layout, its lines too. `pane` is a `SplitterPane`.
 
 ## form
 
@@ -208,14 +211,14 @@ f.end();
 ```
 
 - `row` puts its label in the column and leaves the row open for a control. A `hint` sits under the control, muted, or an `err` in its place in the theme's danger color, and `required` marks the label with "*", as the kit's field has them. `info` adds an ⓘ after the label that says more in a tooltip; `disabled` dims the label and hint beside a control the caller disables; `label_top` puts the label at the top, beside a control taller than a line. An empty label leaves just the control column, for a checkbox with its own title or buttons under the controls.
-- A row's label names its control to a screen reader, whole even when it is cut short, as nanoui names a control by the text before it on its line.
+- A row's label names its control to a screen reader, whole even when it is cut short, as nanoui names a control by the text before it on its line. A required row's name says so ("Name, required"; `required_text`), as the "*" isn't said.
 - `property` shows a label and a value that wraps within the room left, the label beside its first line; a screen reader hears them as one ("Hostname, studio.local"). With `selectable`, the value can be selected and copied; with `wrap = false`, it keeps to a line, ends in "…" and shows whole in a tooltip.
 - `heading` titles the rows after it, with a muted `description` under the title if wanted, and a `status` (danger for what can't be undone) that colors its title and its card. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them. `row_lines` draws a line between rows.
 - `foldingHeading` folds the rows after it and opens them again, eased, on a click or Enter or Space; the caller keeps whether it is open and draws its rows while it returns true. A screen reader hears it as a button that says whether it is expanded (`expanded_text`, `collapsed_text`).
-- `link` is a row that leads somewhere, such as another pane: its label, its value and a chevron at its end, clicked as a whole or with Enter or Space; it returns true when it is.
+- `link` is a row that leads somewhere, such as another pane: its label, its value and a chevron at its end, clicked as a whole or with Enter or Space; it returns true when it is. A value cut short shows whole in a tooltip, and a row appearing above it doesn't take its keyboard.
 - `note` puts muted text under the rows before it, under their card when grouped.
 - `control_align = .end` puts controls, values and hints at the rows' ends, as a settings window's cards have them.
-- The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls.
+- The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls (both alignments are a `FormAlign`).
 - Every row is at least the height of the kit's controls at its `size`, so selects, inputs and toggles keep one rhythm; `gap` is the room after the labels and `row_gap` between rows.
 - With `stack_below`, a form narrower than that puts its labels above what they name, as the kit's field has them, for a narrow pane; `stacked` says it did.
 
@@ -227,8 +230,9 @@ A row of round colors (`Swatch`, a color and its name) to pick one from. The cal
 if (controls.swatches(c, &colors, &chosen, .{})) apply(colors[chosen.?].color);
 ```
 
-- A click chooses one, and so do Left, Right, Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent.
-- Each is named in a tooltip and to a screen reader, as a radio button, the chosen one selected.
+- A click chooses one, and so do Left, Right (or Up and Down, as a radio group's keys), Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent.
+- Each is named in a tooltip and to a screen reader, as a radio button, the chosen one selected, with the row's `label` ("Accent color") said after it.
+- `disabled` dims them: no clicks or keys, and said as disabled. Swatches with no colors don't take Tab.
 - `size` is a `kit.Size`, in step with the kit's controls; `border` and `selected_border` color the edges.
 
 ## flow
@@ -246,20 +250,21 @@ f.end();
 ```
 
 - `breakRow` starts the next cell on a new row; `per_row` and `rows` say how it laid them out.
+- `fill` stretches the cells to share each row's width, the cell width the narrowest they get, for cards that span their pane; a last row of fewer cells keeps their width.
 
 ## Charts
 
 The charts draw what the caller keeps, a history or a few figures. What they share:
 
-- **Sizes:** `width` and `height` are a `ui.Length`, as `kit.progress`'s width is. `.fill`, the default width, takes the parent's width, or in a row the room the rest leaves, so a chart sits beside a label as is. A bar across (`breakdown`, `meter`) takes a `height` in points, as the kit's progress bar does.
+- **Sizes:** `width` and `height` are a `ui.Length`, as `kit.progress`'s width is. `.fill`, the default width, takes the parent's width, or in a row the room the rest leaves, so a chart sits beside a label as is. A bar across (`breakdown`, `meter`, a bar list's bars) takes its `height` as a `ui.Length` too, in points before `scale` for most. Round charts (`donut`, `gauge`) take a `diameter`, as `size` is a `kit.Size` wherever a chart has one.
 - **Colors** come from the theme: bars and lines in its accent, tracks as the kit's progress bar's, legend labels muted. A `ramp` is a list of colors from the bottom to the top (or the first segment to the last), blended between, such as cool to hot; `rampColor` gives the color at a place on one, for a legend or a label in the same color.
 - **Histories** (`trend`, `line`, `stat`) are oldest first. One kept in a ring, where a new reading takes the oldest's place, is read from its oldest reading with `head`, without copying it. With fewer readings than slots, they sit on the right.
-- **Scale:** `min` is the value at the bottom and `max` at the top, unless a reading goes higher: then the top rises to it, so a quiet history doesn't fill the chart and a loud one isn't cut off. `fixed_max` keeps the top at `max`.
+- **Scale:** every chart with a scale (`trend`, `line`, `bars` with `units`, `barList`) takes it the same way. `min` is the value at the bottom and `max` at the top, unless the data goes higher: then the top rises to it, so a quiet history doesn't fill the chart and a loud one isn't cut off. `fixed_max` keeps the top at `max`, and a null `max` takes the data's largest. `meter` and `gauge` take a `min` and `max` too, for a value in its own units.
 - **Lines at values:** `value_lines` (`ValueLine`) draws lines across at values, such as half or a limit, with a label each, behind the bars or lines.
-- **Inspecting:** an `interactive` chart (`bars`, `line`) follows the pointer, and takes the keyboard on a click or Tab: Left, Right, Home and End move on from the slot pointed at, until the pointer moves again. `current` is the slot it points at; call `tooltip` with what it shows, and the chart says it in a tooltip there and to a screen reader.
-- **Screen readers:** with a `label` ("CPU history"), a chart is one image, and its `value_text` ("62 °C, peak 81 °C") is what it shows; a meter and a gauge say their value as a percentage unless given one. Without a label, a chart is a decoration and is left out, unless it is interactive: then it is called "Chart", so give it a label.
+- **Inspecting:** an `interactive` chart (`bars`, `line`) follows the pointer, and takes the keyboard on a click or Tab: Left, Right, Home and End move on from the slot pointed at, until the pointer moves again. `current` is the slot it points at; call `tooltip` with what it shows, and the chart says it in a tooltip there and to a screen reader. It is adjustable to a screen reader: swiping up and down steps through its slots, saying each.
+- **Screen readers:** with a `label` ("CPU history"), a chart is one image, and its `value_text` ("62 °C, peak 81 °C") is what it shows; a meter and a gauge say their value as a percentage unless given one. Without a label, a chart is a decoration and is left out, unless it is interactive: then it is called its `chart_text` ("Chart"), so give it a label.
 - **Motion:** `breakdown`, `donut`, `gauge` and `meter` ease to new values, as the kit's progress bar does, unless the system asks for reduced motion.
-- **Bad figures:** a part that is negative (where there is no room below zero) or not a number counts as nothing, a reading that is not a number or is infinite leaves its slot empty or breaks its line, and parts that add up to more than their bar are squeezed to fit.
+- **Bad figures:** a part that is negative (where there is no room below zero) or not a number counts as nothing, a reading that is not a number or is infinite leaves its slot empty or breaks its line, and parts that add up to more than their bar are squeezed to fit. `gap = 0` means no gap and no seams on every chart that has one.
 - **`scale`** multiplies a chart's lengths for apps that zoom their layout with `c.setZoom`, as the grid's does: the kit has no sizes for charts. Charts with text (`legend`, `barList`, `stat`) take the kit's `size` for it.
 
 ## trend
@@ -273,6 +278,7 @@ controls.trend(c, temps, .{ .capacity = 60, .min = 20, .max = 110, .label = "Tem
 - `color` colors every bar, or `ramp` each by its height.
 - `baseline` keeps a reading at `min` showing as a line, and `fade` is the oldest bar's opacity, rising to 1 at the newest (null for none).
 - With more readings than slots, it shows the newest, scaled to them.
+- It is drawn with `bars`, so it takes their `axis`, `start_text` and `end_text`, and `interactive` with `tips`, one a reading shown, oldest first, said in a tooltip and to a screen reader.
 
 ## line
 
@@ -283,11 +289,11 @@ var l = controls.line(c, &.{
     .{ .values = read, .head = read_head, .area = 0.15 },
     .{ .values = write, .head = write_head, .color = t.success },
 }, .{ .capacity = 60, .max = 40, .interactive = true, .label = "Network traffic" });
-if (l.current) |i| l.tooltip(c.print("read {d:.1} MB/s", .{readAt(i)}));
+if (l.current) |i| if (l.reading(0, i)) |r| l.tooltip(c.print("read {d:.1} MB/s", .{r}));
 l.end();
 ```
 
-- With `interactive`, the current reading is marked by a line down through it and a dot on each series.
+- With `interactive`, the current reading is marked by a line down through it and a dot on each series; with a history shorter than the chart, only slots with a reading are stopped on. `l.reading(series, slot)` is a series' reading in a slot, ring or not.
 - `line_width` is the lines' width.
 - `axis`, `start_text` and `end_text`, as `bars` takes them: the value lines' labels beside the chart, and times under it.
 
@@ -306,7 +312,7 @@ b.end();
 ```
 
 - Parts stack up from zero, the first nearest it. With room `below` zero (a share of the height), negative parts go down from it: a loss, a change down.
-- **Units:** with `max`, parts are values on a scale from `min` to `max` (a bar of 40 on a scale of 0 to 100 is 40% of the height), and value lines are placed on it. Unless `fixed_max`, the top rises to the tallest bar, so none is cut off. A `min` below zero leaves room for negative parts at the same scale; one above zero starts the bars there, as a temperature from 20 does.
+- **Units:** with `units`, parts are values on a scale from `min` to `max` (a bar of 40 on a scale of 0 to 100 is 40% of the height), and value lines are placed on it. Unless `fixed_max`, the top rises to the tallest bar, so none is cut off, and a null `max` takes it. A `min` below zero leaves room for negative parts at the same scale; one above zero starts the bars there, as a temperature from 20 does.
 - **A short history:** with `readings`, fewer readings than slots sit at the right, the newest last. `next` gives only their slots, `slot.reading` is the reading in each, and with `interactive`, only they can be pointed at or stepped through, `current` being a reading.
 - **An axis:** `axis = .start` or `.end` puts the value lines' labels in a gutter beside the chart, level with their lines, leaving out one that would overlap the one above it; `start_text` and `end_text` go under the chart at its ends ("−60 s", "now").
 - `gap` is the room between slots, a hairline of one point by default.
@@ -326,7 +332,7 @@ controls.breakdown(c, &.{
 - By default each part is `value` of the bar (0 to 1), and what they leave shows the track.
 - With `whole`, the parts are the whole bar, each its share of their sum: traffic by source, say.
 - One part with a `part_radius` and a `glow` is a level against a maximum, such as a fan's speed.
-- `height`, `radius` (null rounds the ends), `gap` (a hairline by default; 0 for none) and `track`.
+- `height` (a `ui.Length`), `radius` (null rounds the ends), `gap` (a hairline by default; 0 for none) and `track`.
 
 ## donut
 
@@ -336,7 +342,7 @@ A ring of parts, clockwise from the top, with a figure (`text`) and a word under
 controls.donut(c, &parts, .{ .diameter = 104, .text = "56%", .caption = "used", .label = "Memory", .value_text = "56% used" });
 ```
 
-- `size` is its width across, `thickness` the ring's, and `gap` the room between parts.
+- `diameter` is its width across, `thickness` the ring's, and `gap` the room between parts.
 
 ## barList
 
@@ -346,9 +352,10 @@ Rows (`BarListItem`) of a label, a bar across and a figure (`value_text`), the b
 if (controls.barList(c, &folders, .{ .clickable = true })) |i| open(folders[i]);
 ```
 
-- `label_width` and `value_width` are the columns either side of the bars, and `bar_height` the bars' height; labels too long are cut short.
+- `label_width` and `value_width` are the columns either side of the bars, and `bar_height` the bars' height; labels too long are cut short. The bars scale to `max`, rising to the largest item unless `fixed_max`; a null `max` takes the largest.
+- An item's `key` keeps its row's keyboard focus and easing on it as the list re-sorts. A clickable row takes Enter or Space.
 - **Richer rows:** an item can lead with an `icon`, in a slot of its own so labels line up, or a `badge` ("P", "GPU") in a small tinted tag; end with a muted `detail` after its figure ("max 94"), in a `detail_width` column; and color its figure (`value_color`). A screen reader hears the figure and the detail.
-- **Levels:** `min` starts the scale above zero (a temperature from 20); `ramp` colors each bar by its level, `track`, `glow` and `bar_radius` style them, and `style = .meter` draws each row's bar as a meter of `segments`, lit to its level.
+- **Levels:** `min` starts the scale above zero (a temperature from 20); `ramp` colors each bar by its level, `track`, `glow` and `bar_radius` (null rounds the ends) style them, and `style = .meter` draws each row's bar as a meter of `segments`, lit to its level.
 
 ## meter
 
@@ -362,6 +369,7 @@ controls.meter(c, 1, .{ .ramp = &hues, .gap = 0, .radius = 0, .segments = 48 });
 - Lit segments take `color`, or `ramp` by their place, and `glow` in it; unlit ones are the `track`.
 - With a `gap` of 0, lit all the way, it is a strip of colors in steps, for the gradients nanoui can't fill, such as under a slider. Its segments overlap by a point, so no seams show, and a `radius` rounds only the strip's ends.
 - `zones` labels equal runs of the segments, one a run ("<20", "<40", "80+"), with a wider `zone_gap` between runs: a scale in bands.
+- `min` and `max` take a value in its own units (a temperature from 20 to 110). `height` is a `ui.Length`, and a null `radius` rounds the segments' ends.
 
 ## gauge
 
@@ -372,7 +380,7 @@ controls.gauge(c, score, .{ .ramp = &strength, .text = "B", .caption = "62 bits"
 ```
 
 - Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them; unlit ones are the `track`. The figure is in the value's color.
-- `size` is its width across and `ticks` how many; their length, width and glow keep in proportion to the size, within its box. `inner_line` draws a thin circle inside them.
+- `diameter` is its width across and `ticks` how many; their length, width and glow keep in proportion to the diameter, within its box. `min` and `max` take a value in its own units. `inner_line` draws a thin circle inside them.
 - A screen reader hears its value as a percentage, unless given a `value_text`.
 
 ## stat
@@ -387,6 +395,7 @@ controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .
 - `value_color` colors the figure, for one that says how something stands: with `card = false`, a reading such as "Thermal: Nominal" in the success color.
 - A row of stats shares it, each `.fill` wide; with the row's `itemsStretch`, the tiles are one height.
 - `unit` follows the figure, smaller and muted ("87" then "%"); `detail` is a muted line under it ("over the last hour"); and `loading` shows a spinner in place of a figure not yet known, so it never reads as 0 (a screen reader hears `loading_text`).
+- `scale` multiplies its lengths, as the charts'. Its history takes a scale as a trend does (`history_min`, `history_max`, `history_fixed_max`) and `history_ramp`.
 - `statButton` draws a stat that can be clicked, to lead to more: it lightens under the pointer, takes the keyboard as a button does (Tab, then Enter or Space), is a button to a screen reader, and returns its `ui.Interaction`.
 
 ## legend
@@ -404,6 +413,7 @@ l.end();
 - `itemDetail` adds a smaller, fainter detail after the label, such as a peak.
 - `trailing` puts text at the end of the last line, such as what the items leave.
 - `size` (`.xs` by default) sizes the labels and swatches, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
+- `shape` draws its items' swatches as squares, dots or lines, for a line chart's series.
 - `width = .fit` makes it only as wide as its items, for a legend beside a chart's title; they still run on where the parent's width ends.
 - `controls.legendSwatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, in a chart's title, a table's cell or a tooltip.
 

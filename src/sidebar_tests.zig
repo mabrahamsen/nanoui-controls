@@ -7,7 +7,7 @@ const sidebar_mod = @import("sidebar.zig");
 const sidebar = sidebar_mod.sidebar;
 
 /// A mail app's sidebar: two mailboxes, then a group of folders.
-const Mail = struct {
+pub const Mail = struct {
     selected: ?[]const u8 = "inbox",
     folders_open: bool = true,
     /// Rows are added and removed, as data changes.
@@ -46,7 +46,7 @@ const Mail = struct {
     }
 };
 
-fn start(m: *Mail, t: *ui.Tester) !void {
+pub fn start(m: *Mail, t: *ui.Tester) !void {
     try t.init(std.testing.allocator, .init(m, Mail.view), .{ .width = 300, .height = 420 });
     t.settle(1);
 }
@@ -490,48 +490,9 @@ test "a sidebar keeps working when what its rows draw makes many states" {
     try std.testing.expectEqualStrings("sent", x.selected.?);
 }
 
-test "with nothing selected, the keys start at the first row, and the keys they take are their own" {
-    var m: Mail = .{ .selected = null, .start_focused = true };
-    var t: ui.Tester = undefined;
-    try start(&m, &t);
-    defer t.deinit();
-    // The first row shows the keys are on it.
-    var ringed = false;
-    for (t.ctx.nodes.items) |node| if (node.style.border != null) {
-        ringed = true;
-    };
-    try std.testing.expect(ringed);
-    t.key(.down);
-    t.settle(1);
-    try std.testing.expectEqualStrings("inbox", m.selected.?);
-    t.key(.end);
-    t.key(.home);
-    t.key(.enter);
-    t.settle(1);
-    try std.testing.expectEqual(@as(usize, 0), m.leaked);
-}
-
-test "when the keys' row is folded away, they go back to the selected row" {
-    var m: Mail = .{ .selected = "sent", .start_focused = true, .choose_on_enter = true };
-    var t: ui.Tester = undefined;
-    try start(&m, &t);
-    defer t.deinit();
-    // To "travel", then fold its group from outside: the keys go back to
-    // the selected row, "sent", and Down from there is the group's
-    // heading, which Enter opens.
-    t.key(.end);
-    t.settle(1);
-    m.folders_open = false;
-    t.settle(1);
-    t.key(.down);
-    t.key(.enter);
-    t.settle(1);
-    try std.testing.expect(m.folders_open);
-    try std.testing.expectEqualStrings("sent", m.selected.?);
-}
-
 test {
     _ = @import("sidebar_branch_tests.zig");
+    _ = @import("sidebar_keys_tests.zig");
 }
 
 test "a long label cut short shows whole in a tooltip, and a sidebar with no rows doesn't take Tab" {
@@ -571,32 +532,4 @@ test "a long label cut short shows whole in a tooltip, and a sidebar with no row
     t.key(.tab);
     t.settle(1);
     try std.testing.expect(x.field_focused);
-}
-
-test "typing a row's first letters moves the keys to it, and a letter again to the next" {
-    var m: Mail = .{ .start_focused = true };
-    var t: ui.Tester = undefined;
-    try start(&m, &t);
-    defer t.deinit();
-    t.typeText("se");
-    t.settle(1);
-    try std.testing.expectEqualStrings("sent", m.selected.?);
-    // After a pause, a new start.
-    t.advance(1.5);
-    t.typeText("w");
-    t.settle(1);
-    try std.testing.expectEqualStrings("work", m.selected.?);
-    // "f", then "f" again: "family", then on past it to the next row that
-    // begins with "f", the folders' heading, which isn't chosen.
-    t.advance(1.5);
-    t.typeText("f");
-    t.settle(1);
-    try std.testing.expectEqualStrings("family", m.selected.?);
-    t.typeText("f");
-    t.settle(1);
-    try std.testing.expectEqualStrings("family", m.selected.?);
-    // Down from the heading: its first row.
-    t.key(.down);
-    t.settle(1);
-    try std.testing.expectEqualStrings("work", m.selected.?);
 }
