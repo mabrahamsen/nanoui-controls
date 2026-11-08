@@ -450,3 +450,38 @@ test "icons only, a disabled row still says its label in a tooltip" {
     t.settle(1);
     try std.testing.expectEqualStrings("inbox", x.selected.?);
 }
+
+test "a sidebar keeps working when what its rows draw makes many states" {
+    // In a frame a key lands, each row makes more new state than nanoui's
+    // store has room for, so it grows, and moves, while the sidebar is
+    // open.
+    const T = struct {
+        selected: ?[]const u8 = "inbox",
+        frames: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            if (x.frames == 0) c.focusNext(false);
+            x.frames += 1;
+            var sb = sidebar(c, "mail", x.selected, .{ .choose_on_enter = true });
+            for ([_][]const u8{ "inbox", "sent", "drafts" }) |key| {
+                sb.item(key, key, .{});
+                if (c.input.key != null) for (0..20_000) |j| {
+                    ui.key(c, c.print("churn-{d}-{s}-{d}", .{ x.frames, key, j }));
+                    _ = c.state(struct { x: u8 = 0 }, "churn");
+                    c.next_key = null;
+                };
+            }
+            if (sb.end()) |key| x.selected = key;
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Down moves the highlight to "sent", and Enter chooses it.
+    t.key(.down);
+    t.settle(1);
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expectEqualStrings("sent", x.selected.?);
+}

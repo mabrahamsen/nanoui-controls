@@ -477,6 +477,136 @@ test "lines, a donut, a list of bars and stats, light and dark" {
     try expectView("charts-more-dark", .init(&x, MoreCharts.view), .{ .height = 290, .dark = true });
 }
 
+/// A form: a heading, rows of the kit's controls with a hint and an
+/// error, and properties under a second heading; swatches in a row, one
+/// chosen.
+const Forms = struct {
+    grouped: bool = false,
+    keep: f64 = 10,
+    every: ?usize = 1,
+    notify: bool = true,
+    color: ?usize = 2,
+    const colors = [_]controls.Swatch{
+        .{ .color = .hex(0xef4444), .label = "Red" },
+        .{ .color = .hex(0xf59e0b), .label = "Amber" },
+        .{ .color = .hex(0x22c55e), .label = "Green" },
+        .{ .color = .hex(0x3b82f6), .label = "Blue" },
+        .{ .color = .hex(0xa855f7), .label = "Purple" },
+    };
+
+    fn view(x: *Forms, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(12);
+        defer root.end();
+        var f = controls.form(c, .{ .size = .sm, .row_lines = true, .grouped = x.grouped });
+        f.heading("Snapshots", .{ .description = "How many to keep, and how often." });
+        {
+            const r = f.row("Keep latest", .{ .hint = "Snapshots to keep, newest first." });
+            _ = kit.numberInput(c, &x.keep, .{ .min = 1, .width = 110 });
+            r.end();
+        }
+        {
+            const r = f.row("Every", .{ .err = "Too often for this disk.", .required = true });
+            _ = kit.select(c, "every", &.{ "Hour", "Day", "Week" }, &x.every, .{ .width = 110 });
+            r.end();
+        }
+        {
+            const r = f.row("Color", .{});
+            _ = controls.swatches(c, &colors, &x.color, .{ .size = .sm });
+            r.end();
+        }
+        f.heading("Repository", .{});
+        f.property("Host", "studio.local", .{ .mono = true });
+        f.property("Path", "/Volumes/Backup/kopia", .{ .mono = true });
+        f.end();
+    }
+};
+
+test "a form with kit controls, a hint, an error, swatches and properties, light and dark" {
+    var x: Forms = .{};
+    try expectView("form", .init(&x, Forms.view), .{ .height = 340 });
+    try expectView("form-dark", .init(&x, Forms.view), .{ .height = 340, .dark = true });
+}
+
+test "a form's sections in cards, light and dark" {
+    var x: Forms = .{ .grouped = true };
+    try expectView("form-grouped", .init(&x, Forms.view), .{ .height = 380 });
+    try expectView("form-grouped-dark", .init(&x, Forms.view), .{ .height = 380, .dark = true });
+}
+
+/// A settings pane: sections as cards with their controls at the rows'
+/// ends, a note, a folded heading, a row that leads somewhere, and a
+/// danger zone.
+const SettingsPane = struct {
+    on: bool = true,
+    every: ?usize = 1,
+    advanced: bool = false,
+
+    fn view(x: *SettingsPane, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(12);
+        defer root.end();
+        var f = controls.form(c, .{ .size = .sm, .row_lines = true, .grouped = true, .control_align = .end });
+        f.heading("Backups", .{ .description = "How often, and how many to keep." });
+        {
+            const r = f.row("Back up", .{});
+            _ = ui.toggle(c, "", &x.on);
+            r.end();
+        }
+        {
+            const r = f.row("Every", .{ .hint = "While the computer is awake." });
+            _ = kit.select(c, "every", &.{ "Hour", "Day", "Week" }, &x.every, .{ .width = 100 });
+            r.end();
+        }
+        f.note("Snapshots older than a year are kept monthly.");
+        _ = f.foldingHeading("Advanced", &x.advanced, .{});
+        f.heading("This computer", .{});
+        f.property("Host", "studio.local", .{ .mono = true });
+        _ = f.link("Repository", "studio", .{});
+        f.heading("Danger zone", .{ .status = .danger });
+        {
+            const r = f.row("Snapshots", .{});
+            _ = kit.button(c, "Delete all", .{ .variant = .danger, .size = .sm });
+            r.end();
+        }
+        f.end();
+    }
+};
+
+test "a settings pane: cards, controls at the end, a note, a fold, a link and a danger zone, light and dark" {
+    var x: SettingsPane = .{};
+    try expectView("form-settings", .init(&x, SettingsPane.view), .{ .height = 560 });
+    try expectView("form-settings-dark", .init(&x, SettingsPane.view), .{ .height = 560, .dark = true });
+}
+
+/// Gauges at a few values, one in a ramp's colors, and a stat as a
+/// reading in a color, in a flow.
+const Gauges = struct {
+    const strength = [_]ui.Color{ .hex(0xf43f5e), .hex(0xfb923c), .hex(0xfacc15), .hex(0xa3e635), .hex(0x34d399) };
+
+    fn view(_: *Gauges, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(12);
+        defer root.end();
+        var f = controls.flow(c, 104, .{ .gap = 12 });
+        for ([_]struct { f32, []const u8, []const u8 }{ .{ 0.62, "B", "62 bits" }, .{ 0.25, "25%", "battery" }, .{ 0.9, "A", "strong" } }, 0..) |g, i| {
+            const cell = f.cell();
+            controls.gauge(c, g[0], .{ .size = 104, .ramp = if (i == 1) &.{} else &strength, .text = g[1], .caption = g[2] });
+            cell.end();
+        }
+        {
+            const cell = f.cell();
+            controls.stat(c, "Thermal", "Nominal", .{ .card = false, .size = .xs, .value_color = t.success });
+            cell.end();
+        }
+        f.end();
+    }
+};
+
+test "gauges and a reading in a flow, light and dark" {
+    var x: Gauges = .{};
+    try expectView("gauges", .init(&x, Gauges.view), .{ .height = 260 });
+    try expectView("gauges-dark", .init(&x, Gauges.view), .{ .height = 260, .dark = true });
+}
+
 test "an empty grid says so under its titles" {
     var f: Files = .{ .count = 0, .selected = null };
     try expectSnapshot("grid-empty", &f, false);

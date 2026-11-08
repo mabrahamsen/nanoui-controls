@@ -49,6 +49,8 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     defer box.end();
     chart.describe(c, box.index, opts.label, opts.value_text, false);
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
+    // In its first frame it has no size: draw it again once it has.
+    if (cv.size.w == 0) c.frameIn(0);
     const r_out = @min(cv.size.w, cv.size.h) / 2;
     const thick = @min(opts.thickness * k, r_out);
     if (r_out > 0) {
@@ -72,44 +74,18 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
             defer from += sweep;
             if (sweep <= gap) continue;
             drawn += 1;
-            arc(c, cv, center, r_out, r_in, from + gap / 2, from + sweep - gap / 2, p.color);
+            chart.arc(c, cv, center, r_out, r_in, from + gap / 2, from + sweep - gap / 2, p.color);
         };
         // The track, where no part is.
         const track = opts.track orelse chart.track(c);
         if (drawn == 0) {
-            arc(c, cv, center, r_out, r_in, 0, std.math.tau, track);
+            chart.arc(c, cv, center, r_out, r_in, 0, std.math.tau, track);
         } else if (std.math.tau - from > gap) {
-            arc(c, cv, center, r_out, r_in, from + gap / 2, std.math.tau - gap / 2, track);
+            chart.arc(c, cv, center, r_out, r_in, from + gap / 2, std.math.tau - gap / 2, track);
         }
     }
     if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.size * 0.2), .weight = .semibold, .color = t.foreground });
     if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.size * 0.11), .color = t.muted });
-}
-
-/// A part of the ring between `r_in` and `r_out`, from angle `a0` to `a1`
-/// clockwise from the top, in `color`: in pieces of at most half a turn,
-/// each a little over the next, so a whole ring has no seam.
-fn arc(c: *ui.Context, cv: *ui.Canvas, center: ui.Point, r_out: f32, r_in: f32, a0: f32, a1: f32, color: ui.Color) void {
-    var from = a0;
-    while (from < a1) {
-        const to = @min(a1, from + std.math.pi);
-        piece(c, cv, center, r_out, r_in, from, if (to < a1) to + 0.01 else to, color);
-        from = to;
-    }
-}
-
-fn piece(c: *ui.Context, cv: *ui.Canvas, center: ui.Point, r_out: f32, r_in: f32, a0: f32, a1: f32, color: ui.Color) void {
-    // About a step every 4 degrees, at least two.
-    const steps: usize = @max(2, @as(usize, @intFromFloat(@ceil((a1 - a0) / 0.07))));
-    const pts = c.alloc().alloc(ui.Point, 2 * (steps + 1)) catch return;
-    for (0..steps + 1) |i| {
-        const a = a0 + (a1 - a0) * @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(steps));
-        const dx = @sin(a);
-        const dy = -@cos(a);
-        pts[i] = .{ .x = center.x + dx * r_out, .y = center.y + dy * r_out };
-        pts[pts.len - 1 - i] = .{ .x = center.x + dx * r_in, .y = center.y + dy * r_in };
-    }
-    cv.fill(pts, color);
 }
 
 const cyan: ui.Color = .hex(0x22d3ee);

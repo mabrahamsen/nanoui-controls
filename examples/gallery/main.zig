@@ -1,6 +1,7 @@
 //! The gallery: each of the library's controls in an app, picked from a
 //! sidebar, itself the library's. "Grid" is a grid of ten thousand files
-//! with a pager (grid.zig); under "Charts", "Monitor" is a system monitor
+//! with a pager (grid.zig); "Form" a settings pane in a form, with
+//! swatches (form.zig); under "Charts", "Monitor" is a system monitor
 //! whose charts move with its readings, its alerts (readings over 80%) in
 //! a pill, and "Every chart" each chart once, as figures it doesn't change
 //! (charts.zig). "More to come" is a row that can't be chosen yet.
@@ -17,6 +18,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const grid = @import("grid.zig");
 const charts = @import("charts.zig");
+const form = @import("form.zig");
 
 const Gallery = struct {
     /// The key of the view shown, as the sidebar chose it.
@@ -31,6 +33,7 @@ const Gallery = struct {
     menu_at: ?ui.Rect = null,
     browser: grid.Browser,
     monitor: charts.Monitor,
+    settings: form.Settings,
 
     const narrow = 120;
     const icons_width = 52;
@@ -46,6 +49,7 @@ const Gallery = struct {
             var sb = controls.sidebar(c, "gallery", g.shown, .{ .icons_only = icons_only });
             sb.heading("Controls");
             sb.item("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len });
+            sb.item("form", "Form", .{ .icon = "slider.horizontal.3" });
             if (sb.group("charts", "Charts", &g.charts_open)) |group| {
                 sb.item("monitor", "Monitor", .{ .icon = "waveform.path.ecg", .count = g.monitor.alerts(), .count_style = .pill });
                 sb.item("every", "Every chart", .{ .icon = "chart.bar.xaxis" });
@@ -77,6 +81,8 @@ const Gallery = struct {
             g.monitor.view(c);
         } else if (std.mem.eql(u8, g.shown, "every")) {
             charts.catalog(c);
+        } else if (std.mem.eql(u8, g.shown, "form")) {
+            g.settings.view(c);
         } else g.browser.view(c);
     }
 };
@@ -84,8 +90,9 @@ const Gallery = struct {
 pub fn main(init: std.process.Init) !void {
     const app = try nanoui.App.create(init, .{ .name = "Gallery" });
     defer app.destroy();
-    var state: Gallery = .{ .browser = try grid.init(init.arena.allocator()), .monitor = charts.init() };
+    var state: Gallery = .{ .browser = try grid.init(init.arena.allocator()), .monitor = charts.init(), .settings = form.init() };
     defer state.browser.search.deinit();
+    defer state.settings.name.deinit();
     _ = try app.newWindow(.{
         .title = "nanoui-controls",
         .width = 980,

@@ -96,6 +96,17 @@ const Entry = struct {
     index: u32,
 };
 
+/// The sidebar's `Kept`, found by a key of its own in its inner box: the
+/// same at its start and in `end`, whatever rows are drawn between. The
+/// pointer lasts only until the next state is made, which a row's tooltip
+/// may do, so it isn't kept: use it at once.
+fn state(c: *ui.Context) *Kept {
+    ui.key(c, "sidebar-state");
+    // Looking a state up doesn't take the key, as a new box would.
+    defer c.next_key = null;
+    return c.state(Kept, "sidebar");
+}
+
 fn entryHash(heading: bool, key: []const u8) u64 {
     return std.hash.Wyhash.hash(@intFromBool(heading), key);
 }
@@ -112,7 +123,7 @@ pub fn sidebar(c: *ui.Context, id: []const u8, selected: ?[]const u8, opts: Opti
     const own = focus.take(c, outer);
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
-    const kept = c.state(Kept, "sidebar");
+    var kept = state(c).*;
     if (!own.focused) kept.cursor = 0;
     var sb: Sidebar = .{
         .focused = own.focused,
@@ -157,7 +168,8 @@ pub const Sidebar = struct {
     outer: ui.Div,
     inner: ui.Div,
     inner_rect: ?ui.Rect,
-    kept: *Kept,
+    /// Its `Kept`, read at the start and written back at the end.
+    kept: Kept,
     own: u64,
     /// The rows and headings drawn this frame, in order, for the keys.
     entries: std.ArrayList(Entry),
@@ -250,7 +262,7 @@ pub const Sidebar = struct {
         if (on and !sb.folding) {
             sb.found = true;
             if (it.rect) |r| if (sb.inner_rect) |br| {
-                sb.kept.* = .{ .y = r.y - br.y, .h = r.h, .known = true, .cursor = sb.kept.cursor };
+                sb.kept = .{ .y = r.y - br.y, .h = r.h, .known = true, .cursor = sb.kept.cursor };
                 // The marker is drawn from the next frame: ask for it.
                 if (!sb.marked) c.animationFrame();
             };
@@ -335,6 +347,7 @@ pub const Sidebar = struct {
         // A selected row folded away, or gone: no marker until it shows.
         if (!sb.found) sb.kept.known = false;
         if (sb.focused) sb.keys();
+        state(sb.c).* = sb.kept;
         sb.inner.end();
         sb.outer.end();
         return sb.chosen;
