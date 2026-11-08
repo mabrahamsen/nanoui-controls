@@ -15,7 +15,8 @@
 //! name's first letters jumps to it, and dragging files out of the window
 //! carries their names. "Pages" shows them a page at a time, with a
 //! pager under them. "Load as it
-//! scrolls" has rows arrive a page at a time, as from a server.
+//! scrolls" has rows arrive a page at a time, as from a server, a thin
+//! line under the titles while a page in view is on its way.
 const std = @import("std");
 const builtin = @import("builtin");
 const nanoui = @import("nanoui");
@@ -80,6 +81,8 @@ pub const Browser = struct {
     striped: bool = false,
     show_kind: bool = true,
     loading: bool = false,
+    /// A row in view was still on its way, the last frame.
+    waiting: bool = false,
     /// When each page of rows arrives; 0 for one not asked for yet.
     arrives: [file_count / page_rows]f64 = @splat(0),
     /// 0 shows every file, 1 the five largest, 2 a page at a time.
@@ -156,6 +159,7 @@ pub const Browser = struct {
             .column_lines = b.lines,
             .scroll_to = scroll_to,
             .empty = "No files match the search.",
+            .loading = if (b.waiting) .{ .label = "Loading files" } else null,
             .drag_rows = true,
         });
         b.scroll_to = null;
@@ -173,8 +177,10 @@ pub const Browser = struct {
             break;
         };
         if (b.loading) b.ask(c, base + g.first, base + g.last);
+        b.waiting = false;
         while (g.next()) |row| {
             if (b.loading and !b.arrived(c, base + row.index)) {
+                b.waiting = true;
                 _ = g.cellAt(0);
                 ui.text(c, "Loading…", .{ .color = t.muted });
                 continue;

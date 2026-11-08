@@ -42,12 +42,22 @@ pub fn check(columns: []const Column, opts: Options) void {
     }
 }
 
-/// Column `i` is shown: the caller doesn't hide it, and the window is
-/// wide enough.
-pub fn shown(c: *const ui.Context, columns: []const Column, opts: Options, i: usize) bool {
+/// Column `i` is shown: the caller doesn't hide it, and the window and
+/// the grid, `grid_w` wide as last laid out, are wide enough.
+pub fn shown(c: *const ui.Context, columns: []const Column, opts: Options, i: usize, grid_w: f32) bool {
     if (opts.hidden) |h| if (h[i]) return false;
+    if (grid_w / opts.scale < columns[i].min_grid_width) return false;
     return c.size.w / opts.scale >= columns[i].min_window_width;
 }
+
+/// A row's height in points before `scale`: `row_height`, with room for
+/// each line past the first.
+pub fn rowHeight(opts: Options) f32 {
+    return opts.row_height + @as(f32, @floatFromInt(opts.lines -| 1)) * line_room;
+}
+
+/// What each line of a cell past the first adds to a row's height.
+pub const line_room = 16;
 
 /// The grid's `T` between frames, found by a key of its own in the grid's
 /// box: the same at the start of `grid` and in `end`, wherever the rows
@@ -72,9 +82,10 @@ pub const Layout = struct {
     content: f32,
     /// The width a row shows.
     view: f32,
-    /// Where the grid starts across the window, as the last frame laid it
-    /// out.
+    /// Where the grid starts across the window, and how wide it is, as
+    /// the last frame laid it out; infinite before it has been.
     left: f32 = 0,
+    grid_w: f32 = std.math.inf(f32),
     /// How far the columns are scrolled sideways.
     sx: f32,
     /// The column that stays in place as the others scroll, and where
@@ -107,12 +118,14 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
     const x = a.alloc(f32, columns.len) catch @panic("grid: out of memory");
     const box_rect = c.rects.get(c.node(box.index).id);
     const width = if (box_rect) |r| r.w else c.size.w;
-    const unit = flexUnit(c, columns, opts, width);
+    // Before the grid has a width, every column shows.
+    const grid_w = if (box_rect) |r| r.w else std.math.inf(f32);
+    const unit = flexUnit(c, columns, opts, width, grid_w);
     var at = opts.padding * k;
     var any = false;
     var frozen: ?usize = null;
     for (order) |i| {
-        if (!shown(c, columns, opts, i)) {
+        if (!shown(c, columns, opts, i, grid_w)) {
             w[i] = 0;
             x[i] = at;
             continue;
@@ -124,7 +137,7 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
         at += w[i] + opts.column_gap * k;
     }
     if (any) at -= opts.column_gap * k;
-    var l: Layout = .{ .order = order, .w = w, .x = x, .content = at + opts.padding * k, .view = width - gutter(opts), .left = if (box_rect) |r| r.x else 0, .sx = 0 };
+    var l: Layout = .{ .order = order, .w = w, .x = x, .content = at + opts.padding * k, .view = width - gutter(opts), .left = if (box_rect) |r| r.x else 0, .grid_w = grid_w, .sx = 0 };
     if (frozen) |f| {
         l.frozen = f;
         l.clip_x = x[f] + w[f] + opts.column_gap * k;
@@ -144,7 +157,7 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
 /// would be under its `min_width` held at that and the rest shared again.
 /// The width is the grid's as the last frame laid it out; when it
 /// changed, another frame is drawn with the new one.
-fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32) f32 {
+fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32, grid_w: f32) f32 {
     const k = opts.scale;
     const last = c.state(struct { width: f32 = 0 }, "grid-width");
     if (last.width != width) {
@@ -154,7 +167,7 @@ fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32) 
     var room = width - 2 * opts.padding * k - gutter(opts);
     var shown_count: f32 = 0;
     for (columns, 0..) |col, i| {
-        if (!shown(c, columns, opts, i)) continue;
+        if (!shown(c, columns, opts, i, grid_w)) continue;
         shown_count += 1;
         if (col.width != null) room -= columnWidth(columns, opts, i, 0);
     }
@@ -166,7 +179,7 @@ fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32) 
         var left = room;
         var flex: f32 = 0;
         for (columns, 0..) |col, i| {
-            if (!shown(c, columns, opts, i) or col.width != null) continue;
+            if (!shown(c, columns, opts, i, grid_w) or col.width != null) continue;
             if (col.flex * unit < col.min_width * k and unit > 0) left -= col.min_width * k else flex += col.flex;
         }
         const next = if (flex > 0) @max(0, left / flex) else 0;
@@ -187,9 +200,10 @@ fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 
 
 /// How wide box `index`'s contents would be, uncut: its texts' widths as
 /// set, its boxes' fixed widths or theirs in turn, and the gaps and
-/// padding between them.
+/// padding between them; in a column, the widest of them.
 pub fn natural(c: *ui.Context, index: u32) f32 {
     const n = c.node(index);
+    const across = n.style.direction == .row;
     var w: f32 = 0;
     var count: f32 = 0;
     var child = n.first_child;
@@ -197,15 +211,17 @@ pub fn natural(c: *ui.Context, index: u32) f32 {
     while (child != std.math.maxInt(u32)) : (child = c.node(child).next) {
         const ch = c.node(child);
         count += 1;
-        w += switch (ch.content) {
+        const cw = switch (ch.content) {
             .text => |t| c.text.width(t.str, t.style),
             else => switch (ch.style.width) {
                 .px => |px| px,
                 else => natural(c, child),
             },
         };
+        w = if (across) w + cw else @max(w, cw);
     }
-    return w + n.style.gap * @max(0, count - 1) + n.style.padding.horizontal();
+    const gaps = if (across) n.style.gap * @max(0, count - 1) else 0;
+    return w + gaps + n.style.padding.horizontal();
 }
 
 /// The sideways scrollbar's thumb being dragged: where the pointer and

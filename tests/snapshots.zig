@@ -701,3 +701,109 @@ test "a grid of three rows with styled titles, a hidden column and no header lin
     };
     try expectSnapshot("grid-styled", &f, false);
 }
+
+/// Pull requests by repository: one open with a group in it, one folded,
+/// one whose heading fills a cell with its total, a row selected.
+const Grouped = struct {
+    open: [4]bool = .{ true, true, false, true },
+    selected: ?usize = 2,
+
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Title" },
+        .{ .title = "Age", .width = 56, .alignment = .end },
+    };
+    const groups = [_]controls.GridGroup{ .{ .size = 2 }, .{ .size = 1, .depth = 1 }, .{ .size = 3 }, .{ .size = 2 } };
+    const names = [_][]const u8{ "nanoui", "docs", "controls", "gallery" };
+    const titles = [_][]const u8{ "Fix the scroll", "Faster text", "A new guide", "", "", "", "Sidebar view", "Charts page" };
+
+    fn view(x: *Grouped, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(8);
+        defer root.end();
+        const gs = controls.GridGroups.init(c, &groups, &x.open, .{});
+        var g = controls.grid(c, &columns, .{ .count = gs.count(), .groups = gs, .selected = &x.selected });
+        while (g.next()) |row| switch (gs.at(row.index)) {
+            .heading => |h| if (h.group == 3) {
+                g.heading(.{ .title = names[h.group], .cells = true });
+                if (g.cellAt(1)) ui.text(c, "5d", .{ .size = 13, .weight = .semibold });
+            } else g.heading(.{ .title = names[h.group], .detail = c.print("{d} pull request{s}", .{ groups[h.group].size, if (groups[h.group].size == 1) "" else "s" }) }),
+            .row => |r| {
+                g.cell();
+                ui.text(c, titles[r.group * 2 + r.index], .{ .size = 13 });
+                g.cell();
+                ui.text(c, c.print("{d}d", .{r.index + 1}), .{ .size = 13 });
+            },
+        };
+        g.end();
+    }
+};
+
+test "a grid in groups, open, folded and nested, light and dark" {
+    var x: Grouped = .{};
+    try expectView("grid-groups", .init(&x, Grouped.view), .{ .height = 270 });
+    x = .{};
+    try expectView("grid-groups-dark", .init(&x, Grouped.view), .{ .height = 270, .dark = true });
+}
+
+/// Two grids loading: one with rows in and a line under its titles, one
+/// with none yet, its rows sketched.
+fn loadingGrids(_: *u8, c: *ui.Context) void {
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Name" },
+        .{ .title = "Size", .width = 70, .alignment = .end },
+        .{ .title = "Kind", .width = 70, .alignment = .center },
+    };
+    const root = ui.div(c).column().sizeFull().p(8).gap(10);
+    defer root.end();
+    {
+        var g = controls.grid(c, &columns, .{ .count = 2, .max_rows = 2, .loading = .{ .label = "More", .done = 2, .total = 5 } });
+        while (g.next()) |row| {
+            g.cell();
+            ui.text(c, if (row.index == 0) "notes.txt" else "photo.heic", .{ .size = 13 });
+            g.cell();
+            ui.text(c, "12 KB", .{ .size = 13 });
+            g.cell();
+            ui.text(c, "File", .{ .size = 13 });
+        }
+        g.end();
+    }
+    var g = controls.grid(c, &columns, .{ .count = 0, .empty = "No files", .loading = .{ .label = "Asking the server…", .done = 1, .total = 3 } });
+    g.end();
+}
+
+test "grids loading, with rows and without, light and dark" {
+    var x: u8 = 0;
+    try expectView("grid-loading", .init(&x, loadingGrids), .{ .height = 270 });
+    try expectView("grid-loading-dark", .init(&x, loadingGrids), .{ .height = 270, .dark = true });
+}
+
+/// Runs as cards without titles, one failed and one selected; then plain
+/// rows of two lines, one with a warning.
+fn runGrids(_: *u8, c: *ui.Context) void {
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Run" },
+        .{ .title = "Took", .width = 56, .alignment = .end },
+    };
+    const names = [_][]const u8{ "Build #412", "Tests #411", "Deploy #410" };
+    const details = [_][]const u8{ "main · 2 min ago", "dev/35 · failed in snapshots", "main · an hour ago" };
+    const root = ui.div(c).column().sizeFull().p(8).gap(12);
+    defer root.end();
+    for ([_]bool{ true, false }) |cards| {
+        ui.keyInt(c, @intFromBool(cards));
+        var selected: ?usize = if (cards) 0 else null;
+        var g = controls.grid(c, &columns, .{ .count = 3, .max_rows = 3, .rows = if (cards) .cards else .plain, .lines = 2, .header = !cards, .selected = &selected });
+        while (g.next()) |row| {
+            if (row.index == 1) row.status(if (cards) .danger else .warning);
+            g.cell();
+            g.twoLines(names[row.index], details[row.index], .{});
+            g.cell();
+            ui.text(c, "2m", .{ .size = 13 });
+        }
+        g.end();
+    }
+}
+
+test "runs as cards and as two-line rows, with statuses, light and dark" {
+    var x: u8 = 0;
+    try expectView("grid-cards", .init(&x, runGrids), .{ .height = 400 });
+    try expectView("grid-cards-dark", .init(&x, runGrids), .{ .height = 400, .dark = true });
+}

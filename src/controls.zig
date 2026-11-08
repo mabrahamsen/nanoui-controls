@@ -17,6 +17,14 @@ pub const GridSort = grid_mod.Sort;
 pub const GridOptions = grid_mod.Options;
 pub const GridRow = grid_mod.Row;
 pub const GridTitleStyle = grid_mod.TitleStyle;
+pub const GridLoading = grid_mod.Loading;
+pub const GridHeading = grid_mod.Heading;
+pub const GridTwoLines = grid_mod.TwoLines;
+pub const GridRowLook = grid_mod.RowLook;
+pub const GridGroups = @import("grid_groups.zig").Groups;
+pub const GridGroup = @import("grid_groups.zig").Group;
+pub const GridGroupItem = @import("grid_groups.zig").Item;
+pub const GridGroupsOptions = @import("grid_groups.zig").Options;
 
 const pager_mod = @import("pager.zig");
 pub const pager = pager_mod.pager;
