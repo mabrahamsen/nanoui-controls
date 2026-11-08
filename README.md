@@ -9,7 +9,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 |---|---|
 | [`grid`](#grid) | Rows of cells under a header of column titles, with the columns lined up, sorting by a clicked title and building only the rows in view. |
 | [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
-| [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings and in groups that fold, chosen by key, with the keyboard. |
+| [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings, in groups that fold and in branches nested to any depth, chosen by key, with the keyboard. |
 | [`splitter`](#splitter) | A handle between two panes that resizes one of them, by dragging or with the keys. |
 | [`form`](#form) | Rows with a label beside a control or a value, the labels in one column, for a settings pane or an inspector. |
 | [`swatches`](#swatches) | A row of round colors to pick one from, with the mouse or the keys. |
@@ -136,7 +136,7 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 
 ## sidebar
 
-Rows to pick what a window shows: a mail app's mailboxes, a settings window's panes. Each row has an optional icon, a label and an optional count, under headings and in groups that fold. One row is selected by a key the caller keeps, never by position, so the selection stays on its row as rows come and go.
+Rows to pick what a window shows: a mail app's mailboxes, a settings window's panes. Each row has an optional icon, a label and an optional count, under headings, in groups that fold, and, if wanted, in branches: rows with rows under them, to any depth. One row is selected by a key the caller keeps, never by position, so the selection stays on its row as rows come and go.
 
 ```zig
 var sb = controls.sidebar(c, "nav", selected, .{});
@@ -147,17 +147,23 @@ if (sb.group("folders", "Folders", &folders_open)) |g| {
     for (folders) |f| sb.item(f.id, f.name, .{ .icon = "folder" });
     g.end();
 }
+if (sb.branch("archive", "Archive", .{ .icon = "folder" }, &archive_open)) |g| {
+    for (years) |y| sb.item(y.id, y.name, .{});
+    g.end();
+}
 if (sb.end()) |key| selected = key;
 ```
 
 - `end` returns the key chosen this frame, by a click or the keys. Keep it: it must outlive the frame, as the rows' keys usually do.
 - It takes the room left in its parent, and scrolls when its rows need more, keeping the keys' row in view.
+- **Branches:** `branch` is a row with rows under it, as `group` is a heading with rows under it: draw them, then `end` the group it returns. It has an `item`'s options, can be chosen and selected, and has a chevron at its end; its rows are indented a step, so their icons sit under its label, and can be branches, headings or groups in turn. The caller keeps whether it is open. A click on the chevron folds or opens it without choosing it; a click elsewhere on it chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint, so the selection can be found. A disabled branch can't be chosen, but still folds.
+- **Fixed trees:** with `null` for `open`, a branch is fixed: its rows always show, it has no chevron, and it doesn't fold, so there is nothing for the caller to keep. A tree of only fixed branches is a fixed tree, such as a docs site's contents; fixed and folding branches can also be mixed. Right and Left still move into and out of a fixed branch.
 - **Motion,** as the kit's: the selection slides from row to row as `kit.tabs`' marker does, a row eases into a wash under the pointer, and a group opens to its rows' height and closes back as `kit.collapsible` does. Reduced motion moves at once.
-- **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows and group headings, past folded rows; Home and End go to the ends; Left folds a group (or goes from a row to its group's heading) and Right opens it. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow.
-- **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; and group headings with whether they are open (`expanded_text`, `collapsed_text`).
+- **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows, branches and group headings, past folded rows; Home and End go to the ends. Left folds an open group or branch, or goes to the group or branch a row is in; Right opens a folded one, or goes from an open branch to its first row. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow.
+- **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; group headings with whether they are open (`expanded_text`, `collapsed_text`), and branches as rows whose value is their count and whether they are open.
 - `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
-- A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows.
-- **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots. With a `splitter`, an app can switch to it when the sidebar is dragged narrow.
+- A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows; in a folded branch, the branch shows it.
+- **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots; a branch's rows aren't indented, and only the keys fold it. With a `splitter`, an app can switch to it when the sidebar is dragged narrow.
 - **Rows** can be `disabled`: dimmed, not chosen by a click, passed by the keys, and said as disabled. A count can be a filled pill in the selection's tint (`count_style = .pill`), for what waits to be seen.
 - **Menus:** a right-click (Control-click on the Mac) on a row sets `secondary_clicked` to its key, for the app to open a menu, such as the kit's; it doesn't choose the row.
 
@@ -387,7 +393,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, Form, and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)) in cards, its controls at the rows' ends: a text field, swatches, a number input, a select and toggles in rows under headings with descriptions, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, a note, an "Advanced" section that folds, properties to read, copy, or read whole in a tooltip, a row that leads somewhere, and a danger zone. Narrow the window and its labels go above their controls; switch off the cards, the lines between rows, and the controls at the ends, or put the labels by their controls.

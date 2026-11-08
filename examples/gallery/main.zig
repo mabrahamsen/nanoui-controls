@@ -1,16 +1,18 @@
 //! The gallery: each of the library's controls in an app, picked from a
 //! sidebar, itself the library's. "Grid" is a grid of ten thousand files
 //! with a pager (grid.zig); "Form" a settings pane in a form, with
-//! swatches (form.zig); under "Charts", "Monitor" is a system monitor
+//! swatches (form.zig); "Sidebar" the sidebar's own options, which the
+//! sidebar takes as they change (sidebar.zig); under "Charts", "Monitor" is a system monitor
 //! whose charts move with its readings, its alerts (readings over 80%) in
 //! a pill, and "Every chart" each chart once, as figures it doesn't change
-//! (charts.zig). "More to come" is a row that can't be chosen yet.
+//! (charts.zig), a branch with the charts of histories and of parts under
+//! it. "More to come" is a row that can't be chosen yet.
 //!
 //! Drag the splitter beside the sidebar to resize it, or click it and use
 //! Left and Right: narrower than 120 points, the sidebar shows only its
 //! icons, the labels in tooltips. The sidebar takes the keyboard on a
 //! click or Tab: Up and Down move between its rows, and Left and Right
-//! fold the Charts group. A right-click on a row opens a menu for it.
+//! fold the Charts group and the Every chart branch. A right-click on a row opens a menu for it.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const controls = @import("nanoui_controls");
@@ -19,11 +21,13 @@ const kit = nanoui.kit;
 const grid = @import("grid.zig");
 const charts = @import("charts.zig");
 const form = @import("form.zig");
+const sidebar = @import("sidebar.zig");
 
 const Gallery = struct {
     /// The key of the view shown, as the sidebar chose it.
     shown: []const u8 = "grid",
     charts_open: bool = true,
+    every_open: bool = false,
     /// The sidebar's width as the splitter set it; below `narrow` it shows
     /// only its icons, `icons_width` wide.
     side_width: f32 = 210,
@@ -34,6 +38,7 @@ const Gallery = struct {
     browser: grid.Browser,
     monitor: charts.Monitor,
     settings: form.Settings,
+    tuning: sidebar.Tuning = .{},
 
     const narrow = 120;
     const icons_width = 52;
@@ -42,17 +47,23 @@ const Gallery = struct {
         const t = kit.tokens(c);
         const root = ui.div(c).row().sizeFull();
         defer root.end();
-        const icons_only = g.side_width < narrow;
+        const opts = g.tuning.options(c, g.side_width < narrow);
+        const icons_only = opts.icons_only;
         {
             const side = ui.div(c).column().w(if (icons_only) icons_width else g.side_width).hFull().p(if (icons_only) 6 else 10).bg(t.surface);
             defer side.end();
-            var sb = controls.sidebar(c, "gallery", g.shown, .{ .icons_only = icons_only });
+            var sb = controls.sidebar(c, "gallery", g.shown, opts);
             sb.heading("Controls");
             sb.item("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len });
             sb.item("form", "Form", .{ .icon = "slider.horizontal.3" });
+            sb.item("sidebar", "Sidebar", .{ .icon = "sidebar.left" });
             if (sb.group("charts", "Charts", &g.charts_open)) |group| {
-                sb.item("monitor", "Monitor", .{ .icon = "waveform.path.ecg", .count = g.monitor.alerts(), .count_style = .pill });
-                sb.item("every", "Every chart", .{ .icon = "chart.bar.xaxis" });
+                sb.item("monitor", "Monitor", .{ .icon = "waveform.path.ecg", .count = g.monitor.alerts(), .count_style = if (g.tuning.pill) .pill else .plain });
+                if (sb.branch("every", "Every chart", .{ .icon = "chart.bar.xaxis" }, if (g.tuning.fixed) null else &g.every_open)) |every| {
+                    sb.item("histories", "Histories", .{ .icon = "list.bullet" });
+                    sb.item("parts", "Parts", .{ .icon = "gauge.with.dots.needle.33percent" });
+                    every.end();
+                }
                 group.end();
             }
             sb.item("more", "More to come", .{ .icon = "sparkles", .disabled = true });
@@ -80,9 +91,15 @@ const Gallery = struct {
         if (std.mem.eql(u8, g.shown, "monitor")) {
             g.monitor.view(c);
         } else if (std.mem.eql(u8, g.shown, "every")) {
-            charts.catalog(c);
+            charts.catalog(c, .all);
+        } else if (std.mem.eql(u8, g.shown, "histories")) {
+            charts.catalog(c, .histories);
+        } else if (std.mem.eql(u8, g.shown, "parts")) {
+            charts.catalog(c, .parts);
         } else if (std.mem.eql(u8, g.shown, "form")) {
             g.settings.view(c);
+        } else if (std.mem.eql(u8, g.shown, "sidebar")) {
+            g.tuning.view(c);
         } else g.browser.view(c);
     }
 };

@@ -2,6 +2,11 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+- `sidebar` branches (`branch`): a row with rows under it, to any depth, as an option. A branch has an item's icon, label and count, can be chosen and selected, and folds by the chevron at its end; its rows are indented a step, and ease open and closed as a group's do. A click on the chevron folds or opens it, and a click elsewhere chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint. Left and Right fold and open branches and move between a branch and its rows, at each level, as a tree's keys do. A screen reader hears a branch as a row, with its count and whether it is open. Groups and headings inside a branch are indented with it. With `null` for `open`, a branch is fixed: always open, without a chevron, for a tree that doesn't fold. A sidebar without branches looks and behaves as it did.
+- The gallery puts the charts of histories and of parts under Every chart, a branch, and has a Sidebar view: the sidebar's options in a form, which the gallery's own sidebar takes as they change, fixed branches among them.
+
 ## 0.6.0
 
 - `form`, a new control: rows with a label beside a control (`row`) or a value (`property`), the labels in one column as wide as the widest, so what follows lines up. Rows are the kit's controls' height for the form's `size`; a row can have a hint or an error under its control and mark its label as required, as the kit's `field`; `heading` heads the rows after it, with a description under its title and a status color if wanted; `foldingHeading` folds its rows, eased; `grouped` puts each heading's rows in a card under it; `control_align = .end` puts controls at the rows' ends; `link` is a row that leads somewhere; `note` says more under a section; and `row_lines` draws lines between rows. A row's label names its control to a screen reader. A row can say more in a tooltip on an ⓘ (`info`) and be dimmed (`disabled`); a property's value can be selectable, or kept to a line with the whole in a tooltip; and with `stack_below`, a narrow form puts its labels above their controls. A screen reader hears a property as one.
