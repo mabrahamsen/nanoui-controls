@@ -205,3 +205,7 @@ test "a stat's figure takes value_color, and the theme's text without it" {
     t.settle(1);
     try std.testing.expectEqual(kit.tokens(&t.ctx).success, T.figure(&t));
 }
+
+test {
+    _ = @import("stat_tests.zig");
+}

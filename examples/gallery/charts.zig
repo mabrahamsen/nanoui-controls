@@ -428,9 +428,9 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
         lg.end();
         ui.spacer(c);
         ui.text(c, "swatches", .{ .size = 12, .color = t.muted });
-        controls.swatch(c, t.primary, .{});
-        controls.swatch(c, t.success, .{ .shape = .dot });
-        controls.swatch(c, t.danger, .{ .shape = .line });
+        controls.legendSwatch(c, t.primary, .{});
+        controls.legendSwatch(c, t.success, .{ .shape = .dot });
+        controls.legendSwatch(c, t.danger, .{ .shape = .line });
     }
     section(c, "gauge and flow", "ticks lit to a value, in cells that wrap to the width");
     {

@@ -375,7 +375,7 @@ fn keys(c: *ui.Context, slot: usize, count: usize, first: usize) usize {
 }
 
 test {
-    _ = @import("chart_more_tests.zig");
+    _ = @import("chart_tests.zig");
 }
 
 test "rampColor blends between stops and holds at the ends" {

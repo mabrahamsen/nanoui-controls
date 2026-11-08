@@ -529,6 +529,8 @@ pub const Group = struct {
     /// these rows.
     seen: bool,
 
+    /// Ends the group's or branch's rows, and puts back what the sidebar
+    /// had before them.
     pub fn end(g: Group) void {
         const sb = g.sb;
         const shown = !sb.folding;

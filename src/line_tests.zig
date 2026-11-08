@@ -165,3 +165,38 @@ test "a line without a label is left out of what a screen reader hears, unless i
         }
     }
 }
+
+/// A line of three readings in eight slots.
+const Short = struct {
+    current: ?usize = null,
+    read: ?f32 = null,
+
+    fn view(x: *Short, c: *ui.Context) void {
+        const root = ui.div(c).column().w(200).p(10);
+        defer root.end();
+        var l = line(c, &.{.{ .values = &.{ 0.2, 0.5, 0.8 } }}, .{ .capacity = 8, .interactive = true });
+        x.current = l.current;
+        x.read = if (l.current) |i| l.reading(0, i) else null;
+        l.end();
+    }
+};
+
+test "an interactive line with a short history stops only on its readings, and says each" {
+    var x: Short = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Short.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    t.ctx.focusCycle(false);
+    t.settle(1);
+    t.key(.home);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 5), x.current);
+    try std.testing.expectEqual(@as(?f32, 0.2), x.read);
+    t.key(.left);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 5), x.current);
+    t.key(.end);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?f32, 0.8), x.read);
+}

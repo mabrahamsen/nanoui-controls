@@ -23,6 +23,10 @@ const focus = @import("focus.zig");
 const measure = @import("measure.zig");
 const sections = @import("form_sections.zig");
 
+/// Where a form's labels or controls sit in their room: at its start,
+/// or at its end.
+pub const Align = enum { start, end };
+
 pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
     /// controls at it, so selects, inputs and toggles keep one rhythm.
@@ -37,10 +41,10 @@ pub const Options = struct {
     max_label_width: f32 = 220,
     /// Labels at the start of their column, or at its end, beside what
     /// they name.
-    label_align: enum { start, end } = .start,
+    label_align: Align = .start,
     /// Controls and values after the labels' column, or at the row's end,
     /// as a settings window's cards have them.
-    control_align: enum { start, end } = .start,
+    control_align: Align = .start,
     /// The labels' color; null takes the theme's muted text.
     label_color: ?ui.Color = null,
     /// The gap after the labels, and between rows, in points before

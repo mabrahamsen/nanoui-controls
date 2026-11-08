@@ -1,7 +1,6 @@
 //! A form's sections: its headings, plain or folding, the cards a grouped
 //! form puts their rows in, and notes under them. Part of `form.zig`, not
 //! a control of its own.
-const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
@@ -12,16 +11,21 @@ const HeadingOptions = form_mod.HeadingOptions;
 
 /// The rows of a folding heading's section: a box clipped to the share of
 /// their height it is open, and the rows in it.
+/// A folding heading's rows, while they show: the box eased to their
+/// height, and the rows in it.
 pub const Fold = struct {
     body: ui.Div,
     rows: ui.Div,
 };
 
+/// A heading over the rows after it (`Form.heading`).
 pub fn heading(f: *Form, title: []const u8, opts: HeadingOptions) void {
     closeSection(f);
     head(f, title, opts, null);
 }
 
+/// A heading that folds the rows after it (`Form.foldingHeading`): true
+/// while they show, eased open and closed.
 pub fn foldingHeading(f: *Form, title: []const u8, open: *bool, opts: HeadingOptions) bool {
     const c = f.c;
     closeSection(f);
@@ -43,6 +47,7 @@ pub fn foldingHeading(f: *Form, title: []const u8, open: *bool, opts: HeadingOpt
     return true;
 }
 
+/// Muted text under a section's rows (`Form.note`).
 pub fn note(f: *Form, text: []const u8) void {
     const c = f.c;
     const k = f.opts.scale;
@@ -123,6 +128,7 @@ pub fn openCard(f: *Form) void {
     f.card = ui.div(f.c).column().wFull().px(cardPadding(f)).py(4 * k).gap(f.opts.row_gap * k).bg(t.surface).border(f.card_border orelse t.border).rounded(t.radius * k);
 }
 
+/// Ends the open card, if any.
 pub fn closeCard(f: *Form) void {
     if (f.card) |card| card.end();
     f.card = null;

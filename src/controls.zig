@@ -98,14 +98,16 @@ pub const SidebarGroup = sidebar_mod.Group;
 const splitter_mod = @import("splitter.zig");
 pub const splitter = splitter_mod.splitter;
 pub const SplitterOptions = splitter_mod.Options;
+pub const SplitterPane = splitter_mod.Pane;
 
 const legend_mod = @import("legend.zig");
 pub const legend = legend_mod.legend;
 pub const Legend = legend_mod.Legend;
 pub const LegendOptions = legend_mod.Options;
-pub const swatch = legend_mod.swatch;
-pub const SwatchShape = legend_mod.SwatchShape;
-pub const SwatchOptions = legend_mod.SwatchOptions;
+/// A legend's swatch on its own; not `swatches`' `Swatch`.
+pub const legendSwatch = legend_mod.swatch;
+pub const LegendSwatchShape = legend_mod.SwatchShape;
+pub const LegendSwatchOptions = legend_mod.SwatchOptions;
 
 // Forms, pickers and layout: labels beside their controls, colors to
 // pick, and cells that wrap.
@@ -114,6 +116,7 @@ const form_mod = @import("form.zig");
 pub const form = form_mod.form;
 pub const Form = form_mod.Form;
 pub const FormOptions = form_mod.Options;
+pub const FormAlign = form_mod.Align;
 pub const FormRow = form_mod.Row;
 pub const FormRowOptions = form_mod.RowOptions;
 pub const FormPropertyOptions = form_mod.PropertyOptions;

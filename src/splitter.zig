@@ -17,6 +17,9 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
 
+/// The pane a splitter resizes: the one before it, or the one after it.
+pub const Pane = enum { start, end };
+
 pub const Options = struct {
     /// The narrowest and widest the pane may be.
     min: f32 = 0,
@@ -24,7 +27,7 @@ pub const Options = struct {
     /// The pane it resizes: the one before it, at the start, which widens
     /// as the splitter moves toward the end; or the one after it, at the
     /// end, which narrows.
-    pane: enum { start, end } = .start,
+    pane: Pane = .start,
     /// How far Left and Right, and a screen reader's step, move it.
     step: f32 = 10,
     /// The handle's width, where the pointer can grab it.

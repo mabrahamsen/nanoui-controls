@@ -9,7 +9,8 @@
 //!     l.end();
 //!
 //! With `width = .fit`, it is only as wide as its items, for a legend
-//! beside a chart's title. `swatch` draws a legend's swatch on its own.
+//! beside a chart's title. `swatch` (exported as `legendSwatch`) draws a legend's swatch on
+//! its own.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -237,4 +238,8 @@ test "a legend keeps everything inside it at any width" {
             try std.testing.expect(r.x + r.w <= w - 10 + 0.5);
         }
     }
+}
+
+test {
+    _ = @import("legend_tests.zig");
 }

@@ -230,3 +230,7 @@ test "a meter with a label reads as its value, a percentage unless given" {
     try std.testing.expectEqualStrings("62%", list.items[0].value);
     try std.testing.expectEqualStrings("Fair", list.items[1].value);
 }
+
+test {
+    _ = @import("meter_tests.zig");
+}

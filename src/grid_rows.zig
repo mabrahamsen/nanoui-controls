@@ -58,7 +58,7 @@ pub fn follow(c: *ui.Context, opts: Options) void {
 pub const Follow = struct { item: ?groups_mod.Item = null, at: usize = 0 };
 
 /// The group opened last, and when, whose rows fade in.
-pub const Opening = struct { group: usize = std.math.maxInt(usize), at: f64 = 0 };
+pub const Opening = struct { group: ?usize = null, at: f64 = 0 };
 
 /// How long a group's rows take to fade in as it opens, in seconds.
 const fade_time = 0.2;
@@ -122,11 +122,12 @@ pub fn toggle(g: *Grid, group: usize) void {
 
 /// Where the rows of the group opened last are in fading in.
 pub fn fadeFrom(g: *Grid, o: Opening) void {
-    if (g.opts.groups == null or o.group == std.math.maxInt(usize)) return;
+    const group = o.group orelse return;
+    if (g.opts.groups == null) return;
     const c = g.c;
     const u: f32 = if (c.reduced_motion) 1 else @floatCast(std.math.clamp((c.time - o.at) / fade_time, 0, 1));
     if (u >= 1) return;
-    g.fade_group = o.group;
+    g.fade_group = group;
     g.fade = ui.motion.Easing.sample(.ease_out, u)[0];
     c.animationFrame();
 }

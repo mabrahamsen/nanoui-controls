@@ -405,7 +405,7 @@ l.end();
 - `trailing` puts text at the end of the last line, such as what the items leave.
 - `size` (`.xs` by default) sizes the labels and swatches, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
 - `width = .fit` makes it only as wide as its items, for a legend beside a chart's title; they still run on where the parent's width ends.
-- `controls.swatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, in a chart's title, a table's cell or a tooltip.
+- `controls.legendSwatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, in a chart's title, a table's cell or a tooltip.
 
 ## Example
 

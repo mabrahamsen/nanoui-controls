@@ -855,8 +855,8 @@ fn richerCharts(_: *u8, c: *ui.Context) void {
         lg.item(t.warning, "Wired");
         lg.end();
         ui.spacer(c);
-        controls.swatch(c, t.success, .{ .shape = .dot });
-        controls.swatch(c, t.danger, .{ .shape = .line });
+        controls.legendSwatch(c, t.success, .{ .shape = .dot });
+        controls.legendSwatch(c, t.danger, .{ .shape = .line });
     }
     controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 4, .height = 8, .segments = 40 });
     controls.meter(c, 0.5, .{ .segments = 15, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &heat });

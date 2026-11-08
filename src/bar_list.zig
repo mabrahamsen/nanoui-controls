@@ -285,3 +285,7 @@ test "a clickable bar list's rows take the keyboard, and Enter clicks one" {
     try std.testing.expect(t.shortcut(.{ .key = ' ' }));
     try std.testing.expectEqual(@as(?usize, 1), f.clicked);
 }
+
+test {
+    _ = @import("bar_list_tests.zig");
+}
