@@ -35,6 +35,10 @@ pub const Options = struct {
     /// Shown dimmed, it takes no clicks or keys, and a screen reader says
     /// it is disabled.
     disabled: bool = false,
+    /// What the row is for ("Accent color"), said after each swatch's
+    /// name. nanoui's screen-reader tree is flat: a box described as the
+    /// row would hide the swatches in it.
+    label: []const u8 = "",
     /// Multiplies its lengths, for an app that zooms its layout along with
     /// `c.setZoom`, as the grid's does.
     scale: f32 = 1,
@@ -56,8 +60,9 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
     const at: ?usize = if (selected.*) |i| (if (i < colors.len) i else null) else null;
     if (own.focused and colors.len > 0) if (c.input.key) |key| {
         switch (key) {
-            .left => selected.* = if (at) |i| i -| 1 else 0,
-            .right => selected.* = if (at) |i| @min(i + 1, colors.len - 1) else 0,
+            // Up and Down as Left and Right, as a radio group's keys.
+            .left, .up => selected.* = if (at) |i| i -| 1 else 0,
+            .right, .down => selected.* = if (at) |i| @min(i + 1, colors.len - 1) else 0,
             .home => selected.* = 0,
             .end => selected.* = colors.len - 1,
             else => {},
@@ -65,7 +70,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         // Used up, even at an end, so a control after it doesn't take it
         // too, as the grid's keys are.
         switch (key) {
-            .left, .right, .home, .end => c.input.key = null,
+            .left, .right, .up, .down, .home, .end => c.input.key = null,
             else => {},
         }
     };
@@ -91,7 +96,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
             c.focus = own.id;
         }
         if (opts.tooltips) kit.tooltip(c, it, sw.label, .{});
-        ui.access.describe(c, dot.index, .{ .role = .radio_button, .label = sw.label, .selected = chosen, .enabled = !opts.disabled });
+        ui.access.describe(c, dot.index, .{ .role = .radio_button, .label = sw.label, .hint = opts.label, .selected = chosen, .enabled = !opts.disabled });
     }
     const changed = selected.* != before;
     if (changed) c.changed = true;
@@ -179,7 +184,8 @@ test "the keys the swatches take are used up, even at an end" {
     t.key(.left);
     t.key(.home);
     try std.testing.expect(!p.key_left);
-    t.key(.down);
+    // A key it doesn't move by is left for what comes after it.
+    t.key(.enter);
     try std.testing.expect(p.key_left);
 }
 
@@ -270,4 +276,29 @@ test "disabled swatches take no clicks or keys, and none at all don't take Tab" 
     t.key(.tab);
     t.settle(1);
     try std.testing.expect(x.field_focused);
+}
+
+test "Up and Down move as Left and Right, and the row's label is said with each swatch" {
+    const T = struct {
+        chosen: ?usize = 1,
+        fn view(x: *@This(), c: *ui.Context) void {
+            if (c.frame == 0) c.focusNext(false);
+            _ = swatches(c, &palette, &x.chosen, .{ .label = "Accent color" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 60 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.down);
+    try std.testing.expectEqual(@as(?usize, 2), x.chosen);
+    t.key(.up);
+    t.key(.up);
+    try std.testing.expectEqual(@as(?usize, 0), x.chosen);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqualStrings("Accent color", list.items[0].hint);
 }

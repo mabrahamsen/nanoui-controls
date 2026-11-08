@@ -58,3 +58,24 @@ test "a swatch on its own is a dot or a line, as a legend draws one" {
     try std.testing.expectEqual(h[0], h[1]);
     try std.testing.expect(h[2] < h[1]);
 }
+
+test "a legend's items can be lines, for a line chart's series" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(300);
+            defer root.end();
+            var l = legend_mod.legend(c, .{ .shape = .line });
+            l.item(red, "Read");
+            l.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    for (t.ctx.nodes.items) |node| if (node.style.background) |b| if (std.meta.eql(b, red)) {
+        const r = t.ctx.rects.get(node.id).?;
+        try std.testing.expect(r.w > r.h * 2);
+    };
+}

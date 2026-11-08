@@ -105,3 +105,31 @@ fn widths(t: *ui.Tester, color: ui.Color, out: []f32) []f32 {
     };
     return out[0..@min(n, out.len)];
 }
+
+test "a bar list's rows keyed by item keep the keyboard on their item as the list re-sorts" {
+    const T = struct {
+        swapped: bool = false,
+        clicked: ?usize = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(400);
+            defer root.end();
+            const a: bar_list.Item = .{ .key = "a", .label = "Alpha", .value = 2 };
+            const b: bar_list.Item = .{ .key = "b", .label = "Beta", .value = 1 };
+            const items = if (x.swapped) [_]bar_list.Item{ b, a } else [_]bar_list.Item{ a, b };
+            if (bar_list.barList(c, &items, .{ .clickable = true })) |i| x.clicked = i;
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    // The keyboard on Alpha, then the list re-sorts: Enter is still
+    // Alpha's, now the second row.
+    t.ctx.focusCycle(false);
+    t.settle(1);
+    x.swapped = true;
+    t.settle(1);
+    t.key(.enter);
+    try std.testing.expectEqual(@as(?usize, 1), x.clicked);
+}

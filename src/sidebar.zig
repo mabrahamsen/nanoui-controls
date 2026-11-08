@@ -107,6 +107,8 @@ const Held = struct {
 const Entry = struct {
     hash: u64,
     key: []const u8,
+    /// What it reads, for typing to move to it.
+    label: []const u8,
     /// A branch or a group's heading, open or not; null for a row or a
     /// fixed branch.
     open: ?*bool = null,
@@ -305,7 +307,7 @@ pub const Sidebar = struct {
         var at: ?usize = null;
         if (!sb.folding and reached) {
             // A row that can't be added is left out for the keys.
-            if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index })) |_| {
+            if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .label = label, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index })) |_| {
                 at = sb.entries.items.len - 1;
             } else |_| {}
         }
@@ -450,7 +452,7 @@ pub const Sidebar = struct {
                 sb.kept.cursor = hash;
             }
             if (!sb.folding) {
-                if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = false, .parent = sb.parent, .index = head.index })) |_| {
+                if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .label = title, .open = open, .choosable = false, .parent = sb.parent, .index = head.index })) |_| {
                     at = sb.entries.items.len - 1;
                 } else |_| {}
             }

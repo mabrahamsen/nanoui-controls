@@ -5,6 +5,38 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const Sidebar = @import("sidebar.zig").Sidebar;
+const typing_mod = @import("grid_keys.zig");
+
+/// The text typed to move to a row, kept by a key of its own: use it at
+/// once.
+fn typing(c: *ui.Context) *typing_mod.Typing {
+    ui.key(c, "sidebar-typing");
+    defer c.next_key = null;
+    return c.state(typing_mod.Typing, "sidebar-typing");
+}
+
+/// Where typing moves the keys: to the first entry after them whose label
+/// begins with the text typed, or with a letter typed again, the next
+/// that begins with it. The characters are the sidebar's.
+fn typed(c: *ui.Context, list: anytype, at: ?usize) ?usize {
+    const chars = c.input.chars;
+    if (chars.len == 0 or std.mem.eql(u8, chars, " ")) return null;
+    const text = typing_mod.useTyping(c, true, typing(c), list.len) orelse return null;
+    c.input.chars = "";
+    const again = text.len > 1 and std.mem.allEqual(u8, text, text[0]);
+    const from = if (at) |a| (if (text.len == 1 or again) a + 1 else a) else 0;
+    return typedTo(list, from, if (again) text[0..1] else text);
+}
+
+/// The first entry from `from`, round to it again, whose label begins
+/// `text`, ignoring case, as the grid's typing does.
+fn typedTo(list: anytype, from: usize, text: []const u8) ?usize {
+    for (0..list.len) |n| {
+        const i = (from + n) % list.len;
+        if (std.ascii.startsWithIgnoreCase(list[i].label, text)) return i;
+    }
+    return null;
+}
 
 /// Where the keys are among the entries drawn: the entry they moved
 /// to, else the selected row, else none.
@@ -29,7 +61,9 @@ pub fn keys(sb: *Sidebar) void {
     if (at == null or list[at.?].hash != sb.kept.cursor) sb.kept.cursor = 0;
     var to: ?usize = null;
     var enter = false;
-    if (c.shortcut(.{ .key = ui.Shortcut.down })) {
+    if (typed(c, list, at)) |i| {
+        to = i;
+    } else if (c.shortcut(.{ .key = ui.Shortcut.down })) {
         to = if (at) |a| @min(a + 1, last) else 0;
     } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
         to = if (at) |a| a -| 1 else last;

@@ -29,6 +29,10 @@ pub const Item = struct {
     value_text: []const u8 = "",
     /// Its bar's color; null takes the list's, or its ramp's.
     color: ?ui.Color = null,
+    /// What the row is known by, as it moves when the list re-sorts: its
+    /// keyboard focus and its bar's easing follow it. Empty keys it by
+    /// its place.
+    key: []const u8 = "",
     /// A symbol before the label, in a slot of its own, so labels line up
     /// whatever the icons.
     icon: ?[]const u8 = null,
@@ -128,7 +132,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
         details = details or it.detail.len > 0;
     }
     for (items, 0..) |it, i| {
-        ui.keyInt(c, i);
+        if (it.key.len > 0) ui.key(c, it.key) else ui.keyInt(c, i);
         var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(6 * k).py(@round(text * 0.35) * k).rounded(@max(0, t.radius - 2));
         if (opts.clickable) {
             // Each row takes the keyboard, as a button does: Tab moves

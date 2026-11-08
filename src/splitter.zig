@@ -28,8 +28,16 @@ pub const Options = struct {
     /// as the splitter moves toward the end; or the one after it, at the
     /// end, which narrows.
     pane: Pane = .start,
-    /// How far Left and Right, and a screen reader's step, move it.
+    /// How far Left and Right, and a screen reader's step, move it; with
+    /// Shift, `big_step`.
     step: f32 = 10,
+    big_step: f32 = 50,
+    /// The width a double click on it goes back to; null leaves it be.
+    default: ?f32 = null,
+    /// The panes are above and below each other, not side by side: the
+    /// handle runs across, `width.*` is the pane's height, and Up and Down
+    /// move it.
+    stacked: bool = false,
     /// The handle's width, where the pointer can grab it, in points before
     /// `scale`.
     grab_width: f32 = 7,
@@ -51,7 +59,10 @@ pub const Options = struct {
 pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
     const t = kit.tokens(c);
     const k = opts.scale;
-    var d = ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
+    var d = if (opts.stacked)
+        ui.div(c).h(opts.grab_width * k).wFull().column().justifyCenter()
+    else
+        ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
     if (opts.disabled) d = d.opacity(focus.dimmed);
     defer d.end();
     var it = c.interact(d.index, .{ .focusable = !opts.disabled });
@@ -60,33 +71,47 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
         it.pressed = false;
         it.focused = false;
         it.a11y_step = 0;
+        it.double_clicked = false;
     }
     const drag = c.state(struct { on: bool = false, x: f32 = 0, width: f32 = 0 }, "splitter");
     const lit = it.hovered or it.pressed or drag.on;
-    if (lit) c.cursor = .resize_left_right;
+    if (lit) c.cursor = if (opts.stacked) .resize_up_down else .resize_left_right;
     if (opts.center_line or lit or it.focused) {
         const col = if (it.focused) focus.ring(c) else if (lit) t.muted else t.border;
-        ui.div(c).w((if (lit or it.focused) @as(f32, 2) else 1) * k).hFull().bg(col).end();
+        const line_w = (if (lit or it.focused) @as(f32, 2) else 1) * k;
+        const line = if (opts.stacked) ui.div(c).h(line_w).wFull() else ui.div(c).w(line_w).hFull();
+        line.bg(col).end();
     }
     const way: f32 = if (opts.pane == .start) 1 else -1;
     const before = width.*;
+    // Where the pointer is along the way the splitter moves.
+    const along = if (opts.stacked) c.input.mouse.y else c.input.mouse.x;
     if (it.pressed) {
         if (!drag.on) {
-            drag.* = .{ .on = true, .x = c.input.mouse.x, .width = width.* };
-        } else width.* = drag.width + way * (c.input.mouse.x - drag.x) / k;
+            drag.* = .{ .on = true, .x = along, .width = width.* };
+        } else width.* = drag.width + way * (along - drag.x) / k;
     } else drag.on = false;
+    if (it.double_clicked) if (opts.default) |w| {
+        width.* = w;
+    };
     if (it.a11y_step != 0) width.* += @as(f32, @floatFromInt(it.a11y_step)) * opts.step;
     // The keys it moves by are its own: nothing after it sees them.
     if (it.focused) if (c.input.key) |key| {
-        switch (key) {
-            .left => width.* -= way * opts.step,
-            .right => width.* += way * opts.step,
+        const step = if (c.input.shift) opts.big_step else opts.step;
+        // Left and Right side by side; Up and Down stacked.
+        const back = if (opts.stacked) key == .up else key == .left;
+        const on = if (opts.stacked) key == .down else key == .right;
+        if (back) {
+            width.* -= way * step;
+        } else if (on) {
+            width.* += way * step;
+        } else switch (key) {
             // To a bound, when it has one.
             .home => width.* = bound(if (opts.pane == .start) opts.min else opts.max, width.*),
             .end => width.* = bound(if (opts.pane == .start) opts.max else opts.min, width.*),
             else => {},
         }
-        if (key == .left or key == .right or key == .home or key == .end) c.input.key = null;
+        if (back or on or key == .home or key == .end) c.input.key = null;
     };
     width.* = std.math.clamp(width.*, opts.min, @max(opts.min, opts.max));
     c.adjustable(d.index, .{ .role = .splitter, .label = opts.label, .value = c.print("{d:.0}", .{width.*}), .enabled = !opts.disabled });
@@ -228,4 +253,37 @@ test "a disabled splitter doesn't move, by drag or key, and says it is disabled"
     var list: std.ArrayList(ui.access.Element) = .empty;
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
     try std.testing.expect(!list.items[0].enabled);
+}
+
+test "a stacked splitter moves with Up and Down, Shift a bigger step, and a double click resets it" {
+    const T = struct {
+        height: f32 = 100,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const col = ui.div(c).column().sizeFull();
+            defer col.end();
+            ui.div(c).h(x.height).wFull().end();
+            _ = splitter(c, &x.height, .{ .min = 50, .max = 300, .stacked = true, .default = 120 });
+            ui.div(c).wFull().grow().end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 400 });
+    defer t.deinit();
+    t.settle(1);
+    // Dragged down: the pane above grows.
+    t.drag(150, 103, 150, 143);
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 140), x.height, 0.5);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 150), x.height, 0.5);
+    t.setMods(.{ .shift = true });
+    t.key(.up);
+    t.setMods(.{});
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 100), x.height, 0.5);
+    t.doubleClick(150, 103);
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 120), x.height, 0.5);
 }
