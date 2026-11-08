@@ -65,11 +65,14 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         }
     };
     const d = @round(opts.size.height() * 0.65) * k;
+    // None chosen, as the keys left it: nothing, or an index past the
+    // colors.
+    const none = if (selected.*) |i| i >= colors.len else true;
     for (colors, 0..) |sw, i| {
         const chosen = selected.* == i;
         // With the keyboard and nothing chosen, the first is where the
         // keys start.
-        const ringed = chosen or (own.focused and selected.* == null and i == 0);
+        const ringed = chosen or (own.focused and none and i == 0);
         const edge = if (ringed and own.focused) t.primary else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
@@ -185,6 +188,27 @@ test "swatches take the keyboard from Tab, and the first key chooses the first" 
     t.settle(1);
     t.key(.right);
     try std.testing.expectEqual(@as(?usize, 0), p.chosen);
+}
+
+test "with the keyboard and a chosen index past the colors, the first swatch shows where the keys start" {
+    const T = struct {
+        chosen: ?usize = 9,
+        fn view(x: *@This(), c: *ui.Context) void {
+            if (c.frame == 0) c.focusNext(false);
+            _ = swatches(c, &palette, &x.chosen, .{});
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 60 });
+    defer t.deinit();
+    t.settle(1);
+    const primary = nanoui.kit.tokens(&t.ctx).primary;
+    var ringed: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.border) |b| if (std.meta.eql(b, primary)) {
+        ringed += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), ringed);
 }
 
 test "each swatch is named in a tooltip and to a screen reader, the chosen one selected" {

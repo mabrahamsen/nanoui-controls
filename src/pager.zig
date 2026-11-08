@@ -25,6 +25,11 @@ pub const Options = struct {
     around: usize = 1,
     /// The buttons' size, as the kit's.
     size: kit.Size = .sm,
+    /// What a screen reader calls the arrows, and a page's number after
+    /// `page_text` ("Page 3").
+    previous_text: []const u8 = "Previous page",
+    next_text: []const u8 = "Next page",
+    page_text: []const u8 = "Page",
 };
 
 /// Draws the pager for `pages` pages, the current one `page.*`, and
@@ -44,16 +49,16 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
         defer box.end();
         if (it.focused) keys(c, page, pages);
         const w = slotWidth(c, pages, opts.size);
-        if (button(c, "chevron.left", "", "Previous page", false, page.* == 0, null, opts)) page.* -= 1;
+        if (button(c, "chevron.left", "", opts.previous_text, false, page.* == 0, null, opts)) page.* -= 1;
         const current = page.*;
         for (0..slots(pages, opts.around)) |k| {
             const i = slot(k, current, pages, opts.around) orelse {
                 gap(c, k, w, opts);
                 continue;
             };
-            if (button(c, "", c.print("{d}", .{i + 1}), c.print("Page {d}", .{i + 1}), i == current, false, w, opts)) page.* = i;
+            if (button(c, "", c.print("{d}", .{i + 1}), c.print("{s} {d}", .{ opts.page_text, i + 1 }), i == current, false, w, opts)) page.* = i;
         }
-        if (button(c, "chevron.right", "", "Next page", false, page.* + 1 >= pages, null, opts)) page.* += 1;
+        if (button(c, "chevron.right", "", opts.next_text, false, page.* + 1 >= pages, null, opts)) page.* += 1;
     }
     // A press on its buttons, which leaves nothing with the keyboard,
     // gives the keyboard to the pager, as the grid's rows do.
@@ -283,6 +288,26 @@ test "a pager with the keyboard moves with Left, Right, Home and End" {
     try std.testing.expectEqual(@as(usize, 0), p.page);
     t.key(.left);
     try std.testing.expectEqual(@as(usize, 0), p.page);
+}
+
+test "a pager's buttons are named in the caller's words" {
+    const T = struct {
+        page: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            _ = pager(c, &x.page, 5, .{ .previous_text = "Précédente", .next_text = "Suivante", .page_text = "Page n°" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try clickLabel(&t, "Suivante");
+    try std.testing.expectEqual(@as(usize, 1), x.page);
+    try clickLabel(&t, "Page n° 4");
+    try std.testing.expectEqual(@as(usize, 3), x.page);
+    try clickLabel(&t, "Précédente");
+    try std.testing.expectEqual(@as(usize, 2), x.page);
 }
 
 test "a screen reader hears the pager's buttons, the current page selected" {

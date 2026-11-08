@@ -188,6 +188,11 @@ pub const Options = struct {
     /// folded.
     expanded_text: []const u8 = "expanded",
     collapsed_text: []const u8 = "collapsed",
+    /// What a screen reader says of the sorted column's title, which way
+    /// it sorts, and of a sortable title, what a click does.
+    ascending_text: []const u8 = "sorted ascending",
+    descending_text: []const u8 = "sorted descending",
+    sort_hint_text: []const u8 = "Sorts the rows by this column",
     /// The column titles show; false leaves them out, and sorting by them.
     header: bool = true,
     /// Rows as plain rows, or as cards: the theme's surface, a border and

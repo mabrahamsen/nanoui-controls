@@ -223,6 +223,7 @@ test "a screen reader hears each row, the selected one selected, and the heading
     try std.testing.expect(!list.items[2].selected);
     try std.testing.expectEqualStrings("Folders", list.items[3].label);
     try std.testing.expectEqualStrings("expanded", list.items[3].value);
+    try std.testing.expect(list.items[3].header);
     try std.testing.expectEqualStrings("work", list.items[4].label);
 }
 

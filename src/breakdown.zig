@@ -50,7 +50,7 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     if (opts.glow == 0) r = r.clip();
     // Without gaps, the parts overlap by a point, as a meter's segments.
     r = r.gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);
-    chart.describe(c, r.index, opts.label, opts.value_text, false);
+    chart.describe(c, r.index, opts.label, opts.value_text, false, "");
     defer r.end();
     // Every part eases first, while the keys they ease under are the same
     // each frame: the boxes after skip parts that are nothing.

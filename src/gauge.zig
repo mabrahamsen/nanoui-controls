@@ -56,7 +56,7 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();
     const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
-    chart.describe(c, box.index, opts.label, said, false);
+    chart.describe(c, box.index, opts.label, said, false, "");
     // Not a number, it goes dark at once.
     const eased = ui.motion.number(c, "gauge", v, .{ .tween = .{ .duration = 0.35 } });
     const shown = if (known) eased else 0;

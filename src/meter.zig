@@ -76,7 +76,7 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     // a label isn't said at all.
     const known = !std.math.isNan(value);
     const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
-    chart.describe(c, r.index, opts.label, said, false);
+    chart.describe(c, r.index, opts.label, said, false, "");
     const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
     var run: ?ui.Div = null;
     var zone: usize = 0;

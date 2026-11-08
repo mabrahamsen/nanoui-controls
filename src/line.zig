@@ -55,6 +55,8 @@ pub const Options = struct {
     /// from one to the next with Left and Right, as `bars`: `Line.current`
     /// is its index in the slots, and the chart marks it.
     interactive: bool = false,
+    /// What a screen reader calls an interactive chart without a `label`.
+    chart_text: []const u8 = "Chart",
     /// What a screen reader calls the chart and says it shows, as `bars`.
     label: []const u8 = "",
     value_text: []const u8 = "",
@@ -197,7 +199,7 @@ pub const Line = struct {
             const x = pad + (if (n <= 1) 1 else @as(f32, @floatFromInt(l.current.?)) / @as(f32, @floatFromInt(n - 1))) * (r.w - 2 * pad);
             l.inspect.tooltip(c, .{ .x = r.x + x - 1, .y = r.y, .w = 2, .h = r.h }, l.tip);
         };
-        chart.describe(c, l.box.index, l.opts.label, if (tip) l.tip else l.opts.value_text, l.opts.interactive);
+        chart.describe(c, l.box.index, l.opts.label, if (tip) l.tip else l.opts.value_text, l.opts.interactive, l.opts.chart_text);
         l.box.end();
         l.frame.close(c);
     }

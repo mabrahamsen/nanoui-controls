@@ -15,6 +15,8 @@ const Settings = struct {
     shown: bool = false,
     opened: usize = 0,
     link_disabled: bool = false,
+    /// A row above the link, from some frame on.
+    extra: bool = false,
 
     fn view(x: *Settings, c: *ui.Context) void {
         const root = ui.div(c).column().w(400);
@@ -22,6 +24,7 @@ const Settings = struct {
         var f = form(c, x.opts);
         f.heading("General", .{});
         f.property("Name", "studio", .{});
+        if (x.extra) f.property("Host", "studio.local", .{});
         if (f.link("Repository", "studio", .{ .disabled = x.link_disabled })) x.opened += 1;
         f.note("Settings apply at once.");
         x.shown = f.foldingHeading("Advanced", &x.advanced, .{ .description = "For the curious." });
@@ -250,4 +253,17 @@ test "the rows after a note start without a line over them" {
         const bg = node.style.background orelse continue;
         try std.testing.expect(!(std.meta.eql(bg, border) and t.ctx.rects.get(node.id).?.h == 1));
     }
+}
+
+test "a link row keeps the keyboard when a row appears above it" {
+    var x: Settings = .{};
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    try t.clickText("Repository");
+    try std.testing.expectEqual(@as(usize, 1), x.opened);
+    x.extra = true;
+    t.settle(1);
+    t.key(.enter);
+    try std.testing.expectEqual(@as(usize, 2), x.opened);
 }

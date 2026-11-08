@@ -591,3 +591,33 @@ test "a heading's chevron follows the grid's scale" {
     };
     try std.testing.expectEqual(@as(f32, 19), size);
 }
+
+test "column titles are headers to a screen reader, in the caller's words" {
+    const T = struct {
+        sort: g_mod.Sort = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().sizeFull();
+            defer root.end();
+            const columns = [_]Column{ .{ .title = "Title", .sortable = true }, .{ .title = "Age", .width = 60 } };
+            var g = grid(c, &columns, .{ .count = 1, .sort = &x.sort, .ascending_text = "croissant", .sort_hint_text = "trie" });
+            while (g.next()) |_| {
+                g.cell();
+                ui.text(c, "a", .{});
+            }
+            g.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqualStrings("Title", list.items[0].label);
+    try std.testing.expect(list.items[0].header);
+    try std.testing.expectEqualStrings("croissant", list.items[0].value);
+    try std.testing.expectEqualStrings("trie", list.items[0].hint);
+}

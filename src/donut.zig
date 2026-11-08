@@ -47,7 +47,7 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     const size = opts.size * k;
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();
-    chart.describe(c, box.index, opts.label, opts.value_text, false);
+    chart.describe(c, box.index, opts.label, opts.value_text, false, "");
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
     // In its first frame it has no size: the canvas asks for the frame
     // that gives it one.

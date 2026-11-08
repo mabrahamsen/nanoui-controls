@@ -446,7 +446,7 @@ pub const Sidebar = struct {
                 ui.spacer(c);
             }
             ui.icon(c, if (open.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = col });
-            ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text });
+            ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text, .header = true });
         }
         return sb.fold(wrap, open.*, at, false);
     }

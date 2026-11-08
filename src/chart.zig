@@ -256,10 +256,11 @@ pub const Frame = struct {
 
 /// Names box `index` for a screen reader as a chart: one image called
 /// `label`, saying `value`. Without a label, an interactive chart is
-/// called "Chart", and any other is left out, as a decoration.
-pub fn describe(c: *ui.Context, index: u32, label: []const u8, value: []const u8, interactive: bool) void {
+/// called `unnamed` (its `chart_text`), and any other is left out, as a
+/// decoration.
+pub fn describe(c: *ui.Context, index: u32, label: []const u8, value: []const u8, interactive: bool, unnamed: []const u8) void {
     if (label.len == 0 and !interactive) return ui.access.hide(c, index);
-    ui.access.describe(c, index, .{ .role = .image, .label = if (label.len > 0) label else "Chart", .value = value });
+    ui.access.describe(c, index, .{ .role = .image, .label = if (label.len > 0) label else unnamed, .value = value });
 }
 
 /// What the pointer or the keys point at in a chart of `count` slots

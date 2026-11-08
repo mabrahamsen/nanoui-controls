@@ -26,6 +26,10 @@ pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
     /// controls at it, so selects, inputs and toggles keep one rhythm.
     size: kit.Size = .md,
+    /// What a screen reader says of a row marked `required`, after its
+    /// label, which names its control ("Name, required"): the "*" isn't
+    /// said.
+    required_text: []const u8 = "required",
     /// The labels' column, in points before `scale`; null takes the
     /// widest label's, as the form measured it, up to `max_label_width`.
     label_width: ?f32 = null,
@@ -199,6 +203,9 @@ pub const Form = struct {
         const k = f.opts.scale;
         const t = kit.tokens(c);
         f.before(label, false, false);
+        // Keyed by its label, so a row appearing above it doesn't take its
+        // keyboard.
+        ui.key(c, c.print("form-link-{s}", .{label}));
         var r = f.openRow(true);
         defer r.end();
         const it = c.interact(r.index, .{ .focusable = !opts.disabled });
@@ -309,7 +316,10 @@ pub const Form = struct {
         // One element, so the mark isn't what names the control.
         if (l.names) {
             if (text.len > 0) {
-                ui.access.describe(c, col.index, .{ .role = .static_text, .label = text, .hint = l.info, .enabled = !l.disabled });
+                // The label names the control, which takes only the label's
+                // text: "Name, required".
+                const said = if (l.required) c.print("{s}, {s}", .{ text, f.opts.required_text }) else text;
+                ui.access.describe(c, col.index, .{ .role = .static_text, .label = said, .hint = l.info, .enabled = !l.disabled });
             } else ui.access.hide(c, col.index);
         }
         // A label too long for the column ends in "…".

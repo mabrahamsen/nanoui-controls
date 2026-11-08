@@ -63,6 +63,8 @@ pub const Options = struct {
     /// and move from slot to slot with Left and Right: `Bars.current` is
     /// that slot, and `tooltip` says what it shows.
     interactive: bool = false,
+    /// What a screen reader calls an interactive chart without a `label`.
+    chart_text: []const u8 = "Chart",
     /// What a screen reader calls the chart ("Traffic"); empty leaves it
     /// out, as a decoration.
     label: []const u8 = "",
@@ -255,7 +257,7 @@ pub const Bars = struct {
         const c = b.c;
         const tip = b.current != null and b.tip.len > 0;
         if (tip) if (b.current_box) |i| b.inspect.tooltip(c, c.rects.get(c.node(i).id), b.tip);
-        chart.describe(c, b.row.index, b.opts.label, if (tip) b.tip else b.opts.value_text, b.opts.interactive);
+        chart.describe(c, b.row.index, b.opts.label, if (tip) b.tip else b.opts.value_text, b.opts.interactive, b.opts.chart_text);
         b.row.end();
         b.frame.close(c);
         // A new tallest bar on a scale that rises: draw again with it.
