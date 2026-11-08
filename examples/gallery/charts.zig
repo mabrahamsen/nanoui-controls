@@ -167,6 +167,7 @@ pub const Monitor = struct {
             // the newest at the right.
             var b = controls.bars(c, .{
                 .count = capacity,
+                .units = true,
                 .readings = m.change.len,
                 .min = -25,
                 .max = 25,
@@ -348,6 +349,7 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
             const load = [_]f32{ 22, 35, 30, 58, 64, 41, 77, 92, 70, 55 };
             var b = controls.bars(c, .{
                 .count = 24,
+                .units = true,
                 .readings = load.len,
                 .max = 100,
                 .fixed_max = true,

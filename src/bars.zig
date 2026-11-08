@@ -9,7 +9,7 @@
 //! value lines' labels beside the chart, and `start_text` and `end_text`
 //! go under it ("-60 s", "now").
 //!
-//!     var b = controls.bars(c, .{ .count = 60, .max = 10, .readings = read.len, .height = .{ .px = 64 }, .interactive = true, .label = "Traffic" });
+//!     var b = controls.bars(c, .{ .count = 60, .units = true, .max = 10, .readings = read.len, .height = .{ .px = 64 }, .interactive = true, .label = "Traffic" });
 //!     while (b.next()) |slot| {
 //!         const i = slot.reading.?;
 //!         slot.bar(&.{ .{ .value = read[i], .color = t.primary }, .{ .value = write[i], .color = t.success } });
@@ -32,21 +32,23 @@ pub const Options = struct {
     height: ui.Length = .{ .px = 26 },
     /// Between the slots; null keeps a hairline of one point at any scale.
     gap: ?f32 = null,
-    /// With `max`, the parts are in units, on a scale from `min` at the
-    /// bottom to `max` at the top: a bar of 40 on a scale of 0 to 100 is
-    /// 40% of the height. Unless `fixed_max`, the top rises to the tallest
-    /// bar, its parts stacked, so none is cut off. A `min` below zero
-    /// leaves that room below zero for negative parts; one above zero
-    /// starts the bars there. Null: parts are shares of the height.
+    /// The parts are in units, on a scale from `min` at the bottom to
+    /// `max` at the top: a bar of 40 on a scale of 0 to 100 is 40% of the
+    /// height. Unless `fixed_max`, the top rises to the tallest bar, its
+    /// parts stacked, so none is cut off; null `max` takes the tallest, as
+    /// every chart with a scale does. A `min` below zero leaves that room
+    /// below zero for negative parts; one above zero starts the bars
+    /// there. Off, parts are shares of the height.
+    units: bool = false,
     min: f32 = 0,
     max: ?f32 = null,
     fixed_max: bool = false,
-    /// Without `max`: the share of the height below zero, for bars of
+    /// Without `units`: the share of the height below zero, for bars of
     /// negative parts (a loss, a change down); 0 keeps every bar above
     /// the bottom.
     below: f32 = 0,
     /// Lines across at values on the scale (shares of the height above
-    /// zero without `max`: 0.5 is halfway up), behind the bars.
+    /// zero without `units`: 0.5 is halfway up), behind the bars.
     value_lines: []const chart.ValueLine = &.{},
     /// How many readings there are, for a history shorter than the slots:
     /// they sit in the slots at the right, the newest last, and the slots
@@ -86,9 +88,9 @@ const Scale = struct {
     squeeze: bool,
 
     fn of(opts: Options, peak: f32) Scale {
-        if (opts.max) |m| {
-            const hi = if (opts.fixed_max) m else @max(m, peak);
-            return .{ .lo = opts.min, .hi = hi, .base = @max(opts.min, 0), .squeeze = opts.fixed_max };
+        if (opts.units) {
+            const fixed = opts.fixed_max and opts.max != null;
+            return .{ .lo = opts.min, .hi = chart.scaleTop(opts.min, opts.max, fixed, peak), .base = @max(opts.min, 0), .squeeze = fixed };
         }
         const below = if (opts.below > 0) @min(opts.below, 1) else 0;
         return .{ .lo = -below, .hi = 1 - below, .base = 0, .squeeze = true };
@@ -257,7 +259,7 @@ pub const Bars = struct {
         b.row.end();
         b.frame.close(c);
         // A new tallest bar on a scale that rises: draw again with it.
-        if (b.opts.max != null and !b.opts.fixed_max and b.peak != b.last_peak) {
+        if (b.opts.units and !(b.opts.fixed_max and b.opts.max != null) and b.peak != b.last_peak) {
             kept(c).peak = b.peak;
             c.frameIn(0);
         }

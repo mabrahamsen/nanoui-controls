@@ -33,8 +33,9 @@ pub const Options = struct {
     min: f32 = 0,
     /// The value at the top. A history that goes higher raises the top to
     /// its peak, so a quiet history doesn't fill the chart and a loud one
-    /// isn't cut off, unless `fixed_max`.
-    max: f32 = 1,
+    /// isn't cut off, unless `fixed_max`. Null takes the history's peak,
+    /// as every chart with a scale does.
+    max: ?f32 = 1,
     /// The top stays at `max`, and readings above it are drawn full.
     fixed_max: bool = false,
     /// The shortest bar, as a share of the height, so a reading at `min`
@@ -61,11 +62,12 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
     const shown = @min(values.len, opts.capacity);
     const skip = values.len - shown;
     const head = if (values.len > 0) opts.head % values.len else 0;
-    var peak = opts.max;
-    if (!opts.fixed_max) for (0..shown) |i| {
+    var most: f32 = -std.math.inf(f32);
+    for (0..shown) |i| {
         const v = values[(head + skip + i) % values.len];
-        if (std.math.isFinite(v)) peak = @max(peak, v);
-    };
+        if (std.math.isFinite(v)) most = @max(most, v);
+    }
+    const peak = chart.scaleTop(opts.min, opts.max, opts.fixed_max, most);
     const empty = opts.capacity - shown;
     const baseline = if (opts.baseline > 0) @min(opts.baseline, 1) else 0;
     var b = bars_mod.bars(c, .{

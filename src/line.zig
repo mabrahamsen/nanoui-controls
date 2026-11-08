@@ -38,9 +38,9 @@ pub const Options = struct {
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 64 },
     /// The value at the bottom, and at the top unless a reading goes
-    /// higher, as a trend's.
+    /// higher, as a trend's; null takes the readings' peak.
     min: f32 = 0,
-    max: f32 = 1,
+    max: ?f32 = 1,
     fixed_max: bool = false,
     line_width: f32 = 1.5,
     /// Lines across at these values, behind the lines.
@@ -68,13 +68,14 @@ pub const Options = struct {
 pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
     const t = kit.tokens(c);
     const k = opts.scale;
-    var peak = opts.max;
-    if (!opts.fixed_max) for (series) |s| {
+    var most: f32 = -std.math.inf(f32);
+    for (series) |s| {
         for (0..@min(s.values.len, opts.capacity)) |j| {
             const v = readingOf(s, opts.capacity, opts.capacity - @min(s.values.len, opts.capacity) + j) orelse continue;
-            peak = @max(peak, v);
+            most = @max(most, v);
         }
-    };
+    }
+    const peak = chart.scaleTop(opts.min, opts.max, opts.fixed_max, most);
     const pad = inset(opts);
     const frame: chart.Frame = .open(c, opts.width, .{ .axis = opts.axis, .lines = opts.value_lines, .lo = opts.min, .hi = peak, .top = pad, .start_text = opts.start_text, .end_text = opts.end_text, .scale = k }, opts.height != .px);
     const box = ui.div(c);

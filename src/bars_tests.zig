@@ -293,7 +293,7 @@ const Units = struct {
     fn view(x: *Units, c: *ui.Context) void {
         const root = ui.div(c).column().w(200).p(10);
         defer root.end();
-        var b = bars(c, .{ .count = x.count, .height = .{ .px = 100 }, .min = x.min, .max = x.max, .fixed_max = x.fixed, .readings = x.readings, .interactive = x.interactive });
+        var b = bars(c, .{ .count = x.count, .height = .{ .px = 100 }, .units = true, .min = x.min, .max = x.max, .fixed_max = x.fixed, .readings = x.readings, .interactive = x.interactive });
         x.current = b.current;
         x.built = 0;
         while (b.next()) |slot| {
@@ -424,7 +424,7 @@ const Framed = struct {
             l.end();
             return;
         }
-        var b = bars(c, .{ .count = 3, .max = 100, .fixed_max = true, .height = .{ .px = 100 }, .value_lines = &lines, .axis = x.axis, .start_text = "-60 s", .end_text = "now" });
+        var b = bars(c, .{ .count = 3, .units = true, .max = 100, .fixed_max = true, .height = .{ .px = 100 }, .value_lines = &lines, .axis = x.axis, .start_text = "-60 s", .end_text = "now" });
         x.box = b.row.index;
         while (b.next()) |slot| slot.bar(&.{.{ .value = 40, .color = blue }});
         b.end();

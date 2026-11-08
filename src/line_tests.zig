@@ -200,3 +200,33 @@ test "an interactive line with a short history stops only on its readings, and s
     t.settle(1);
     try std.testing.expectEqual(@as(?f32, 0.8), x.read);
 }
+
+test "a line without a max scales to its peak, as every chart with a scale does" {
+    const T = struct {
+        top: ?f32 = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(200).p(10);
+            defer root.end();
+            var l = line(c, &.{.{ .values = &.{ 0.1, 0.2 } }}, .{ .capacity = 2, .max = x.top, .height = .{ .px = 100 }, .value_lines = &.{.{ .value = 0.2 }} });
+            l.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    // The line at the peak, 0.2, sits at the top.
+    var y: ?f32 = null;
+    for (t.ctx.nodes.items) |node| if (node.style.height == .px and node.style.height.px == 1 and node.style.background != null) {
+        y = t.ctx.rects.get(node.id).?.y;
+    };
+    try std.testing.expect(y.? < 10 + 3);
+    // With max 1, it sits low.
+    x.top = 1;
+    t.settle(1);
+    for (t.ctx.nodes.items) |node| if (node.style.height == .px and node.style.height.px == 1 and node.style.background != null) {
+        y = t.ctx.rects.get(node.id).?.y;
+    };
+    try std.testing.expect(y.? > 10 + 70);
+}

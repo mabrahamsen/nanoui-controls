@@ -52,8 +52,12 @@ pub const Style = enum {
 };
 
 pub const Options = struct {
-    /// The value of a full bar; null takes the largest item's.
+    /// The value of a full bar, rising to the largest item's unless
+    /// `fixed_max`; null takes the largest item's, as every chart with a
+    /// scale does.
     max: ?f32 = null,
+    /// A full bar stays at `max`, and larger items are drawn full.
+    fixed_max: bool = false,
     /// The value of an empty bar: a temperature from 20 to 110 fills the
     /// bar from its start.
     min: f32 = 0,
@@ -96,12 +100,11 @@ pub const Options = struct {
 pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     const t = kit.tokens(c);
     const k = opts.scale;
-    var max: f32 = 0;
-    if (opts.max) |m| {
-        max = m;
-    } else for (items) |it| {
-        if (std.math.isFinite(it.value)) max = @max(max, it.value);
-    }
+    var largest: f32 = -std.math.inf(f32);
+    for (items) |it| if (std.math.isFinite(it.value)) {
+        largest = @max(largest, it.value);
+    };
+    const max = chart.scaleTop(opts.min, opts.max, opts.fixed_max, largest);
     const col = ui.div(c).column().wFull().gap(opts.gap * k);
     defer col.end();
     var clicked: ?usize = null;

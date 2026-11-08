@@ -821,7 +821,7 @@ fn richerCharts(_: *u8, c: *ui.Context) void {
     {
         const row = ui.div(c).row().wFull().gap(14);
         defer row.end();
-        var b = controls.bars(c, .{ .count = 16, .readings = load.len, .max = 100, .fixed_max = true, .height = .{ .px = 56 }, .gap = 2, .axis = .start, .value_lines = &.{ .{ .value = 100, .label = "100" }, .{ .value = 50, .label = "50" }, .{ .value = 0, .label = "0" } }, .start_text = "-16 s", .end_text = "now", .width = .{ .px = 160 } });
+        var b = controls.bars(c, .{ .count = 16, .readings = load.len, .units = true, .max = 100, .fixed_max = true, .height = .{ .px = 56 }, .gap = 2, .axis = .start, .value_lines = &.{ .{ .value = 100, .label = "100" }, .{ .value = 50, .label = "50" }, .{ .value = 0, .label = "0" } }, .start_text = "-16 s", .end_text = "now", .width = .{ .px = 160 } });
         while (b.next()) |slot| {
             const v = load[slot.reading.?];
             slot.bar(&.{.{ .value = v, .color = controls.rampColor(&heat, v / 100) }});

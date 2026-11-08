@@ -82,6 +82,14 @@ pub fn level(x: f32, min: f32, max: f32) ?f32 {
     return std.math.clamp((x - min) / range, 0, 1);
 }
 
+/// A chart's scale's top, as every chart with a scale takes it: `max`
+/// rising to the data's `peak` unless `fixed`; null takes the peak. A top
+/// with no room above `min` is one above it.
+pub fn scaleTop(min: f32, max: ?f32, fixed: bool, peak: f32) f32 {
+    const hi = if (max) |m| (if (fixed) m else @max(m, peak)) else peak;
+    return if (std.math.isFinite(hi) and hi > min) hi else min + 1;
+}
+
 /// The reading in slot `i` of `n`, for readings kept oldest first from
 /// `head` (a ring once full) and shown right-aligned, the newest in the
 /// last slot; with more readings than slots, the newest. Null where there

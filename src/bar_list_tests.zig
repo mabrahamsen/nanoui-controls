@@ -65,3 +65,43 @@ test "a bar list as meters lights each row's segments to its level" {
     };
     try std.testing.expectEqual(@as(usize, 5), unlit);
 }
+
+test "a bar list's max rises to its largest item, unless fixed" {
+    const T = struct {
+        fixed: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(400);
+            defer root.end();
+            _ = bar_list.barList(c, &.{
+                .{ .label = "a", .value = 20, .color = blue },
+                .{ .label = "b", .value = 10, .color = red },
+            }, .{ .max = 10, .fixed_max = x.fixed });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    var b: [2]f32 = undefined;
+    var r: [2]f32 = undefined;
+    // Widths: the largest full, the other half.
+    const wa = widths(&t, blue, &b);
+    const wb = widths(&t, red, &r);
+    try std.testing.expectApproxEqAbs(wa[0] / 2, wb[0], 1);
+    x.fixed = true;
+    t.settle(1);
+    // Fixed at 10: both full.
+    try std.testing.expectApproxEqAbs(widths(&t, blue, &b)[0], widths(&t, red, &r)[0], 1);
+}
+
+/// The widths of the boxes in `color`, in the order drawn.
+fn widths(t: *ui.Tester, color: ui.Color, out: []f32) []f32 {
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.background) |bg| if (std.meta.eql(bg, color)) {
+        const rect = t.ctx.rects.get(node.id) orelse continue;
+        if (n < out.len) out[n] = rect.w;
+        n += 1;
+    };
+    return out[0..@min(n, out.len)];
+}
