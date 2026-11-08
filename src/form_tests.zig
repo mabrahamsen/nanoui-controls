@@ -264,7 +264,7 @@ const Toggles = struct {
     }
 };
 
-test "a row's label names its control to a screen reader, not its required mark" {
+test "a row's label names its control to a screen reader, saying it is required in words, not by its mark" {
     var x: Toggles = .{};
     var t: ui.Tester = undefined;
     try start(&x, &t);
@@ -273,7 +273,7 @@ test "a row's label names its control to a screen reader, not its required mark"
     defer arena.deinit();
     const list = try elements(&t, arena.allocator());
     try std.testing.expectEqual(@as(usize, 1), list.len);
-    try std.testing.expectEqualStrings("Notify", list[0].label);
+    try std.testing.expectEqualStrings("Notify, required", list[0].label);
 }
 
 test "an ⓘ after a label says more in a tooltip, and the column makes room for it" {
@@ -427,7 +427,8 @@ test "a label cut short still names its control whole" {
     defer arena.deinit();
     const list = try elements(&t, arena.allocator());
     try std.testing.expectEqual(@as(usize, 1), list.len);
-    try std.testing.expectEqualStrings("Notify when a backup ends", list[0].label);
+    // Required, as its name says.
+    try std.testing.expectEqualStrings("Notify when a backup ends, required", list[0].label);
 }
 
 fn wrapping(f: *form_mod.Form, _: *ui.Context) void {
@@ -560,4 +561,33 @@ test "a heading's description sits under its title, and a screen reader hears bo
     try std.testing.expect(list[0].header and std.mem.eql(u8, list[0].label, "Backups"));
     try std.testing.expectEqualStrings("How often, and how many to keep.", list[1].label);
     try std.testing.expect(!list[1].header);
+}
+
+test "a required row says so to a screen reader, in the caller's words" {
+    const T = struct {
+        name: ui.TextBuffer = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            var f = form(c, .{ .required_text = "obligatoire" });
+            const r = f.row("Nom", .{ .required = true });
+            _ = ui.textField(c, &x.name, .{});
+            r.end();
+            f.end();
+        }
+    };
+    var x: T = .{};
+    defer x.name.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var found = false;
+    for (list.items) |e| if (std.mem.eql(u8, e.label, "Nom, obligatoire")) {
+        found = true;
+        try std.testing.expectEqual(ui.access.Role.text_field, e.role);
+    };
+    try std.testing.expect(found);
 }

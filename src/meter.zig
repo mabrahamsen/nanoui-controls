@@ -21,13 +21,20 @@ const chart = @import("chart.zig");
 pub const Options = struct {
     /// How many segments.
     segments: usize = 24,
+    /// The values of an unlit meter and a full one: a temperature from 20
+    /// to 110 needs no scaling to 0 and 1.
+    min: f32 = 0,
+    max: f32 = 1,
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
-    height: f32 = 8,
-    /// Between the segments; 0 makes a strip without seams.
+    height: ui.Length = .{ .px = 8 },
+    /// Between the segments, in points before `scale`; 0 makes a strip
+    /// without seams.
     gap: f32 = 3,
-    /// The segments' corner radius; without gaps, the strip's ends'.
-    radius: f32 = 2,
+    /// The segments' corner radius, in points before `scale`; without
+    /// gaps, the strip's ends'. Null
+    /// rounds their ends, as a breakdown's.
+    radius: ?f32 = 2,
     /// Labels under equal runs of the segments, one a run ("<20", "<40",
     /// "80+"), the runs `zone_gap` apart: a scale in bands.
     zones: []const []const u8 = &.{},
@@ -58,21 +65,29 @@ pub const Options = struct {
 /// lights none.
 pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     const k = opts.scale;
-    const v = if (std.math.isNan(value)) 0 else std.math.clamp(value, 0, 1);
+    // Its place between `min` and `max`; none for one that isn't a number.
+    const v = chart.level(value, opts.min, opts.max) orelse 0;
     const lit = opts.color orelse kit.tokens(c).primary;
     const off = opts.track orelse chart.track(c);
     const n: f32 = @floatFromInt(opts.segments);
-    const strip = opts.gap == 0 and opts.radius > 0;
+    const strip = opts.gap == 0 and (opts.radius orelse 1) > 0;
     const zones = @min(opts.zones.len, opts.segments);
     const outer = if (zones > 0) ui.div(c).column().gap(3 * k) else null;
     if (outer) |o| c.node(o.index).style.width = chart.scaled(opts.width, k);
     // Without gaps, the segments overlap by a point: edges that fall
     // between pixels would otherwise show the background through.
-    var r = ui.div(c).row().h(opts.height * k).gap(if (zones > 0) opts.zone_gap * k else if (opts.gap > 0) opts.gap * k else -1);
+    var r = ui.div(c).row().gap(if (zones > 0) opts.zone_gap * k else if (opts.gap > 0) opts.gap * k else -1);
     c.node(r.index).style.width = if (zones > 0) .fill else chart.scaled(opts.width, k);
+    c.node(r.index).style.height = chart.scaled(opts.height, k);
+    const h = chart.linesHeight(c, opts.height, k, r.index);
+    const radius = if (opts.radius) |rad| rad * k else h / 2;
     // A strip rounded at its ends only: the segments square, cut by it.
-    if (strip) r = r.rounded(opts.radius * k).clip();
-    chart.describe(c, r.index, opts.label, if (opts.value_text.len > 0) opts.value_text else c.print("{d}%", .{@round(v * 100)}), false);
+    if (strip) r = r.rounded(radius).clip();
+    // A value that isn't a number says nothing, as a gauge's; one without
+    // a label isn't said at all.
+    const known = std.math.isFinite(value);
+    const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
+    chart.describe(c, r.index, opts.label, said, false, "");
     const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
     var run: ?ui.Div = null;
     var zone: usize = 0;
@@ -81,10 +96,12 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
         if (zones > 0 and (run == null or i * zones / opts.segments != zone)) {
             if (run) |x| x.end();
             zone = i * zones / opts.segments;
-            run = ui.div(c).row().w(0).grow().hFull().gap(if (opts.gap > 0) opts.gap * k else -1);
+            // As wide as its share of the segments, so they are one width
+            // whatever the zones.
+            run = chart.weighted(ui.div(c).row().w(0).hFull().gap(if (opts.gap > 0) opts.gap * k else -1), @floatFromInt(zoneSize(zone, zones, opts.segments)));
         }
         const at = (@as(f32, @floatFromInt(i)) + 0.5) / n;
-        var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else opts.radius * k);
+        var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else radius);
         if (at <= shown + 1e-6) {
             const col = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, at) else lit;
             seg = seg.bg(col);
@@ -100,11 +117,19 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     defer labels.end();
     ui.access.hide(c, labels.index);
     const t = kit.tokens(c);
-    for (opts.zones[0..zones]) |label| {
-        const cell = ui.div(c).w(0).grow().row().justifyCenter();
+    for (opts.zones[0..zones], 0..) |label, z| {
+        const cell = chart.weighted(ui.div(c).w(0).row().justifyCenter(), @floatFromInt(zoneSize(z, zones, opts.segments)));
         defer cell.end();
-        ui.text(c, label, .{ .size = 9.5, .mono = true, .color = t.muted });
+        ui.text(c, label, .{ .size = chart.axis_text_size, .mono = true, .color = t.muted });
     }
+}
+
+/// How many of `segments` fall in zone `z` of `zones`, as `meter` deals
+/// them out.
+fn zoneSize(z: usize, zones: usize, segments: usize) usize {
+    var n: usize = 0;
+    for (0..segments) |i| n += @intFromBool(i * zones / segments == z);
+    return n;
 }
 
 const Color = ui.Color;
@@ -215,4 +240,8 @@ test "a meter with a label reads as its value, a percentage unless given" {
     try std.testing.expectEqualStrings("CPU load", list.items[0].label);
     try std.testing.expectEqualStrings("62%", list.items[0].value);
     try std.testing.expectEqualStrings("Fair", list.items[1].value);
+}
+
+test {
+    _ = @import("meter_tests.zig");
 }

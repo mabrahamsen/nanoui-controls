@@ -14,6 +14,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 const breakdown_mod = @import("breakdown.zig");
 const meter_mod = @import("meter.zig");
 const chart = @import("chart.zig");
@@ -28,6 +29,10 @@ pub const Item = struct {
     value_text: []const u8 = "",
     /// Its bar's color; null takes the list's, or its ramp's.
     color: ?ui.Color = null,
+    /// What the row is known by, as it moves when the list re-sorts: its
+    /// keyboard focus and its bar's easing follow it. Empty keys it by
+    /// its place.
+    key: []const u8 = "",
     /// A symbol before the label, in a slot of its own, so labels line up
     /// whatever the icons.
     icon: ?[]const u8 = null,
@@ -51,18 +56,22 @@ pub const Style = enum {
 };
 
 pub const Options = struct {
-    /// The value of a full bar; null takes the largest item's.
+    /// The value of a full bar, rising to the largest item's unless
+    /// `fixed_max`; null takes the largest item's, as every chart with a
+    /// scale does.
     max: ?f32 = null,
+    /// A full bar stays at `max`, and larger items are drawn full.
+    fixed_max: bool = false,
     /// The value of an empty bar: a temperature from 20 to 110 fills the
     /// bar from its start.
     min: f32 = 0,
-    /// The labels' column, wide enough for most labels; longer ones are
-    /// cut short with an ellipsis.
+    /// The labels' column, in points before `scale`, wide enough for most
+    /// labels; longer ones are cut short with an ellipsis.
     label_width: f32 = 120,
-    /// The figures' column, at the end.
+    /// The figures' column, at the end, in points before `scale`.
     value_width: f32 = 64,
-    bar_height: f32 = 6,
-    /// Between the rows.
+    bar_height: ui.Length = .{ .px = 6 },
+    /// Between the rows, in points before `scale`.
     gap: f32 = 2,
     /// The text's size, as the kit's.
     size: kit.Size = .sm,
@@ -75,13 +84,14 @@ pub const Options = struct {
     track: ?ui.Color = null,
     /// The opacity of a glow around each bar, in its color; 0 draws none.
     glow: f32 = 0,
-    /// The bars' corners; null rounds their ends.
+    /// The bars' corners, in points before `scale`; null rounds their
+    /// ends.
     bar_radius: ?f32 = null,
     style: Style = .bar,
     /// With `.meter`, how many segments a row's meter has.
     segments: usize = 12,
-    /// The details' column, at the end; nothing is kept for it when no row
-    /// has a detail.
+    /// The details' column, at the end, in points before `scale`; nothing
+    /// is kept for it when no row has a detail.
     detail_width: f32 = 56,
     /// Rows light up under the pointer and can be clicked, or reached
     /// with Tab and clicked with Enter.
@@ -90,11 +100,13 @@ pub const Options = struct {
     scale: f32 = 1,
 };
 
-/// Where `v` falls between `min` and `max`, from 0 to 1; 0 for a value
-/// that is not a number, or a scale with no room.
-fn level(v: f32, min: f32, max: f32) f32 {
-    if (!std.math.isFinite(v) or !(max > min)) return 0;
-    return std.math.clamp((v - min) / (max - min), 0, 1);
+/// Half a bar's height, for its rounded ends; a bar that fills rounds as
+/// much as it can.
+fn barHalf(h: ui.Length) f32 {
+    return switch (h) {
+        .px => |v| v / 2,
+        else => 999,
+    };
 }
 
 /// Draws a row for each of `items`, and returns the one clicked this
@@ -102,12 +114,11 @@ fn level(v: f32, min: f32, max: f32) f32 {
 pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     const t = kit.tokens(c);
     const k = opts.scale;
-    var max: f32 = 0;
-    if (opts.max) |m| {
-        max = m;
-    } else for (items) |it| {
-        if (std.math.isFinite(it.value)) max = @max(max, it.value);
-    }
+    var largest: f32 = -std.math.inf(f32);
+    for (items) |it| if (std.math.isFinite(it.value)) {
+        largest = @max(largest, it.value);
+    };
+    const max = chart.scaleTop(opts.min, opts.max, opts.fixed_max, largest);
     const col = ui.div(c).column().wFull().gap(opts.gap * k);
     defer col.end();
     var clicked: ?usize = null;
@@ -121,7 +132,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
         details = details or it.detail.len > 0;
     }
     for (items, 0..) |it, i| {
-        ui.keyInt(c, i);
+        if (it.key.len > 0) ui.key(c, it.key) else ui.keyInt(c, i);
         var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(6 * k).py(@round(text * 0.35) * k).rounded(@max(0, t.radius - 2));
         if (opts.clickable) {
             // Each row takes the keyboard, as a button does: Tab moves
@@ -131,8 +142,18 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 row = row.bg(t.surface_hover);
                 c.cursor_hand = true;
             }
-            if (in.focused) row = row.border(t.primary.alpha(0.6));
-            if (in.clicked or (in.focused and c.input.key == .enter)) clicked = i;
+            if (in.focused) row = row.border(focus.ring(c));
+            // Enter or Space clicks the row that has the keyboard, and is
+            // the list's: nothing after it sees it.
+            const pressed = in.focused and (c.input.key == .enter or c.shortcut(.{ .key = ' ' }) or std.mem.eql(u8, c.input.chars, " "));
+            if (pressed) {
+                c.input.key = null;
+                c.input.chars = "";
+            }
+            if (in.clicked or pressed) {
+                clicked = i;
+                c.changed = true;
+            }
         }
         defer row.end();
         if (icons) {
@@ -140,7 +161,8 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             defer slot.end();
             if (it.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = t.muted });
         }
-        const share = level(it.value, opts.min, max);
+        // A value that is not a number draws no bar.
+        const share = chart.level(it.value, opts.min, max) orelse 0;
         const bar_color = it.color orelse if (opts.ramp.len > 0) chart.rampColor(opts.ramp, share) else opts.color orelse t.primary;
         {
             const l = ui.div(c).w(opts.label_width * k).row().itemsCenter().gap(@round(text * 0.4) * k);
@@ -157,7 +179,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             .bar => breakdown_mod.breakdown(c, &.{.{ .value = share, .color = bar_color }}, .{
                 .height = opts.bar_height,
                 .radius = opts.bar_radius,
-                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse opts.bar_height / 2) else 0,
+                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse barHalf(opts.bar_height)) else 0,
                 .glow = opts.glow,
                 .track = opts.track,
                 .scale = k,
@@ -169,7 +191,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 .ramp = if (it.color == null) opts.ramp else &.{},
                 .glow = opts.glow,
                 .track = opts.track,
-                .radius = opts.bar_radius orelse 2,
+                .radius = opts.bar_radius,
                 .scale = k,
             }),
         }
@@ -191,6 +213,9 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
 
 const Folders = struct {
     clicked: ?usize = null,
+    /// Keys left for the app after the list, and frames marked changed.
+    leaked: usize = 0,
+    changed: usize = 0,
     const items = [_]Item{
         .{ .label = "Photos", .value = 40, .value_text = "40 GB" },
         .{ .label = "Music", .value = 10, .value_text = "10 GB" },
@@ -200,6 +225,8 @@ const Folders = struct {
         const root = ui.div(c).column().w(400);
         defer root.end();
         if (barList(c, &items, .{ .clickable = true })) |i| f.clicked = i;
+        if (c.input.key != null) f.leaked += 1;
+        if (c.changed) f.changed += 1;
     }
 };
 
@@ -264,6 +291,18 @@ test "a clickable bar list's rows take the keyboard, and Enter clicks one" {
     t.ctx.focusCycle(false);
     t.settle(1);
     try std.testing.expectEqual(@as(?usize, null), f.clicked);
+    const changed = f.changed;
     t.key(.enter);
     try std.testing.expectEqual(@as(?usize, 1), f.clicked);
+    // Enter is the list's, and a click is a change.
+    try std.testing.expectEqual(@as(usize, 0), f.leaked);
+    try std.testing.expect(f.changed > changed);
+    // Space clicks too.
+    f.clicked = null;
+    try std.testing.expect(t.shortcut(.{ .key = ' ' }));
+    try std.testing.expectEqual(@as(?usize, 1), f.clicked);
+}
+
+test {
+    _ = @import("bar_list_tests.zig");
 }

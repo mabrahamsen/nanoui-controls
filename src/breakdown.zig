@@ -13,8 +13,9 @@ const chart = @import("chart.zig");
 pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
-    height: f32 = 6,
-    /// The bar's corner radius; null rounds its ends.
+    height: ui.Length = .{ .px = 6 },
+    /// The bar's corner radius, in points before `scale`; null rounds its
+    /// ends.
     radius: ?f32 = null,
     /// Between the parts; null keeps a hairline of one point at any scale,
     /// and 0 none.
@@ -25,7 +26,8 @@ pub const Options = struct {
     /// none of the bar is left. Otherwise each is `value` of the bar (0 to
     /// 1), and what they leave stays empty.
     whole: bool = false,
-    /// Each part's corner radius, for a level's rounded end.
+    /// Each part's corner radius, for a level's rounded end, in points
+    /// before `scale`.
     part_radius: f32 = 0,
     /// The opacity of a glow around each part, in its color; 0 draws none.
     /// A glowing bar doesn't clip its parts, so the glow shows around it:
@@ -44,26 +46,23 @@ pub const Options = struct {
 /// fit, each keeping its share.
 pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     const k = opts.scale;
-    const h = opts.height * k;
-    var r = ui.div(c).row().h(h).rounded(if (opts.radius) |rad| rad * k else h / 2).bg(opts.track orelse chart.track(c));
+    var r = ui.div(c).row().bg(opts.track orelse chart.track(c));
     c.node(r.index).style.width = chart.scaled(opts.width, k);
+    c.node(r.index).style.height = chart.scaled(opts.height, k);
+    // Its ends round at half its height, as laid out for one that fills.
+    const h = chart.linesHeight(c, opts.height, k, r.index);
+    r = r.rounded(if (opts.radius) |rad| rad * k else h / 2);
     if (opts.glow == 0) r = r.clip();
     // Without gaps, the parts overlap by a point, as a meter's segments.
     r = r.gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);
-    chart.describe(c, r.index, opts.label, opts.value_text, false);
+    chart.describe(c, r.index, opts.label, opts.value_text, false, "");
     defer r.end();
     // Every part eases first, while the keys they ease under are the same
     // each frame: the boxes after skip parts that are nothing.
-    var eased: [max_eased]f32 = undefined;
-    var used: f32 = 0;
+    var eased: [chart.max_eased]f32 = undefined;
+    const used = chart.easeParts(c, parts, &eased);
     for (parts, 0..) |p, i| {
-        const v = chart.partShare(p.value);
-        const e = if (i < max_eased) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
-        if (i < max_eased) eased[i] = e;
-        used += e;
-    }
-    for (parts, 0..) |p, i| {
-        const v = if (i < max_eased) eased[i] else chart.partShare(p.value);
+        const v = chart.eased(parts, &eased, i);
         if (!(v > 0)) continue;
         var d = ui.div(c).hFull();
         if (opts.part_radius > 0) d = d.rounded(opts.part_radius * k);
@@ -73,9 +72,6 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     }
     if (!opts.whole and used < 1) chart.weighted(ui.div(c).hFull(), 1 - used).end();
 }
-
-/// How many parts ease to new values; any after them move at once.
-const max_eased = 32;
 
 const Color = ui.Color;
 const cyan: Color = .hex(0x22d3ee);

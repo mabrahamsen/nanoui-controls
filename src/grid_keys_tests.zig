@@ -11,7 +11,9 @@ const type_pause = @import("grid_keys.zig").type_pause;
 /// text begins, as an app would, under a search field.
 const Names = struct {
     selected: ?usize = null,
+    /// The text typed, copied: `g.typed` lasts only for its frame.
     typed: ?[]const u8 = null,
+    typed_buf: [32]u8 = undefined,
     field: bool = false,
     search: ui.TextBuffer = .{},
     first: usize = 0,
@@ -36,7 +38,8 @@ const Names = struct {
         n.started = true;
         var g = grid(c, &columns, .{ .count = count, .selected = &n.selected });
         if (g.typed) |text| {
-            n.typed = text;
+            @memcpy(n.typed_buf[0..text.len], text);
+            n.typed = n.typed_buf[0..text.len];
             for (0..count) |i| if (std.ascii.startsWithIgnoreCase(name(c, i), text)) {
                 g.jump(i);
                 break;

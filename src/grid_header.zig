@@ -116,11 +116,16 @@ fn title(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, i: u
         c.changed = true;
     };
     const on = if (sort) |s| s.column == i else false;
-    if (sort) |s| ui.access.describe(c, box.index, .{
-        .label = col.title,
-        .value = if (!on) "" else if (s.descending) "sorted descending" else "sorted ascending",
-        .hint = "Sorts the rows by this column",
-    });
+    // A column header to a screen reader: one that sorts says which way,
+    // and what a click does.
+    if (sort) |s| {
+        ui.access.describe(c, box.index, .{
+            .label = col.title,
+            .value = if (!on) "" else if (s.descending) opts.descending_text else opts.ascending_text,
+            .hint = opts.sort_hint_text,
+            .header = true,
+        });
+    } else ui.access.describe(c, box.index, .{ .role = .static_text, .label = col.title, .header = true });
     const ts = opts.title_style;
     const muted = ts.color orelse t.muted;
     const fg = if (on) ts.sorted_color orelse t.foreground else if (sort != null and it.hovered) muted.mix(t.foreground, 0.5) else muted;

@@ -25,6 +25,13 @@ pub fn gutter(opts: Options) f32 {
 /// Panics on options that don't match the columns or the rows, and starts
 /// the caller's `widths` at the columns' own.
 pub fn check(columns: []const Column, opts: Options) void {
+    if (!(opts.scale > 0)) @panic("grid: `scale` needs to be more than 0");
+    if (!(rowHeight(opts) > 0)) @panic("grid: `row_height` needs to be more than 0");
+    if (opts.groups) |gs| {
+        if (gs.count() != opts.count) @panic("grid: `count` needs to be `groups.count()`");
+        // Folding changes the rows in view, which `selection`'s flags are.
+        if (opts.selection != null) @panic("grid: `selection` doesn't go with `groups`; use `selected`");
+    }
     if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
     if (opts.widths) |w| {
         if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
@@ -58,6 +65,18 @@ pub fn rowHeight(opts: Options) f32 {
 
 /// What each line of a cell past the first adds to a row's height.
 pub const line_room = 16;
+
+/// The room between rows, in points before `scale`: none with lines
+/// between them, which the rows meet, and more between cards.
+pub fn rowGap(opts: Options) f32 {
+    if (opts.rows == .cards) return @max(opts.gap, 6);
+    return if (opts.row_lines) 0 else opts.gap;
+}
+
+/// The rows the grid shows: all of them, or with `max_rows`, that many.
+pub fn rowsShown(opts: Options) usize {
+    return if (opts.max_rows) |n| @min(n, opts.count) else opts.count;
+}
 
 /// The grid's `T` between frames, found by a key of its own in the grid's
 /// box: the same at the start of `grid` and in `end`, wherever the rows

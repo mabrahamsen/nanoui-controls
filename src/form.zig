@@ -19,23 +19,32 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
-const chart = @import("chart.zig");
+const focus = @import("focus.zig");
+const measure = @import("measure.zig");
 const sections = @import("form_sections.zig");
+
+/// Where a form's labels or controls sit in their room: at its start,
+/// or at its end.
+pub const Align = enum { start, end };
 
 pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
     /// controls at it, so selects, inputs and toggles keep one rhythm.
     size: kit.Size = .md,
+    /// What a screen reader says of a row marked `required`, after its
+    /// label, which names its control ("Name, required"): the "*" isn't
+    /// said.
+    required_text: []const u8 = "required",
     /// The labels' column, in points before `scale`; null takes the
     /// widest label's, as the form measured it, up to `max_label_width`.
     label_width: ?f32 = null,
     max_label_width: f32 = 220,
     /// Labels at the start of their column, or at its end, beside what
     /// they name.
-    label_align: enum { start, end } = .start,
+    label_align: Align = .start,
     /// Controls and values after the labels' column, or at the row's end,
     /// as a settings window's cards have them.
-    control_align: enum { start, end } = .start,
+    control_align: Align = .start,
     /// The labels' color; null takes the theme's muted text.
     label_color: ?ui.Color = null,
     /// The gap after the labels, and between rows, in points before
@@ -107,7 +116,7 @@ pub const PropertyOptions = struct {
 pub fn form(c: *ui.Context, opts: Options) Form {
     const box = ui.div(c).column().wFull().gap(opts.row_gap * opts.scale);
     // Its width as the last frame laid it out, only when it matters.
-    const stacked = if (opts.stack_below) |below| if (chart.lastSize(c, box.index)) |s| s.w < below * opts.scale else false else false;
+    const stacked = if (opts.stack_below) |below| if (measure.lastSize(c, box.index)) |s| s.w < below * opts.scale else false else false;
     return .{ .stacked = stacked, .c = c, .opts = opts, .box = box, .measured = state(c).width };
 }
 
@@ -199,20 +208,28 @@ pub const Form = struct {
         const k = f.opts.scale;
         const t = kit.tokens(c);
         f.before(label, false, false);
+        // Keyed by its label, so a row appearing above it doesn't take its
+        // keyboard.
+        ui.key(c, c.print("form-link-{s}", .{label}));
         var r = f.openRow(true);
         defer r.end();
         const it = c.interact(r.index, .{ .focusable = !opts.disabled });
         const live = !opts.disabled;
         if (live and it.hovered) c.cursor_hand = true;
-        if (it.focused) r = r.border(t.primary.alpha(0.6)).rounded(@max(0, t.radius - 2) * k);
+        if (it.focused) r = r.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
         f.drawLabel(label, .{ .disabled = opts.disabled });
         {
             var v = ui.div(c).wFull().row().itemsCenter().justifyEnd().gap(4 * k);
-            if (opts.disabled) v = v.opacity(0.45);
+            if (opts.disabled) v = v.opacity(focus.dimmed);
             defer v.end();
             const col = if (live and it.hovered) t.foreground else t.muted;
-            ui.text(c, value, .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis });
+            const style: ui.TextStyle = .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis };
+            ui.text(c, value, style);
+            // Whole in a tooltip, when the last frame cut it short.
+            var tip = it;
+            tip.hovered = it.hovered and measure.cutOff(c, value, style);
+            kit.tooltip(c, tip, value, .{});
             ui.icon(c, "chevron.right", .{ .size = f.opts.size.text() - 3, .color = col });
         }
         return live and (it.clicked or sections.activated(c, it.focused));
@@ -304,12 +321,15 @@ pub const Form = struct {
         var col = ui.div(c).row().itemsCenter().gap(2 * k).clip().pt(l.top);
         col = if (f.stacked) col.wFull() else col.w(f.columnWidth());
         if (f.opts.label_align == .end and !f.stacked) col = col.justifyEnd();
-        if (l.disabled) col = col.opacity(0.45);
+        if (l.disabled) col = col.opacity(focus.dimmed);
         defer col.end();
         // One element, so the mark isn't what names the control.
         if (l.names) {
             if (text.len > 0) {
-                ui.access.describe(c, col.index, .{ .role = .static_text, .label = text, .hint = l.info, .enabled = !l.disabled });
+                // The label names the control, which takes only the label's
+                // text: "Name, required".
+                const said = if (l.required) c.print("{s}, {s}", .{ text, f.opts.required_text }) else text;
+                ui.access.describe(c, col.index, .{ .role = .static_text, .label = said, .hint = l.info, .enabled = !l.disabled });
             } else ui.access.hide(c, col.index);
         }
         // A label too long for the column ends in "…".
@@ -381,7 +401,7 @@ pub const Row = struct {
         const t = kit.tokens(r.c);
         var under = ui.div(r.c).row().wFull().pl(r.indent);
         if (r.at_end) under = under.justifyEnd();
-        if (r.opts.disabled) under = under.opacity(0.45);
+        if (r.opts.disabled) under = under.opacity(focus.dimmed);
         defer under.end();
         endText(r.c, msg, .{ .size = r.size.text() - 1, .color = if (r.opts.err.len > 0) t.danger else t.muted, .wrap = true }, r.at_end, under.index, r.indent);
     }

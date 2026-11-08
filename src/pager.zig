@@ -18,6 +18,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 
 pub const Options = struct {
     /// How many pages either side of the current one are numbered, besides
@@ -25,6 +26,11 @@ pub const Options = struct {
     around: usize = 1,
     /// The buttons' size, as the kit's.
     size: kit.Size = .sm,
+    /// What a screen reader calls the arrows, and a page's number after
+    /// `page_text` ("Page 3").
+    previous_text: []const u8 = "Previous page",
+    next_text: []const u8 = "Next page",
+    page_text: []const u8 = "Page",
 };
 
 /// Draws the pager for `pages` pages, the current one `page.*`, and
@@ -39,22 +45,27 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     if (page.* >= pages) page.* = pages - 1;
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
     const it = c.interact(box.index, .{ .focusable = true });
-    if (it.focused) c.node(box.index).style.border = t.primary.alpha(0.6);
+    if (it.focused) c.node(box.index).style.border = focus.ring(c);
     {
         defer box.end();
         if (it.focused) keys(c, page, pages);
         const w = slotWidth(c, pages, opts.size);
-        if (button(c, "chevron.left", "", "Previous page", false, page.* == 0, null, opts)) page.* -= 1;
+        if (button(c, "chevron.left", "", opts.previous_text, false, page.* == 0, null, opts)) page.* -= 1;
         const current = page.*;
         for (0..slots(pages, opts.around)) |k| {
             const i = slot(k, current, pages, opts.around) orelse {
                 gap(c, k, w, opts);
                 continue;
             };
-            if (button(c, "", c.print("{d}", .{i + 1}), c.print("Page {d}", .{i + 1}), i == current, false, w, opts)) page.* = i;
+            if (button(c, "", c.print("{d}", .{i + 1}), c.print("{s} {d}", .{ opts.page_text, i + 1 }), i == current, false, w, opts)) page.* = i;
         }
-        if (button(c, "chevron.right", "", "Next page", false, page.* + 1 >= pages, null, opts)) page.* += 1;
+        if (button(c, "chevron.right", "", opts.next_text, false, page.* + 1 >= pages, null, opts)) page.* += 1;
     }
+    // A press on its buttons, which leaves nothing with the keyboard,
+    // gives the keyboard to the pager, as the grid's rows do.
+    if (c.input.pressed and c.focus == 0) if (it.rect) |r| if (r.contains(c.input.mouse)) {
+        c.focus = it.id;
+    };
     if (page.* != before) c.changed = true;
     return page.* != before;
 }
@@ -98,19 +109,23 @@ fn slotWidth(c: *ui.Context, pages: usize, size: kit.Size) f32 {
     return @max(size.height(), @ceil(digits * digit + 2 * size.text() * 0.6));
 }
 
-/// Left and Right move a page, Home and End to the ends.
+/// Left and Right move a page, Home and End to the ends: keys it takes,
+/// so nothing else acts on them.
 fn keys(c: *ui.Context, page: *usize, pages: usize) void {
     if (c.shortcut(.{ .key = ui.Shortcut.left })) {
         page.* -|= 1;
     } else if (c.shortcut(.{ .key = ui.Shortcut.right })) {
         page.* = @min(page.* + 1, pages - 1);
-    } else if (c.input.key) |key| switch (key) {
-        .left => page.* -|= 1,
-        .right => page.* = @min(page.* + 1, pages - 1),
-        .home => page.* = 0,
-        .end => page.* = pages - 1,
-        else => {},
-    };
+    } else if (c.input.key) |key| {
+        switch (key) {
+            .left => page.* -|= 1,
+            .right => page.* = @min(page.* + 1, pages - 1),
+            .home => page.* = 0,
+            .end => page.* = pages - 1,
+            else => return,
+        }
+        c.input.key = null;
+    }
 }
 
 /// One of the pager's buttons, a kit button: an arrow (`icon`) or a
@@ -146,12 +161,35 @@ const Pages = struct {
     page: usize = 0,
     pages: usize = 20,
     changed: usize = 0,
+    /// Keys left for the app after the pager, as an app's own Enter or
+    /// arrows would see them.
+    leaked: usize = 0,
     fn view(p: *Pages, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull().p(10);
         defer root.end();
         if (pager(c, &p.page, p.pages, .{})) p.changed += 1;
+        if (c.input.key != null) p.leaked += 1;
     }
 };
+
+test "a click on a pager's page gives it the keyboard, and the keys it takes are its own" {
+    var p: Pages = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Pages.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try t.clickText("3");
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 2), p.page);
+    t.key(.right);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 3), p.page);
+    t.key(.end);
+    t.key(.home);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), p.page);
+    try std.testing.expectEqual(@as(usize, 0), p.leaked);
+}
 
 test "a pager numbers the ends and the pages around the current one" {
     var p: Pages = .{ .page = 9 };
@@ -251,6 +289,26 @@ test "a pager with the keyboard moves with Left, Right, Home and End" {
     try std.testing.expectEqual(@as(usize, 0), p.page);
     t.key(.left);
     try std.testing.expectEqual(@as(usize, 0), p.page);
+}
+
+test "a pager's buttons are named in the caller's words" {
+    const T = struct {
+        page: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            _ = pager(c, &x.page, 5, .{ .previous_text = "Précédente", .next_text = "Suivante", .page_text = "Page n°" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try clickLabel(&t, "Suivante");
+    try std.testing.expectEqual(@as(usize, 1), x.page);
+    try clickLabel(&t, "Page n° 4");
+    try std.testing.expectEqual(@as(usize, 3), x.page);
+    try clickLabel(&t, "Précédente");
+    try std.testing.expectEqual(@as(usize, 2), x.page);
 }
 
 test "a screen reader hears the pager's buttons, the current page selected" {

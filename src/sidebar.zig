@@ -31,6 +31,8 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const motion = ui.motion;
 const focus = @import("focus.zig");
+const measure = @import("measure.zig");
+const keys_mod = @import("sidebar_keys.zig");
 
 pub const Options = struct {
     /// The rows' height and text, as the kit's controls at this size.
@@ -48,7 +50,7 @@ pub const Options = struct {
     /// that folds it, and counts dots; a branch's rows aren't indented,
     /// and only the keys fold it.
     icons_only: bool = false,
-    /// Between the rows.
+    /// Between the rows, in points before `scale`.
     gap: f32 = 2,
     /// What a screen reader says of a group's heading or a branch while
     /// its rows show, and while they are folded away.
@@ -88,6 +90,10 @@ const Kept = struct {
     /// What the keys are on (`entryHash`); 0 while they follow the
     /// selection.
     cursor: u64 = 0,
+    /// The keys have nothing to start from (nothing selected, or it is
+    /// folded away): the first row shows the ring, and the first key goes
+    /// to it.
+    start: bool = false,
 };
 
 /// What a branch keeps between frames: the selected row it last showed
@@ -101,6 +107,8 @@ const Held = struct {
 const Entry = struct {
     hash: u64,
     key: []const u8,
+    /// What it reads, for typing to move to it.
+    label: []const u8,
     /// A branch or a group's heading, open or not; null for a row or a
     /// fixed branch.
     open: ?*bool = null,
@@ -132,6 +140,16 @@ fn held(c: *ui.Context) *Held {
     return c.state(Held, "held");
 }
 
+/// Whether the sidebar had rows the last frame, found by a key of its own
+/// in its outer box. Use it at once, as `state`'s.
+fn hadRows(c: *ui.Context) *HadRows {
+    ui.key(c, "sidebar-rows");
+    defer c.next_key = null;
+    return c.state(HadRows, "sidebar-rows");
+}
+
+const HadRows = struct { rows: bool = true };
+
 fn entryHash(heading: bool, key: []const u8) u64 {
     return std.hash.Wyhash.hash(@intFromBool(heading), key);
 }
@@ -145,11 +163,15 @@ pub fn sidebar(c: *ui.Context, id: []const u8, selected: ?[]const u8, opts: Opti
     // Unkeyed, so `c.focusNext` just before names it.
     const outer = ui.div(c).column().wFull().grow().scrollY();
     c.node(outer.index).style.min_height = 0;
-    const own = focus.take(c, outer);
+    // One that had no rows the last frame doesn't take Tab.
+    const own = focus.takeIf(c, outer, hadRows(c).rows);
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
     var kept = state(c).*;
-    if (!own.focused) kept.cursor = 0;
+    if (!own.focused) {
+        kept.cursor = 0;
+        kept.start = false;
+    }
     var sb: Sidebar = .{
         .focused = own.focused,
         .c = c,
@@ -271,7 +293,7 @@ pub const Sidebar = struct {
         const hash = entryHash(false, key);
         // A disabled branch is still reached by the keys, to fold it.
         const reached = !opts.disabled or open != null;
-        const at_cursor = sb.focused and reached and sb.cursorIs(hash, on);
+        const at_cursor = sb.focused and reached and (sb.cursorIs(hash, on) or sb.isStart());
         const tint = sb.opts.color orelse t.primary;
         const pad = @round(text * @as(f32, if (narrow) 0.3 else 0.8)) * k;
         var row_box = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(pad).pl(if (narrow) pad else sb.inset()).h(size.height() * k).rounded(radius(c, k));
@@ -284,8 +306,10 @@ pub const Sidebar = struct {
         } else if (it.hovered) c.cursor_hand = true;
         var at: ?usize = null;
         if (!sb.folding and reached) {
-            sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index }) catch {};
-            at = sb.entries.items.len - 1;
+            // A row that can't be added is left out for the keys.
+            if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .label = label, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index })) |_| {
+                at = sb.entries.items.len - 1;
+            } else |_| {}
         }
         // A wash eases in under the pointer, and on the row the keys are on
         // when they don't choose as they move.
@@ -296,8 +320,8 @@ pub const Sidebar = struct {
             const base = sb.opts.background orelse t.foreground.alpha(0);
             row_box = row_box.bg(base.mix(t.foreground.alpha(0.07), wash));
         } else if (sb.opts.background) |bg| row_box = row_box.bg(bg);
-        if (at_cursor) row_box = row_box.border(tint.alpha(0.45));
-        if (opts.disabled) c.node(row_box.index).style.opacity = 0.45;
+        if (at_cursor) row_box = row_box.border(focus.ringIn(tint));
+        if (opts.disabled) c.node(row_box.index).style.opacity = focus.dimmed;
         defer row_box.end();
         if (holds) sb.seen = true;
         const pill = opts.count_style == .pill;
@@ -315,12 +339,17 @@ pub const Sidebar = struct {
         if (narrow) {
             kit.tooltip(c, it, label, .{ .placement = .right });
         } else {
-            ui.text(c, label, .{
+            const style: ui.TextStyle = .{
                 .size = text,
                 .weight = if (on) .semibold else .regular,
                 .color = if (on) t.foreground else if (holds) tint else t.foreground.alpha(0.85).mix(t.foreground, wash),
                 .truncate = .ellipsis,
-            });
+            };
+            ui.text(c, label, style);
+            // Whole in a tooltip, when the last frame cut it short.
+            var tip = it;
+            tip.hovered = it.hovered and measure.cutOff(c, label, style);
+            kit.tooltip(c, tip, label, .{ .placement = .right });
             ui.spacer(c);
             if (opts.count) |n| if (pill) {
                 const p = ui.div(c).h(@round(text * 1.25) * k).px(@round(text * 0.45) * k).roundedFull().bg(count_col).center();
@@ -406,7 +435,7 @@ pub const Sidebar = struct {
         const t = kit.tokens(c);
         const text = sb.opts.size.text();
         const hash = entryHash(true, key);
-        const at_cursor = sb.focused and sb.cursorIs(hash, false);
+        const at_cursor = sb.focused and (sb.cursorIs(hash, false) or sb.isStart());
         ui.key(c, key);
         const wrap = ui.div(c).column().wFull().gap(sb.opts.gap * k);
         var at: ?usize = null;
@@ -415,7 +444,7 @@ pub const Sidebar = struct {
             defer head.end();
             const it = head.interaction();
             if (it.hovered) c.cursor_hand = true;
-            if (at_cursor) _ = head.border((sb.opts.color orelse t.primary).alpha(0.45));
+            if (at_cursor) _ = head.border(focus.ringIn(sb.opts.color orelse t.primary));
             if (it.clicked) {
                 open.* = !open.*;
                 c.changed = true;
@@ -423,8 +452,9 @@ pub const Sidebar = struct {
                 sb.kept.cursor = hash;
             }
             if (!sb.folding) {
-                sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = false, .parent = sb.parent, .index = head.index }) catch {};
-                at = sb.entries.items.len - 1;
+                if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .label = title, .open = open, .choosable = false, .parent = sb.parent, .index = head.index })) |_| {
+                    at = sb.entries.items.len - 1;
+                } else |_| {}
             }
             const col = if (it.hovered) t.foreground else t.muted;
             // Narrowed, the chevron alone, centered, its title in a tooltip.
@@ -436,7 +466,7 @@ pub const Sidebar = struct {
                 ui.spacer(c);
             }
             ui.icon(c, if (open.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = col });
-            ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text });
+            ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text, .header = true });
         }
         return sb.fold(wrap, open.*, at, false);
     }
@@ -471,11 +501,21 @@ pub const Sidebar = struct {
     pub fn end(sb: *Sidebar) ?[]const u8 {
         // A selected row folded away, or gone: no marker until it shows.
         if (!sb.found) sb.kept.known = false;
-        if (sb.focused) sb.keys();
+        if (sb.focused) keys_mod.keys(sb);
         state(sb.c).* = sb.kept;
         sb.inner.end();
+        const rows = sb.entries.items.len > 0;
+        const had = hadRows(sb.c);
+        if (had.rows != rows) sb.c.changed = true;
+        had.rows = rows;
         sb.outer.end();
         return sb.chosen;
+    }
+
+    /// Whether the keys have nothing to start from and the entry about to
+    /// be added is the first: it shows the ring.
+    fn isStart(sb: *const Sidebar) bool {
+        return sb.kept.start and !sb.folding and sb.entries.items.len == 0;
     }
 
     /// Whether the keys are on `hash`: the entry they moved to, or, while
@@ -485,92 +525,13 @@ pub const Sidebar = struct {
         return on;
     }
 
-    fn choose(sb: *Sidebar, key: []const u8) void {
+    pub fn choose(sb: *Sidebar, key: []const u8) void {
         sb.chosen = key;
         sb.c.changed = true;
     }
 
-    /// The keys, while the sidebar has the keyboard: on the rows, branches
-    /// and headings drawn this frame.
-    fn keys(sb: *Sidebar) void {
-        const c = sb.c;
-        const list = sb.entries.items;
-        if (list.len == 0) return;
-        // Where the keys are: the entry they moved to, else the selected
-        // row, else the first.
-        var at: usize = 0;
-        for (list, 0..) |e, i| {
-            if (sb.kept.cursor != 0 and e.hash == sb.kept.cursor) {
-                at = i;
-                break;
-            }
-            if (sb.kept.cursor == 0 and e.choosable and sb.selected != null and std.mem.eql(u8, e.key, sb.selected.?)) at = i;
-        }
-        const e = list[at];
-        var to: ?usize = null;
-        var enter = false;
-        if (c.shortcut(.{ .key = ui.Shortcut.down })) {
-            to = @min(at + 1, list.len - 1);
-        } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
-            to = at -| 1;
-        } else if (c.shortcut(.{ .key = ' ' })) {
-            enter = true;
-        } else if (c.input.key) |key| switch (key) {
-            .down => to = @min(at + 1, list.len - 1),
-            .up => to = at -| 1,
-            .home => to = 0,
-            .end => to = list.len - 1,
-            .enter => enter = true,
-            // Left folds what is open, else goes to what the entry is
-            // in; Right opens what is folded, else goes to its first row,
-            // as on a fixed branch.
-            .left => if (e.open != null and e.open.?.*) {
-                e.open.?.* = false;
-                c.changed = true;
-            } else if (e.parent) |p| {
-                to = p;
-            },
-            .right => if (e.open != null and !e.open.?.*) {
-                e.open.?.* = true;
-                c.changed = true;
-            } else if (at + 1 < list.len and list[at + 1].parent == at) {
-                to = at + 1;
-            },
-            else => {},
-        };
-        if (enter) {
-            if (e.choosable) {
-                if (!sb.isSelected(e.key)) sb.choose(e.key);
-            } else if (e.open) |o| {
-                o.* = !o.*;
-                c.changed = true;
-            }
-            sb.kept.cursor = e.hash;
-        }
-        const i = to orelse return;
-        const next = list[i];
-        sb.kept.cursor = next.hash;
-        c.changed = true;
-        if (next.choosable and !sb.opts.choose_on_enter and !sb.isSelected(next.key)) sb.choose(next.key);
-        sb.reveal(next.index);
-    }
-
-    fn isSelected(sb: *const Sidebar, key: []const u8) bool {
+    pub fn isSelected(sb: *const Sidebar, key: []const u8) bool {
         return if (sb.selected) |s| std.mem.eql(u8, s, key) else false;
-    }
-
-    /// Scrolls the sidebar so box `index`, as last laid out, is in view.
-    fn reveal(sb: *Sidebar, index: u32) void {
-        const c = sb.c;
-        const box_id = c.node(sb.outer.index).id;
-        const view = c.rects.get(box_id) orelse return;
-        const r = c.rects.get(c.node(index).id) orelse return;
-        const offset = c.scroll.get(box_id) orelse 0;
-        if (r.y < view.y) {
-            c.scroll.put(c.gpa, box_id, @max(0, offset - (view.y - r.y))) catch {};
-        } else if (r.y + r.h > view.y + view.h) {
-            c.scroll.put(c.gpa, box_id, offset + (r.y + r.h - view.y - view.h)) catch {};
-        }
     }
 };
 
@@ -591,6 +552,8 @@ pub const Group = struct {
     /// these rows.
     seen: bool,
 
+    /// Ends the group's or branch's rows, and puts back what the sidebar
+    /// had before them.
     pub fn end(g: Group) void {
         const sb = g.sb;
         const shown = !sb.folding;

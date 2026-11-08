@@ -45,7 +45,7 @@ pub fn sketch(c: *ui.Context, columns: []const Column, opts: Options, lay: Layou
     }
     const h = lay_mod.rowHeight(opts) * k;
     const bar_h = 10 * k;
-    const list = ui.div(c).column().wFull().gap(opts.gap * k);
+    const list = ui.div(c).column().wFull().gap(lay_mod.rowGap(opts) * k);
     defer list.end();
     // A decoration: a screen reader hears the label above instead.
     ui.access.hide(c, list.index);

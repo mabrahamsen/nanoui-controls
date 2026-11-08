@@ -13,13 +13,17 @@
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
-const chart = @import("chart.zig");
+const measure = @import("measure.zig");
 
 pub const Options = struct {
     /// Between the cells in a row, and between the rows, in points before
     /// `scale`.
     gap: f32 = 10,
     row_gap: f32 = 10,
+    /// The cells stretch to share each row's width, `cell_width` the
+    /// narrowest they get, for cards that span their pane. A last row of
+    /// fewer cells keeps their width, so the columns line up.
+    fill: bool = false,
     /// Multiplies its lengths, the cells' width among them, for an app
     /// that zooms its layout along with `c.setZoom`, as the grid's does.
     scale: f32 = 1,
@@ -31,11 +35,15 @@ pub fn flow(c: *ui.Context, cell_width: f32, opts: Options) Flow {
     const k = opts.scale;
     const box = ui.div(c).column().wFull().gap(opts.row_gap * k);
     // The width as the last frame laid it out; until then, the window's.
-    const width = if (chart.lastSize(c, box.index)) |s| s.w else c.size.w;
+    const width = if (measure.lastSize(c, box.index)) |s| s.w else c.size.w;
     // A cell and its gap take at least a point, so a row holds a finite
     // number of them.
     const fit = @floor(@max(0, width + opts.gap * k) / @max(1, (cell_width + opts.gap) * k));
-    return .{ .c = c, .box = box, .opts = opts, .cell_width = cell_width, .per_row = @intFromFloat(@max(1, fit)) };
+    const per_row: usize = @intFromFloat(@max(1, fit));
+    const n: f32 = @floatFromInt(per_row);
+    const shared = (width - opts.gap * k * (n - 1)) / n;
+    const cell_px = if (opts.fill) @max(cell_width * k, shared) else cell_width * k;
+    return .{ .c = c, .box = box, .opts = opts, .cell_px = cell_px, .per_row = per_row };
 }
 
 /// An open flow: add its cells, then `end` it.
@@ -49,7 +57,8 @@ pub const Flow = struct {
     c: *ui.Context,
     box: ui.Div,
     opts: Options,
-    cell_width: f32,
+    /// Each cell's width, in points as drawn.
+    cell_px: f32,
     row: ?ui.Div = null,
     /// Cells in the row being filled.
     in_row: usize = 0,
@@ -63,7 +72,7 @@ pub const Flow = struct {
             f.in_row = 0;
         }
         f.in_row += 1;
-        return ui.div(f.c).column().w(f.cell_width * f.opts.scale).clip();
+        return ui.div(f.c).column().w(f.cell_px).clip();
     }
 
     /// Starts the next cell on a new row.
@@ -96,6 +105,31 @@ const Cells = struct {
         f.end();
     }
 };
+
+test "with fill, cells share each row's width, a last short row keeping it" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const box = ui.div(c).column().w(460);
+            defer box.end();
+            var f = flow(c, 120, .{ .gap = 20, .fill = true });
+            for ([_][]const u8{ "one", "two", "three", "four" }) |s| {
+                const cell = f.cell();
+                ui.text(c, s, .{});
+                cell.end();
+            }
+            f.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 900, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Three to a row, stretched from 120 to (460 - 2 * 20) / 3 = 140 wide:
+    // 160 apart with the gap.
+    try std.testing.expectApproxEqAbs(@as(f32, 160), t.findText("two").?.x - t.findText("one").?.x, 0.5);
+    try std.testing.expectApproxEqAbs(t.findText("one").?.x, t.findText("four").?.x, 0.5);
+}
 
 test "cells wrap onto rows of as many as fit the parent, and wrap anew when it changes" {
     var x: Cells = .{};

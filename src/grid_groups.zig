@@ -61,13 +61,31 @@ pub const Groups = struct {
     /// Whether each group is open, kept by the caller: the grid changes
     /// it as the user folds and opens groups.
     open: []bool,
-    /// The rows in view, in order: what each is.
-    items: []const Item,
+    /// The groups that show, in order: where each starts in view. A grid
+    /// of many rows costs what its groups do, not its rows.
+    shown: []const Shown,
+    /// Each group's place in `shown`, or null where it is folded away.
+    place: []const ?usize,
+    rows: usize,
+
+    /// A group that shows: its first row in view, and whether that is its
+    /// row alone (a group of one, without `singles`), or its heading,
+    /// followed by `len - 1` rows while it is open.
+    const Shown = struct {
+        group: usize,
+        start: usize,
+        len: usize,
+        single: bool,
+    };
 
     /// The groups' rows in view, as `open` says, in the frame's arena.
     pub fn init(c: *ui.Context, groups: []const Group, open: []bool, opts: Options) Groups {
         if (open.len != groups.len) @panic("grid groups: `open` needs one flag a group");
-        var items: std.ArrayList(Item) = .empty;
+        const a = c.alloc();
+        var shown: std.ArrayList(Shown) = .empty;
+        const place = a.alloc(?usize, groups.len) catch @panic("grid groups: out of memory");
+        @memset(place, null);
+        var rows: usize = 0;
         // Groups deeper than this are in a folded one, and don't show.
         var folded: ?u8 = null;
         for (groups, 0..) |gr, i| {
@@ -76,28 +94,37 @@ pub const Groups = struct {
                 folded = null;
             }
             const has_groups = i + 1 < groups.len and groups[i + 1].depth > gr.depth;
-            if (!opts.singles and gr.size == 1 and !has_groups) {
-                items.append(c.alloc(), .{ .row = .{ .group = i, .index = 0, .depth = gr.depth } }) catch @panic("grid groups: out of memory");
-                continue;
-            }
-            items.append(c.alloc(), .{ .heading = .{ .group = i, .depth = gr.depth } }) catch @panic("grid groups: out of memory");
-            if (!open[i]) {
-                folded = gr.depth;
-                continue;
-            }
-            for (0..gr.size) |j| items.append(c.alloc(), .{ .row = .{ .group = i, .index = j, .depth = gr.depth + 1 } }) catch @panic("grid groups: out of memory");
+            const single = !opts.singles and gr.size == 1 and !has_groups;
+            const len: usize = if (single) 1 else if (open[i]) 1 + gr.size else 1;
+            if (!single and !open[i]) folded = gr.depth;
+            place[i] = shown.items.len;
+            shown.append(a, .{ .group = i, .start = rows, .len = len, .single = single }) catch @panic("grid groups: out of memory");
+            rows += len;
         }
-        return .{ .groups = groups, .open = open, .items = items.items };
+        return .{ .groups = groups, .open = open, .shown = shown.items, .place = place, .rows = rows };
     }
 
     /// How many rows show: the grid's `count`.
     pub fn count(gs: Groups) usize {
-        return gs.items.len;
+        return gs.rows;
     }
 
-    /// What row `i` in view is.
+    /// What row `i` in view is: found by its group, among those that show.
     pub fn at(gs: Groups, i: usize) Item {
-        return gs.items[i];
+        std.debug.assert(i < gs.rows);
+        // The last group that starts at or before `i`.
+        var lo: usize = 0;
+        var hi: usize = gs.shown.len;
+        while (hi - lo > 1) {
+            const mid = lo + (hi - lo) / 2;
+            if (gs.shown[mid].start <= i) lo = mid else hi = mid;
+        }
+        const sh = gs.shown[lo];
+        const depth = gs.groups[sh.group].depth;
+        const off = i - sh.start;
+        if (sh.single) return .{ .row = .{ .group = sh.group, .index = 0, .depth = depth } };
+        if (off == 0) return .{ .heading = .{ .group = sh.group, .depth = depth } };
+        return .{ .row = .{ .group = sh.group, .index = off - 1, .depth = depth + 1 } };
     }
 
     /// The group `g` is in, if any: the nearest before it that is less deep.
@@ -122,13 +149,19 @@ pub const Groups = struct {
     /// shows, or the group is gone.
     pub fn locate(gs: Groups, item: Item) ?usize {
         if (item.group() >= gs.groups.len) return null;
-        for (gs.items, 0..) |it, i| if (it.eql(item)) return i;
-        // Its group's first row in view (its heading, or its row alone
-        // when it is a group of one), else the nearest group over it.
-        var g: ?usize = item.group();
-        while (g) |x| : (g = gs.parent(x)) {
-            for (gs.items, 0..) |it, i| if (it.group() == x) return i;
+        if (gs.place[item.group()]) |p| {
+            const sh = gs.shown[p];
+            return switch (item) {
+                // A group of one shown as its row stands for its heading.
+                .heading => sh.start,
+                .row => |r| if (sh.single or sh.len == 1)
+                    sh.start
+                else if (r.index < sh.len - 1) sh.start + 1 + r.index else sh.start,
+            };
         }
+        // Folded away: the nearest group over it that shows.
+        var g = gs.parent(item.group());
+        while (g) |x| : (g = gs.parent(x)) if (gs.place[x]) |p| return gs.shown[p].start;
         return null;
     }
 };

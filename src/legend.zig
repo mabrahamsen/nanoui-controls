@@ -9,7 +9,8 @@
 //!     l.end();
 //!
 //! With `width = .fit`, it is only as wide as its items, for a legend
-//! beside a chart's title. `swatch` draws a legend's swatch on its own.
+//! beside a chart's title. `swatch` (exported as `legendSwatch`) draws a legend's swatch on
+//! its own.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -17,9 +18,9 @@ const kit = nanoui.kit;
 const chart = @import("chart.zig");
 
 pub const Options = struct {
-    /// Between the items on a line.
+    /// Between the items on a line, in points before `scale`.
     gap: f32 = 14,
-    /// Between the lines.
+    /// Between the lines, in points before `scale`.
     row_gap: f32 = 4,
     /// The labels' size, as the kit's; the swatches go with it.
     size: kit.Size = .xs,
@@ -27,6 +28,9 @@ pub const Options = struct {
     mono: bool = false,
     /// The labels' color; null takes the theme's muted text.
     color: ?ui.Color = null,
+    /// The items' swatches: squares, dots, or lines for a line chart's
+    /// series.
+    shape: SwatchShape = .square,
     /// Multiplies the legend's lengths but not its text, as the charts'.
     scale: f32 = 1,
     /// As wide as its parent, or only as wide as its items: they still
@@ -71,9 +75,15 @@ pub fn swatch(c: *ui.Context, color: ui.Color, opts: SwatchOptions) void {
     const d = switch (opts.shape) {
         .square => ui.div(c).w(sw).h(sw).rounded(sw / 4),
         .dot => ui.div(c).w(sw).h(sw).roundedFull(),
-        .line => ui.div(c).w(sw * 1.4).h(@max(2, @round(sw / 4))).roundedFull(),
+        .line => ui.div(c).w(swatchWidth(opts)).h(@max(2, @round(sw / 4))).roundedFull(),
     };
     d.bg(color).end();
+}
+
+/// How wide a swatch is: a line is longer than it is tall.
+fn swatchWidth(opts: SwatchOptions) f32 {
+    const sw = @round(opts.size.text() * 0.72) * opts.scale;
+    return if (opts.shape == .line) sw * 1.4 else sw;
 }
 
 pub const Legend = struct {
@@ -101,14 +111,14 @@ pub const Legend = struct {
         const k = l.opts.scale;
         const style = l.labelStyle();
         const detail_style = l.detailStyle();
-        const sw = @round(style.size * 0.72) * k;
+        const sw = swatchWidth(.{ .size = l.opts.size, .shape = l.opts.shape, .scale = k });
         const inner = @round(style.size * 0.55) * k;
         var w = sw + inner + @ceil(c.text.width(label, style));
         if (detail.len > 0) w += inner + @ceil(c.text.width(detail, detail_style));
         l.place(w);
         const it = ui.div(c).row().itemsCenter().gap(inner);
         defer it.end();
-        swatch(c, color, .{ .size = l.opts.size, .scale = k });
+        swatch(c, color, .{ .size = l.opts.size, .shape = l.opts.shape, .scale = k });
         ui.text(c, label, style);
         if (detail.len > 0) ui.text(c, detail, detail_style);
     }
@@ -237,4 +247,8 @@ test "a legend keeps everything inside it at any width" {
             try std.testing.expect(r.x + r.w <= w - 10 + 0.5);
         }
     }
+}
+
+test {
+    _ = @import("legend_tests.zig");
 }

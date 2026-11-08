@@ -63,6 +63,9 @@ const Layout = lay_mod.Layout;
 const header = @import("grid_header.zig").header;
 const groups_mod = @import("grid_groups.zig");
 const loading_mod = @import("grid_loading.zig");
+const rows = @import("grid_rows.zig");
+const cells = @import("grid_cells.zig");
+const select = @import("grid_select.zig");
 
 pub const Column = struct {
     title: []const u8 = "",
@@ -72,7 +75,8 @@ pub const Column = struct {
     /// Its share of the room left, against the other columns without a
     /// width: 2 takes twice what 1 does.
     flex: f32 = 1,
-    /// The narrowest it gets, taking room or resized, in points.
+    /// The narrowest it gets, taking room or resized, in points before
+    /// `scale`.
     min_width: f32 = 40,
     /// Where its cells' contents and its title sit: numbers line up at
     /// the end, a mark or a short status may sit in the center.
@@ -99,14 +103,16 @@ pub const Sort = struct {
 };
 
 pub const Options = struct {
+    /// How many rows.
     count: usize,
+    /// A row's height, in points before `scale`.
     row_height: f32 = 28,
     /// Lines of text a row has room for: each past the first adds to
     /// `row_height`, for cells drawn with `twoLines`.
     lines: u8 = 1,
-    /// Between rows.
+    /// Between rows, in points before `scale`.
     gap: f32 = 2,
-    /// Between columns.
+    /// Between columns, in points before `scale`.
     column_gap: f32 = 10,
     /// The order the rows are in, which the header shows and changes.
     sort: ?*Sort = null,
@@ -188,6 +194,11 @@ pub const Options = struct {
     /// folded.
     expanded_text: []const u8 = "expanded",
     collapsed_text: []const u8 = "collapsed",
+    /// What a screen reader says of the sorted column's title, which way
+    /// it sorts, and of a sortable title, what a click does.
+    ascending_text: []const u8 = "sorted ascending",
+    descending_text: []const u8 = "sorted descending",
+    sort_hint_text: []const u8 = "Sorts the rows by this column",
     /// The column titles show; false leaves them out, and sorting by them.
     header: bool = true,
     /// Rows as plain rows, or as cards: the theme's surface, a border and
@@ -198,7 +209,8 @@ pub const Options = struct {
     /// kit sizes its controls with a `kit.Size`, as the pager does, but
     /// has no sizes for a grid.
     scale: f32 = 1,
-    /// How far the header and the rows start their cells in.
+    /// How far the header and the rows start their cells in, in points
+    /// before `scale`.
     padding: f32 = 10,
     /// A line under the header.
     header_line: bool = true,
@@ -217,28 +229,8 @@ pub const Loading = struct {
 
 pub const RowLook = enum { plain, cards };
 
-/// A heading's look (`Grid.heading`).
-pub const Heading = struct {
-    title: []const u8,
-    /// Muted, after the title: "4 pull requests".
-    detail: []const u8 = "",
-    /// The title in the first column's cell, leaving the others for the
-    /// caller's `cellAt`, for a group's totals; false spans the columns.
-    cells: bool = false,
-};
-
-/// A cell's two lines (`Grid.twoLines`).
-pub const TwoLines = struct {
-    /// The title's size; the detail is a point and a half smaller.
-    size: f32 = 13,
-    /// Null takes the theme's muted text.
-    detail_color: ?ui.Color = null,
-    mono_detail: bool = false,
-};
-
-/// How far in each level of a group goes: a heading's chevron and the
-/// gap after it, in points before `scale`.
-const indent_step = 18;
+pub const Heading = rows.Heading;
+pub const TwoLines = rows.TwoLines;
 
 /// The look of the column titles; null takes the theme's.
 pub const TitleStyle = struct {
@@ -274,7 +266,7 @@ pub const Row = struct {
     /// row's leading edge: a failed run, a warning. Call it before the
     /// row's cells.
     pub fn status(r: Row, s: kit.Status) void {
-        r.grid.rowStatus(s);
+        rows.rowStatus(r.grid, s);
     }
 };
 
@@ -291,38 +283,40 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         // scrolls them.
         c.node(box.index).style.min_height = 0;
     }
-    follow(c, opts);
-    if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
-        s.* = if (opts.count > 0) opts.count - 1 else null;
+    rows.follow(c, opts);
+    // A selection past the rows shown moves back to the last of them.
+    const shown = lay_mod.rowsShown(opts);
+    if (opts.selected) |s| if (s.*) |i| if (i >= shown) {
+        s.* = if (shown > 0) shown - 1 else null;
         c.changed = true;
     };
     const own = keys.take(c, box, opts.selected != null);
-    if (opts.selection) |m| if (own.focused and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
+    if (opts.selection) |m| if (own.focused and shown > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m[0..shown], true);
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;
     const press: Press = if (c.input.down) lay_mod.state(c, Press).* else .{};
-    const opening = lay_mod.state(c, Opening).*;
-    if (opts.loading) |l| if (!kept.loading) ui.access.announce(c, l.label);
+    const opening = lay_mod.state(c, rows.Opening).*;
+    if (opts.loading) |l| if (!kept.loading and l.label.len > 0) ui.access.announce(c, l.label);
     const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
     const head: @import("grid_header.zig").Head = if (opts.header) header(c, columns, opts, lay) else .{};
     if (opts.header and opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     if (opts.loading) |l| if (opts.count > 0) loading_mod.line(c, opts, l);
     var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .fit_w = head.fit_w };
-    g.fadeFrom(opening);
-    const row_gap = rowGap(opts);
+    rows.fadeFrom(&g, opening);
+    const row_gap = lay_mod.rowGap(opts);
     if (g.anchor) |a| if (a >= opts.count) {
         g.anchor = null;
     };
     const pitch = (lay_mod.rowHeight(opts) + row_gap) * k;
     const before = if (opts.selected) |s| s.* else null;
-    g.groupKeys();
-    g.otherKeys();
+    rows.groupKeys(&g);
+    keys.otherKeys(&g);
     // A page of sketched rows, while there are none to show yet.
     var sketched: usize = 0;
     if (opts.max_rows) |n| {
         g.rows_end = @min(n, opts.count);
         g.last = g.rows_end;
-        g.useKeys(before, keys.useKeys(c, own.focused, opts.selected, g.rows_end, n));
+        select.useKeys(&g, before, keys.useKeys(c, own.focused, opts.selected, g.rows_end, n));
         g.plain = ui.div(c).column().wFull().gap(row_gap * k).pt(row_gap * k);
         sketched = n;
     } else {
@@ -330,7 +324,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         // page by a view, keep a row in it and say which rows it shows.
         const id = c.peekId(null);
         const view_h = if (c.rects.get(id)) |r| r.h else c.size.h;
-        g.useKeys(before, keys.useKeys(c, own.focused, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
+        select.useKeys(&g, before, keys.useKeys(c, own.focused, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
         var want = opts.scroll_to;
         if (kept.jump_to) |i| want = i;
         if (opts.selected) |s| if (s.* != before) if (s.*) |i| {
@@ -365,45 +359,10 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     return g;
 }
 
-/// The room between rows: none with lines between them, which the rows
-/// meet, and more between cards.
-fn rowGap(opts: Options) f32 {
-    if (opts.rows == .cards) return @max(opts.gap, 6);
-    return if (opts.row_lines) 0 else opts.gap;
-}
-
-/// Keeps `selected` on the row it was on when the rows in view changed
-/// under it, as a group above it folded or opened; on the nearest heading
-/// over it when it was folded away. A caller that moved the selection
-/// itself keeps its own.
-fn follow(c: *ui.Context, opts: Options) void {
-    const gs = opts.groups orelse return;
-    const s = opts.selected orelse return;
-    const i = s.* orelse return;
-    const was = lay_mod.state(c, Follow).*;
-    const item = was.item orelse return;
-    if (was.at != i) return;
-    if (i < gs.count() and gs.at(i).eql(item)) return;
-    if (gs.locate(item)) |j| {
-        s.* = j;
-        c.changed = true;
-    }
-}
-
 /// What the grid keeps between frames: where Shift-click and Shift with
 /// the keys select from, the row `jump` scrolls to next, how far the
 /// columns are scrolled sideways, and whether it was loading.
 const Kept = struct { anchor: ?usize = null, jump_to: ?usize = null, sx: f32 = 0, loading: bool = false };
-
-/// The selected row's place in its groups, and where it was in view, to
-/// follow it when groups fold or open.
-const Follow = struct { item: ?groups_mod.Item = null, at: usize = 0 };
-
-/// The group opened last, and when, whose rows fade in.
-const Opening = struct { group: usize = std.math.maxInt(usize), at: f64 = 0 };
-
-/// How long a group's rows take to fade in as it opens, in seconds.
-const fade_time = 0.2;
 
 /// A row held down: which, where the pointer went down, and whether it
 /// has moved far enough to drag.
@@ -484,7 +443,7 @@ pub const Grid = struct {
 
     /// Opens the next row in view, or null when the view is full.
     pub fn next(g: *Grid) ?Row {
-        g.endRow();
+        cells.endRow(g);
         const i = if (g.list) |*l| l.next() orelse return null else blk: {
             if (g.next_row >= g.rows_end) return null;
             g.next_row += 1;
@@ -515,7 +474,7 @@ pub const Grid = struct {
             g.pick(i, if (in.shift) .extend else if (adds) .toggle else .only);
         }
         if (it.clicked or it.secondary_clicked) g.c.changed = true;
-        const drag_started = g.opts.drag_rows and it.pressed and g.pressDrags(i);
+        const drag_started = g.opts.drag_rows and it.pressed and select.pressDrags(g, i);
         const selected = g.isSelected(i);
         // The selection is the accent's color while the grid has the
         // keyboard, and grey while something else does.
@@ -534,289 +493,51 @@ pub const Grid = struct {
         g.row = r;
         g.row_hovered = it.hovered;
         g.row_index = i;
-        g.row_clicked = it.clicked;
+        // The second click of a double click is a click too: a heading
+        // folds or opens on the first only.
+        g.row_clicked = it.clicked and !it.double_clicked;
         g.row_depth = if (item) |x| x.depth() else 0;
         g.column = 0;
         return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = !is_heading and (it.double_clicked or g.opened == i), .secondary_clicked = it.secondary_clicked, .drag_started = drag_started, .grid = g };
     }
 
-    /// Follows row `i` held down: true once it has moved far enough to
-    /// drag, when the row is selected unless it is already.
-    fn pressDrags(g: *Grid, i: usize) bool {
-        const m = g.c.input.mouse;
-        if (g.press.row != i) {
-            g.press = .{ .row = i, .x = m.x, .y = m.y };
-            return false;
-        }
-        if (g.press.dragging or @abs(m.x - g.press.x) + @abs(m.y - g.press.y) < 4 * g.opts.scale) return false;
-        g.press.dragging = true;
-        if (!g.isSelected(i)) g.pick(i, .only);
-        g.c.changed = true;
-        return true;
-    }
-
     /// Starts dragging `text` out of the grid, with the row being built as
     /// what is seen dragged: in the frame `Row.drag_started` says so.
-    pub fn dragOut(g: *Grid, text: []const u8) void {
-        const r = g.row orelse return;
-        g.c.startDrag(r.index, text);
-    }
+    pub const dragOut = select.dragOut;
 
     /// Selects row `i` alone, if rows select, and scrolls it into view:
     /// where `typed` leads. The grid is drawn again to show it.
-    pub fn jump(g: *Grid, i: usize) void {
-        if (i >= g.opts.count) return;
-        g.pick(i, .only);
-        g.jump_to = i;
-        g.c.changed = true;
-    }
+    pub const jump = select.jump;
 
     /// Row `i` is selected: among `selection`'s, or `selected` without it.
-    fn isSelected(g: *const Grid, i: usize) bool {
-        if (g.opts.selection) |m| return m[i];
-        return if (g.opts.selected) |s| s.* == i else false;
-    }
-
-    const Pick = enum { only, toggle, extend };
-
-    /// Makes row `i` the selected one, and changes `selection` as `how` says:
-    /// `i` alone, `i` added or taken away, or every row from the anchor
-    /// to `i`.
-    fn pick(g: *Grid, i: usize, how: Pick) void {
-        const s = g.opts.selected orelse return;
-        s.* = i;
-        const m = g.opts.selection orelse return;
-        switch (how) {
-            .only => {
-                @memset(m, false);
-                m[i] = true;
-                g.anchor = i;
-            },
-            .toggle => {
-                m[i] = !m[i];
-                g.anchor = i;
-            },
-            .extend => {
-                const from = g.anchor orelse i;
-                g.anchor = from;
-                @memset(m, false);
-                @memset(m[@min(from, i) .. @max(from, i) + 1], true);
-            },
-        }
-    }
-
-    /// Follows the keys with `selection`: the row they moved to alone, or with
-    /// Shift the rows from the anchor to it.
-    fn useKeys(g: *Grid, before: ?usize, k: keys.Keys) void {
-        g.opened = k.opened;
-        const s = g.opts.selected orelse return;
-        const i = s.* orelse return;
-        if (i != before) g.pick(i, if (k.extend) .extend else .only);
-    }
+    pub const isSelected = select.isSelected;
+    pub const Pick = select.Pick;
+    pub const pick = select.pick;
 
     /// Opens the row's next cell, ending the one before: what is drawn
     /// until the next `cell` goes in it. When columns hide, use `cellAt`,
     /// as this panics on a hidden one.
-    pub fn cell(g: *Grid) void {
-        if (!g.cellAt(g.column)) @panic("grid: `cell` opened a hidden column; use `cellAt`");
-    }
+    pub const cell = cells.cell;
 
     /// Opens column `i`'s cell, ending the one before, and returns true;
     /// false when the column is hidden, with nothing to draw. Columns go
     /// in order: `i` is past the cell before.
-    pub fn cellAt(g: *Grid, i: usize) bool {
-        g.endCell();
-        std.debug.assert(g.row != null and i >= g.column and i < g.columns.len);
-        g.column = i + 1;
-        if (!g.isShown(i)) return false;
-        const c = g.c;
-        const l = g.lay;
-        const k = g.opts.scale;
-        const h = lay_mod.rowHeight(g.opts) * k;
-        // The frozen column's cell sits in the row; the others in a box
-        // past it that cuts them off as they scroll.
-        var origin: f32 = 0;
-        if (l.frozen == i) {
-            g.endCut();
-        } else {
-            if (g.cut == null) g.cut = ui.div(c).absolute().offset(l.clip_x, 0).w(@max(0, l.view - l.clip_x)).h(h).clip();
-            origin = l.clip_x;
-        }
-        var d = ui.div(c).absolute().offset(l.at(i) - origin, 0).w(l.w[i]).h(h).row().itemsCenter().gap(g.opts.column_gap * k / 2);
-        // The first column steps in for each level of groups the row is in.
-        if (i == 0 and g.row_depth > 0) d = d.pl(@as(f32, @floatFromInt(g.row_depth)) * indent_step * k);
-        d = switch (g.columns[i].alignment) {
-            .start => d,
-            .center => d.justifyCenter(),
-            .end => d.justifyEnd(),
-        };
-        g.cell_box = d;
-        g.cell_column = i;
-        return true;
-    }
+    pub const cellAt = cells.cellAt;
+
+    /// Draws the row being built as its group's heading (`grid_rows.zig`).
+    pub const heading = rows.heading;
+
+    /// Draws a title over a muted detail in the cell open
+    /// (`grid_rows.zig`).
+    pub const twoLines = rows.twoLines;
 
     /// Column `i` is shown this frame.
     pub fn isShown(g: *const Grid, i: usize) bool {
         return lay_mod.shown(g.c, g.columns, g.opts, i, g.lay.grid_w);
     }
 
-    /// Draws the row being built as its group's heading: a chevron, the
-    /// title and the detail, across the columns, or with `cells` in the
-    /// first column's cell, the caller's `cellAt` filling the others. A
-    /// click on it folds or opens its group.
-    pub fn heading(g: *Grid, opts: Heading) void {
-        const gs = g.opts.groups orelse @panic("grid: `heading` needs `groups`");
-        const item = gs.at(g.row_index);
-        if (item != .heading) @panic("grid: `heading` on a row that isn't one");
-        const group = item.heading.group;
-        if (g.row_clicked) g.toggle(group);
-        const open = gs.open[group];
-        const c = g.c;
-        const t = kit.tokens(c);
-        const k = g.opts.scale;
-        // In the first column's cell, unless that column is hidden.
-        const in_cell = opts.cells and g.cellAt(0);
-        const box = if (in_cell) g.cell_box.? else blk: {
-            const x = (g.opts.padding + @as(f32, @floatFromInt(item.heading.depth)) * indent_step) * k;
-            break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(g.opts.column_gap * k / 2);
-        };
-        {
-            const slot = ui.div(c).w((indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
-            defer slot.end();
-            ui.icon(c, if (open) "chevron.down" else "chevron.right", .{ .size = 9.5, .color = t.muted });
-        }
-        ui.text(c, opts.title, .{ .size = 13, .weight = .semibold, .truncate = .ellipsis });
-        if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = 12, .color = t.muted, .truncate = .ellipsis });
-        if (!in_cell) box.end();
-        const label = if (opts.detail.len > 0) c.print("{s}, {s}", .{ opts.title, opts.detail }) else opts.title;
-        ui.access.describe(c, g.row.?.index, .{
-            .role = .row,
-            .label = label,
-            .value = if (open) g.opts.expanded_text else g.opts.collapsed_text,
-            .selected = g.isSelected(g.row_index),
-        });
-    }
-
-    /// Draws a title over a muted detail in the cell open, each cut short
-    /// with an ellipsis, and whole in the cell's tooltip. Give the grid
-    /// `lines = 2` for the room.
-    pub fn twoLines(g: *Grid, title: []const u8, detail: []const u8, opts: TwoLines) void {
-        std.debug.assert(g.cell_box != null);
-        const c = g.c;
-        const col = ui.div(c).column().wFull().gap(1 * g.opts.scale);
-        defer col.end();
-        ui.text(c, title, .{ .size = opts.size, .truncate = .ellipsis });
-        ui.text(c, detail, .{ .size = opts.size - 1.5, .color = opts.detail_color orelse kit.tokens(c).muted, .mono = opts.mono_detail, .truncate = .ellipsis });
-    }
-
-    /// Folds or opens `group`; its rows fade in as it opens.
-    fn toggle(g: *Grid, group: usize) void {
-        const gs = g.opts.groups orelse return;
-        gs.open[group] = !gs.open[group];
-        if (gs.open[group]) g.opened_group = group;
-        g.c.changed = true;
-    }
-
-    /// Where the rows of the group opened last are in fading in.
-    fn fadeFrom(g: *Grid, o: Opening) void {
-        if (g.opts.groups == null or o.group == std.math.maxInt(usize)) return;
-        const c = g.c;
-        const u: f32 = if (c.reduced_motion) 1 else @floatCast(std.math.clamp((c.time - o.at) / fade_time, 0, 1));
-        if (u >= 1) return;
-        g.fade_group = o.group;
-        g.fade = ui.motion.Easing.sample(.ease_out, u)[0];
-        c.animationFrame();
-    }
-
-    /// The row's edge in `s`'s color (`Row.status`).
-    fn rowStatus(g: *Grid, s: kit.Status) void {
-        const r = g.row orelse return;
-        const c = g.c;
-        const t = kit.tokens(c);
-        const k = g.opts.scale;
-        const color = if (s == .neutral) t.primary else kit.statusColor(t, s);
-        if (g.opts.rows == .cards) {
-            _ = r.border(color);
-            return;
-        }
-        g.endCell();
-        g.endCut();
-        const h = lay_mod.rowHeight(g.opts) * k;
-        ui.div(c).absolute().offset(2 * k, 5 * k).w(3 * k).h(@max(0, h - 10 * k)).roundedFull().bg(color).end();
-    }
-
-    /// The keys on groups, while the grid has the keyboard: Left folds a
-    /// heading or goes from a row to its heading, Right opens a heading or
-    /// goes to its first row, and Enter or Space folds or opens one.
-    fn groupKeys(g: *Grid) void {
-        const gs = g.opts.groups orelse return;
-        const s = g.opts.selected orelse return;
-        const i = s.* orelse return;
-        if (!g.focused or i >= gs.count()) return;
-        const c = g.c;
-        switch (gs.at(i)) {
-            .heading => |h| {
-                const open = gs.open[h.group];
-                if (c.shortcut(.{ .key = ui.Shortcut.enter }) or c.shortcut(.{ .key = ' ' })) return g.toggle(h.group);
-                if (std.mem.eql(u8, c.input.chars, " ")) {
-                    c.input.chars = "";
-                    return g.toggle(h.group);
-                }
-                const key = c.input.key orelse return;
-                switch (key) {
-                    .enter => g.toggle(h.group),
-                    .left => if (open) {
-                        g.toggle(h.group);
-                    } else if (gs.parent(h.group)) |p| {
-                        if (gs.locate(.{ .heading = .{ .group = p, .depth = 0 } })) |j| g.pick(j, .only);
-                    },
-                    .right => if (!open) {
-                        g.toggle(h.group);
-                    } else if (i + 1 < gs.count() and gs.within(gs.at(i + 1).group(), h.group)) {
-                        g.pick(i + 1, .only);
-                    },
-                    else => return,
-                }
-                c.input.key = null;
-                c.changed = true;
-            },
-            .row => |r| if (c.input.key == .left) {
-                // Its group's heading; a group of one shown as its row goes
-                // to the heading over it.
-                var to = gs.locate(.{ .heading = .{ .group = r.group, .depth = 0 } });
-                if (to == i) to = if (gs.parent(r.group)) |p| gs.locate(.{ .heading = .{ .group = p, .depth = 0 } }) else null;
-                if (to) |j| g.pick(j, .only);
-                c.input.key = null;
-                c.changed = true;
-            },
-        }
-    }
-
-    /// Backspace or Cmd+Up (Alt+Up off the Mac), and Escape, while the
-    /// grid has the keyboard.
-    fn otherKeys(g: *Grid) void {
-        if (!g.focused) return;
-        const c = g.c;
-        const mac = builtin.os.tag.isDarwin();
-        if (c.shortcut(.{ .key = ui.Shortcut.up, .cmd = mac, .alt = !mac })) {
-            g.back = true;
-            return;
-        }
-        const key = c.input.key orelse return;
-        switch (key) {
-            .backspace => g.back = true,
-            .up => if (if (mac) c.input.cmd else c.input.alt) {
-                g.back = true;
-            } else return,
-            .escape => g.escaped = true,
-            else => return,
-        }
-        c.input.key = null;
-        c.changed = true;
-    }
-
     pub fn end(g: *Grid) void {
-        g.endRow();
+        cells.endRow(g);
         if (g.list) |*l| l.end();
         if (g.plain) |p| p.end();
         if (g.fit) |f| if (g.opts.widths) |widths| {
@@ -828,8 +549,8 @@ pub const Grid = struct {
         lay_mod.state(g.c, Press).* = g.press;
         if (g.opts.groups) |gs| {
             const sel = if (g.opts.selected) |s| s.* else null;
-            lay_mod.state(g.c, Follow).* = if (sel) |i| (if (i < gs.count()) .{ .item = gs.at(i), .at = i } else .{}) else .{};
-            if (g.opened_group) |o| lay_mod.state(g.c, Opening).* = .{ .group = o, .at = g.c.time };
+            lay_mod.state(g.c, rows.Follow).* = if (sel) |i| (if (i < gs.count()) .{ .item = gs.at(i), .at = i } else .{}) else .{};
+            if (g.opened_group) |o| lay_mod.state(g.c, rows.Opening).* = .{ .group = o, .at = g.c.time };
         }
         // A press in the grid that left nothing with the keyboard (on a
         // row, a title, the scrollbar) gives the keyboard to the grid.
@@ -838,72 +559,6 @@ pub const Grid = struct {
             c.focus = g.own;
         };
         g.box.end();
-    }
-
-    /// Ends the cell, measuring it for a fit, and showing its whole text on
-    /// hover if it is cut off.
-    fn endCell(g: *Grid) void {
-        const b = g.cell_box orelse return;
-        const i = g.cell_column;
-        if (g.fit == i) g.fit_w = @max(g.fit_w, lay_mod.natural(g.c, b.index));
-        if (g.opts.tooltips) g.tooltip(b, i);
-        b.end();
-        g.cell_box = null;
-    }
-
-    /// The cell's whole text over it, while the pointer rests on it and
-    /// the text is cut off. Asked of every cut-off cell in view, under the
-    /// pointer or not, so its wait starts when the pointer comes.
-    fn tooltip(g: *Grid, b: ui.Div, i: usize) void {
-        const c = g.c;
-        const id = c.node(b.index).id;
-        const rect = c.rects.get(id) orelse return;
-        if (lay_mod.natural(c, b.index) <= g.lay.w[i] + 0.5) return;
-        // Not where the frozen column covers it.
-        const visible = g.lay.frozen == i or c.input.mouse.x >= g.lay.left + g.lay.clip_x;
-        const over = g.row_hovered and visible and rect.contains(c.input.mouse);
-        const text = ui.access.textOf(c, c.alloc(), b.index) catch return;
-        kit.tooltip(c, .{ .id = id, .rect = rect, .hovered = over, .pressed = false, .clicked = false, .focused = false }, text, .{});
-    }
-
-    fn endCut(g: *Grid) void {
-        if (g.cut) |d| d.end();
-        g.cut = null;
-    }
-
-    fn endRow(g: *Grid) void {
-        g.endCell();
-        if (g.row != null) g.lines();
-        g.endCut();
-        if (g.row) |r| r.end();
-        g.row = null;
-    }
-
-    /// The row's lines: down the gaps between its columns, the scrolled
-    /// ones' cut off past the frozen column, and along its bottom.
-    fn lines(g: *Grid) void {
-        const c = g.c;
-        const l = g.lay;
-        const k = g.opts.scale;
-        const h = lay_mod.rowHeight(g.opts) * k;
-        const border = kit.tokens(c).border;
-        const half = g.opts.column_gap * k / 2;
-        if (g.opts.column_lines) {
-            if (g.cut == null) g.cut = ui.div(c).absolute().offset(l.clip_x, 0).w(@max(0, l.view - l.clip_x)).h(h).clip();
-            var last: ?usize = null;
-            for (l.order) |i| if (l.w[i] > 0) {
-                last = i;
-            };
-            for (l.order) |i| {
-                if (l.w[i] == 0 or i == last or i == l.frozen) continue;
-                ui.div(c).absolute().offset(l.at(i) + l.w[i] + half - l.clip_x, 0).w(1).h(h).bg(border).end();
-            }
-        }
-        g.endCut();
-        if (l.frozen) |f| if (g.opts.column_lines or l.sx > 0) {
-            ui.div(c).absolute().offset(l.x[f] + l.w[f] + half, 0).w(1).h(h).bg(border).end();
-        };
-        if (g.opts.row_lines and g.opts.rows != .cards) ui.div(c).absolute().offset(0, h - 1).w(l.view).h(1).bg(border).end();
     }
 };
 

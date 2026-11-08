@@ -2,7 +2,40 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.7.0
+
+### Changed: what callers write
+
+- Every chart with a scale takes `min`, `max` and `fixed_max` the same way: `max` is where the top starts, rising to the data unless `fixed_max`, and a null `max` takes the data's largest. `line` and `trend` take `max: ?f32` (1 by default, as before); `bars` switches to units with `units = true`; a bar list's given `max` rises unless `fixed_max`.
+- `breakdown`'s and `meter`'s `height`, and a bar list's `bar_height`, are a `ui.Length`: write `.height = .{ .px = 8 }`.
+- A donut's and a gauge's `size` is `diameter`.
+- `meter`'s `radius` is optional: null rounds the segments' ends, as `breakdown`'s does; a bar list's `bar_radius` means the same for its meters, which now have round ends.
+- `gap = 0` on `bars` means no seams, the slots overlapping by a point, as on the other charts.
+- A form row marked `required` says so in its control's name ("Name, required").
+- `Grid.typed` lasts only for its frame: copy it to keep it.
+- `selection` with `groups` panics, with a message saying so, instead of crashing when a group folds.
+
+### Fixed
+
+- A click on the pager gives it the keyboard. The pager, sidebar, splitter and a clickable bar list consume the keys they act on, so an app's own Enter or arrows don't fire as well.
+- The sidebar's keys start at its first row when nothing is selected, and go back to the selected row when their own row is gone, instead of skipping the first row.
+- A donut or gauge with no room no longer asks for a frame every frame.
+- An interactive `line` with a short history no longer stops on empty slots.
+- The grid: a heading's chevron follows `scale`; a double click on a heading folds it once; with `max_rows`, the selection and `jump` stay among the rows shown; sketched rows take cards' gap; an empty loading label isn't announced; `check` says what is wrong with a `scale` or row height of 0 or a `count` that isn't `groups.count()`.
+- Meter zones keep their segments one width when they don't divide evenly; a meter with no value says nothing, not "0%".
+- The swatches show where the keys start when the chosen index is past the colors; a form link keeps its keyboard when a row appears above it; `bars` on a fixed scale don't ask for frames as their data changes; a box's measured size is kept by the box.
+
+### New
+
+- Screen readers: an interactive chart is adjustable, so swipes step through its slots; grid column titles and sidebar group headings are headers; no fixed English (`ascending_text`, `descending_text`, `sort_hint_text` on the grid, `previous_text`, `next_text`, `page_text` on the pager, `chart_text` on interactive charts, `required_text` on the form).
+- `meter` and `gauge` take `min` and `max`. `trend` takes `axis`, `start_text`, `end_text`, and `interactive` with `tips`. `Line.reading` gives a series' reading in a slot. `stat` takes `scale`, and its history a scale and a ramp. A legend's items take a `shape`.
+- `splitter` takes `stacked`, `default` (a double click goes back to it), `big_step` (with Shift) and `disabled`; `swatches` take `disabled`, a `label`, and Up and Down. A sidebar with no rows and swatches with no colors don't take Tab.
+- `flow` takes `fill`. Typing moves a sidebar's keys to the row it begins. A bar list item's `key` keeps its focus as the list re-sorts.
+- Sidebar labels and form link values cut short show whole in a tooltip. Every control's focus ring looks the same.
+- `FormAlign` and `SplitterPane` name the form's alignments and the splitter's pane. The legend's chip is `legendSwatch`.
+- `GridGroups` costs what its groups do, not its rows.
+
+### Grid groups, richer charts and sidebar branches
 
 - `grid` groups that fold (`groups`, with `GridGroups`): headings with a chevron, a title and a detail, or the title in the first cell with the group's totals in the others; rows stepped in a level, groups in groups, and a group of one shown without its heading if wanted. A click folds or opens a group and its rows fade in; Left, Right, Enter and Space fold, open and move between a heading and its rows. The selection stays on its row as groups above it fold, and goes to its heading when folded away. A screen reader hears a heading with its detail and whether it is open.
 - `grid` `loading`, told apart from empty: with no rows yet, a spinner, a label and a progress bar over sketched rows; with rows in, a thin progress line under the titles. A screen reader hears the label as loading starts.
@@ -11,10 +44,10 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - `grid` reports Backspace or Cmd+Up (`back`) and Escape (`escaped`) while it has the keyboard.
 - `grid` can be shorter than its rows in a column that grows, without the caller setting its minimum height.
 - The gallery has a Grouped view under Grid: pull requests in groups that fold, as cards or rows of two lines, reloading with sketched rows and loading more with a line under the titles. The file grid shows the line while its pages arrive.
-- `bars` in units (`min`, `max`, `fixed_max`), on a scale that rises to the tallest bar unless fixed, with room below zero for a `min` under it; a history shorter than the slots at the right (`readings`, `slot.reading`), only its slots pointed at; and an `axis` with the value lines' labels in a gutter, overlapping ones left out, and `start_text` and `end_text` under the chart. `line` takes the same axis and texts.
+- `bars` in units (`units`, `min`, `max`, `fixed_max`), on a scale that rises to the tallest bar unless fixed, with room below zero for a `min` under it; a history shorter than the slots at the right (`readings`, `slot.reading`), only its slots pointed at; and an `axis` with the value lines' labels in a gutter, overlapping ones left out, and `start_text` and `end_text` under the chart. `line` takes the same axis and texts.
 - `barList` rows can lead with an `icon` or a `badge`, end with a `detail`, and color their figure; the list takes `min`, a `ramp`, `track`, `glow`, `bar_radius`, and `style = .meter` for levels read in steps.
 - `stat` takes a `unit`, a `detail` line and `loading`, a spinner in place of the figure; `statButton` is a stat that can be clicked, with the pointer or the keys.
-- `legend` can fit its items (`width = .fit`); `swatch` draws a legend's swatch on its own, as a square, a dot or a line.
+- `legend` can fit its items (`width = .fit`); `legendSwatch` draws a legend's swatch on its own, as a square, a dot or a line.
 - `meter` without gaps rounds only its ends, and `zones` label runs of its segments.
 - The gallery's Every chart shows each of these, and its Monitor uses units, axes and times under its charts. The Parts page no longer shows the histories too.
 - `sidebar` branches (`branch`): a row with rows under it, to any depth, as an option. A branch has an item's icon, label and count, can be chosen and selected, and folds by the chevron at its end; its rows are indented a step, and ease open and closed as a group's do. A click on the chevron folds or opens it, and a click elsewhere chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint. Left and Right fold and open branches and move between a branch and its rows, at each level, as a tree's keys do. A screen reader hears a branch as a row, with its count and whether it is open. Groups and headings inside a branch are indented with it. With `null` for `open`, a branch is fixed: always open, without a chevron, for a tree that doesn't fold. A sidebar without branches looks and behaves as it did.

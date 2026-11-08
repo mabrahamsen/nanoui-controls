@@ -9,7 +9,7 @@
 //! value lines' labels beside the chart, and `start_text` and `end_text`
 //! go under it ("-60 s", "now").
 //!
-//!     var b = controls.bars(c, .{ .count = 60, .max = 10, .readings = read.len, .height = .{ .px = 64 }, .interactive = true, .label = "Traffic" });
+//!     var b = controls.bars(c, .{ .count = 60, .units = true, .max = 10, .readings = read.len, .height = .{ .px = 64 }, .interactive = true, .label = "Traffic" });
 //!     while (b.next()) |slot| {
 //!         const i = slot.reading.?;
 //!         slot.bar(&.{ .{ .value = read[i], .color = t.primary }, .{ .value = write[i], .color = t.success } });
@@ -30,23 +30,26 @@ pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 26 },
-    /// Between the slots; null keeps a hairline of one point at any scale.
+    /// Between the slots; null keeps a hairline of one point at any scale,
+    /// and 0 none, without seams, as the other charts' gaps.
     gap: ?f32 = null,
-    /// With `max`, the parts are in units, on a scale from `min` at the
-    /// bottom to `max` at the top: a bar of 40 on a scale of 0 to 100 is
-    /// 40% of the height. Unless `fixed_max`, the top rises to the tallest
-    /// bar, its parts stacked, so none is cut off. A `min` below zero
-    /// leaves that room below zero for negative parts; one above zero
-    /// starts the bars there. Null: parts are shares of the height.
+    /// The parts are in units, on a scale from `min` at the bottom to
+    /// `max` at the top: a bar of 40 on a scale of 0 to 100 is 40% of the
+    /// height. Unless `fixed_max`, the top rises to the tallest bar, its
+    /// parts stacked, so none is cut off; null `max` takes the tallest, as
+    /// every chart with a scale does. A `min` below zero leaves that room
+    /// below zero for negative parts; one above zero starts the bars
+    /// there. Off, parts are shares of the height.
+    units: bool = false,
     min: f32 = 0,
     max: ?f32 = null,
     fixed_max: bool = false,
-    /// Without `max`: the share of the height below zero, for bars of
+    /// Without `units`: the share of the height below zero, for bars of
     /// negative parts (a loss, a change down); 0 keeps every bar above
     /// the bottom.
     below: f32 = 0,
     /// Lines across at values on the scale (shares of the height above
-    /// zero without `max`: 0.5 is halfway up), behind the bars.
+    /// zero without `units`: 0.5 is halfway up), behind the bars.
     value_lines: []const chart.ValueLine = &.{},
     /// How many readings there are, for a history shorter than the slots:
     /// they sit in the slots at the right, the newest last, and the slots
@@ -63,6 +66,8 @@ pub const Options = struct {
     /// and move from slot to slot with Left and Right: `Bars.current` is
     /// that slot, and `tooltip` says what it shows.
     interactive: bool = false,
+    /// What a screen reader calls an interactive chart without a `label`.
+    chart_text: []const u8 = "Chart",
     /// What a screen reader calls the chart ("Traffic"); empty leaves it
     /// out, as a decoration.
     label: []const u8 = "",
@@ -84,9 +89,9 @@ const Scale = struct {
     squeeze: bool,
 
     fn of(opts: Options, peak: f32) Scale {
-        if (opts.max) |m| {
-            const hi = if (opts.fixed_max) m else @max(m, peak);
-            return .{ .lo = opts.min, .hi = hi, .base = @max(opts.min, 0), .squeeze = opts.fixed_max };
+        if (opts.units) {
+            const fixed = opts.fixed_max and opts.max != null;
+            return .{ .lo = opts.min, .hi = chart.scaleTop(opts.min, opts.max, fixed, peak), .base = @max(opts.min, 0), .squeeze = fixed };
         }
         const below = if (opts.below > 0) @min(opts.below, 1) else 0;
         return .{ .lo = -below, .hi = 1 - below, .base = 0, .squeeze = true };
@@ -180,15 +185,12 @@ pub fn bars(c: *ui.Context, opts: Options) Bars {
     const peak = kept(c).peak;
     const sc = Scale.of(opts, peak);
     const frame: chart.Frame = .open(c, .fill, .{ .axis = opts.axis, .lines = opts.value_lines, .lo = sc.lo, .hi = sc.hi, .start_text = opts.start_text, .end_text = opts.end_text, .scale = k }, opts.height != .px);
-    const row = ui.div(c).row().gap(if (opts.gap) |g| g * k else 1);
+    // Without gaps, the slots overlap by a point, as a meter's segments.
+    const row = ui.div(c).row().gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);
     frame.size(c, row.index, .fill, if (framed) opts.height else .fill);
     const in: chart.Inspect = if (opts.interactive) .beginFrom(c, row.index, opts.count, empty, false) else .{};
     if (opts.value_lines.len > 0) {
-        const h = switch (opts.height) {
-            .px => |v| v * k,
-            else => if (chart.lastSize(c, row.index)) |sz| sz.h else 0,
-        };
-        chart.valueLines(c, opts.value_lines, h, 0, sc.lo, sc.hi, opts.axis == .none);
+        chart.valueLines(c, opts.value_lines, chart.linesHeight(c, opts.height, k, row.index), 0, sc.lo, sc.hi, opts.axis == .none);
     }
     const current = if (in.current) |s| (if (opts.readings != null) s - empty else s) else null;
     return .{ .current = current, .focused = in.focused, .c = c, .holder = holder, .frame = frame, .row = row, .opts = opts, .inspect = in, .scale = sc, .empty = empty, .current_slot = in.current, .last_peak = peak };
@@ -255,11 +257,11 @@ pub const Bars = struct {
         const c = b.c;
         const tip = b.current != null and b.tip.len > 0;
         if (tip) if (b.current_box) |i| b.inspect.tooltip(c, c.rects.get(c.node(i).id), b.tip);
-        chart.describe(c, b.row.index, b.opts.label, if (tip) b.tip else b.opts.value_text, b.opts.interactive);
+        chart.describe(c, b.row.index, b.opts.label, if (tip) b.tip else b.opts.value_text, b.opts.interactive, b.opts.chart_text);
         b.row.end();
         b.frame.close(c);
         // A new tallest bar on a scale that rises: draw again with it.
-        if (b.opts.max != null and b.peak != b.last_peak) {
+        if (b.opts.units and !(b.opts.fixed_max and b.opts.max != null) and b.peak != b.last_peak) {
             kept(c).peak = b.peak;
             c.frameIn(0);
         }

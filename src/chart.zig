@@ -6,6 +6,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 
 /// One part of a bar: `value` its share, and its color. A part that is
 /// negative or not a number counts as 0, unless the chart has room below
@@ -58,21 +59,75 @@ pub fn track(c: *ui.Context) ui.Color {
     return t.surface_hover.mix(t.border, 0.5);
 }
 
-/// The size of box `index` as the last frame laid it out, or null in its
-/// first frame. Then, or when it changed, another frame is drawn with the
-/// new one, as the grid does with its width.
-pub fn lastSize(c: *ui.Context, index: u32) ?ui.Size {
-    const r = c.rects.get(c.node(index).id) orelse {
-        c.frameIn(0);
-        return null;
+/// The size of box `index` as the last frame laid it out (`measure.zig`).
+pub const lastSize = @import("measure.zig").lastSize;
+
+/// The height of a chart's box `index`, `height` before `scale` `k`: its
+/// points, or for one that fills, as the last frame laid it out (0 in its
+/// first). For lines across it at values.
+pub fn linesHeight(c: *ui.Context, height: ui.Length, k: f32, index: u32) f32 {
+    return switch (height) {
+        .px => |v| v * k,
+        else => if (lastSize(c, index)) |sz| sz.h else 0,
     };
-    const last = c.state(struct { w: f32 = 0, h: f32 = 0 }, "chart-size");
-    if (last.w != r.w or last.h != r.h) {
-        last.* = .{ .w = r.w, .h = r.h };
-        c.frameIn(0);
-    }
-    return .{ .w = r.w, .h = r.h };
 }
+
+/// Where `x` falls between `min` and `max`, from 0 to 1; null for no
+/// reading (not a number, or infinite). A scale with no room between
+/// `min` and `max` puts every reading at 0.
+pub fn level(x: f32, min: f32, max: f32) ?f32 {
+    if (!std.math.isFinite(x)) return null;
+    const range = max - min;
+    if (!std.math.isFinite(range) or !(range > 0)) return 0;
+    return std.math.clamp((x - min) / range, 0, 1);
+}
+
+/// A chart's scale's top, as every chart with a scale takes it: `max`
+/// rising to the data's `peak` unless `fixed`; null takes the peak. A top
+/// with no room above `min` is one above it.
+pub fn scaleTop(min: f32, max: ?f32, fixed: bool, peak: f32) f32 {
+    const hi = if (max) |m| (if (fixed) m else @max(m, peak)) else peak;
+    return if (std.math.isFinite(hi) and hi > min) hi else min + 1;
+}
+
+/// The reading in slot `i` of `n`, for readings kept oldest first from
+/// `head` (a ring once full) and shown right-aligned, the newest in the
+/// last slot; with more readings than slots, the newest. Null where there
+/// is none, or one that is not a number.
+pub fn slotReading(values: []const f32, head: usize, n: usize, i: usize) ?f32 {
+    const shown = @min(values.len, n);
+    if (i < n - shown or i >= n) return null;
+    const skip = values.len - shown;
+    const v = values[(head % values.len + skip + i - (n - shown)) % values.len];
+    return if (std.math.isFinite(v)) v else null;
+}
+
+/// How many parts of a bar ease to new values; any after them move at
+/// once.
+pub const max_eased = 32;
+
+/// Eases each of the first `max_eased` parts' shares to its new value,
+/// into `out`, in an order kept from frame to frame; the rest as they
+/// are. Returns their sum.
+pub fn easeParts(c: *ui.Context, parts: []const Part, out: *[max_eased]f32) f32 {
+    var sum: f32 = 0;
+    for (parts, 0..) |p, i| {
+        const v = partShare(p.value);
+        const e = if (i < max_eased) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
+        if (i < max_eased) out[i] = e;
+        sum += e;
+    }
+    return sum;
+}
+
+/// Part `i`'s share as `easeParts` left it.
+pub fn eased(parts: []const Part, out: *const [max_eased]f32, i: usize) f32 {
+    return if (i < max_eased) out[i] else partShare(parts[i].value);
+}
+
+/// The size of the small figures charts set beside or under them: value
+/// lines' labels, an axis, zones.
+pub const axis_text_size = 9.5;
 
 /// A part of the ring between `r_in` and `r_out`, from angle `a0` to `a1`
 /// clockwise from the top, in `color`: in pieces of at most half a turn,
@@ -118,7 +173,7 @@ pub fn valueLines(c: *ui.Context, lines: []const ValueLine, h: f32, top: f32, lo
         if (labels and l.label.len > 0) {
             const d = ui.div(c).absolute().offset(2, @max(0, y - 13)).h(12);
             defer d.end();
-            ui.text(c, l.label, .{ .size = 9.5, .mono = true, .color = t.muted });
+            ui.text(c, l.label, .{ .size = axis_text_size, .mono = true, .color = t.muted });
         }
     }
 }
@@ -144,7 +199,7 @@ pub const FrameSpec = struct {
     }
 };
 
-const axis_style: ui.TextStyle = .{ .size = 9.5, .mono = true };
+const axis_style: ui.TextStyle = .{ .size = axis_text_size, .mono = true };
 
 /// A chart's frame, with an axis beside it or texts under it: open it
 /// before the chart, which then takes its width, and close it after.
@@ -252,10 +307,14 @@ pub const Frame = struct {
 
 /// Names box `index` for a screen reader as a chart: one image called
 /// `label`, saying `value`. Without a label, an interactive chart is
-/// called "Chart", and any other is left out, as a decoration.
-pub fn describe(c: *ui.Context, index: u32, label: []const u8, value: []const u8, interactive: bool) void {
+/// called `unnamed` (its `chart_text`), and any other is left out, as a
+/// decoration.
+pub fn describe(c: *ui.Context, index: u32, label: []const u8, value: []const u8, interactive: bool, unnamed: []const u8) void {
     if (label.len == 0 and !interactive) return ui.access.hide(c, index);
-    ui.access.describe(c, index, .{ .role = .image, .label = if (label.len > 0) label else "Chart", .value = value });
+    // An interactive chart is adjustable: a screen reader's swipes step
+    // through its slots, saying each one's tooltip as its value.
+    if (interactive) return c.adjustable(index, .{ .role = .image, .label = if (label.len > 0) label else unnamed, .value = value });
+    ui.access.describe(c, index, .{ .role = .image, .label = label, .value = value });
 }
 
 /// What the pointer or the keys point at in a chart of `count` slots
@@ -280,12 +339,14 @@ pub const Inspect = struct {
         const it = c.interact(index, .{ .focusable = true });
         // The slot pointed at or moved to, and where the pointer was when
         // it last picked one (none while it is off the chart).
-        const kept = c.state(struct { slot: ?usize = null, x: ?f32 = null }, "chart-slot");
+        // Whether a screen reader stepped to it: the slot stays current
+        // while its reader is on the chart, as the pointer's does under it.
+        const kept = c.state(struct { slot: ?usize = null, x: ?f32 = null, voiced: bool = false }, "chart-slot");
         if (count == 0 or first >= count) return .{ .focused = it.focused, .id = it.id };
         if (kept.slot) |s| if (s >= count) {
             kept.slot = count - 1;
         };
-        if (it.focused) c.node(index).style.border = kit.tokens(c).primary.alpha(0.6);
+        if (it.focused) c.node(index).style.border = focus.ring(c);
         if (!it.hovered) kept.x = null;
         if (it.hovered) {
             c.wants_moves = true;
@@ -295,13 +356,23 @@ pub const Inspect = struct {
                 const n: f32 = @floatFromInt(count);
                 const x = (c.input.mouse.x - r.x) / r.w;
                 kept.slot = @intFromFloat(std.math.clamp(if (points) @round(x * (n - 1)) else x * n, 0, n - 1));
+                kept.voiced = false;
             };
         }
         if (it.focused) kept.slot = keys(c, kept.slot orelse count - 1, count, first);
+        // A screen reader's swipe up or down steps from slot to slot, as
+        // Right and Left do.
+        if (it.a11y_step != 0) {
+            const up = it.a11y_step > 0;
+            // From nothing, the first swipe lands on an end.
+            kept.slot = if (kept.slot) |at| (if (up) @min(at + 1, count - 1) else @max(first, at -| 1)) else if (up) first else count - 1;
+            kept.voiced = true;
+            c.changed = true;
+        }
         if (kept.slot) |s| if (s < first) {
             kept.slot = if (it.focused) first else null;
         };
-        if (!it.hovered and !it.focused) return .{ .id = it.id };
+        if (!it.hovered and !it.focused and !kept.voiced) return .{ .id = it.id };
         return .{ .current = kept.slot, .focused = it.focused, .id = it.id };
     }
 
@@ -327,7 +398,7 @@ fn keys(c: *ui.Context, slot: usize, count: usize, first: usize) usize {
 }
 
 test {
-    _ = @import("chart_more_tests.zig");
+    _ = @import("chart_tests.zig");
 }
 
 test "rampColor blends between stops and holds at the ends" {

@@ -16,11 +16,11 @@ const kit = nanoui.kit;
 const chart = @import("chart.zig");
 
 pub const Options = struct {
-    /// Across, in points.
-    size: f32 = 96,
-    /// The ring's thickness.
+    /// Across, in points before `scale`.
+    diameter: f32 = 96,
+    /// The ring's thickness, in points before `scale`.
     thickness: f32 = 12,
-    /// Between the parts, at the ring's middle.
+    /// Between the parts, at the ring's middle, in points before `scale`.
     gap: f32 = 2,
     /// Where no part is; null takes the track of the kit's progress bar.
     track: ?ui.Color = null,
@@ -44,33 +44,26 @@ pub const Options = struct {
 pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     const t = kit.tokens(c);
     const k = opts.scale;
-    const size = opts.size * k;
+    const size = opts.diameter * k;
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();
-    chart.describe(c, box.index, opts.label, opts.value_text, false);
+    chart.describe(c, box.index, opts.label, opts.value_text, false, "");
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
-    // In its first frame it has no size: draw it again once it has.
-    if (cv.size.w == 0) c.frameIn(0);
+    // In its first frame it has no size: the canvas asks for the frame
+    // that gives it one.
     const r_out = @min(cv.size.w, cv.size.h) / 2;
     const thick = @min(opts.thickness * k, r_out);
     if (r_out > 0) {
         const center: ui.Point = .{ .x = cv.size.w / 2, .y = cv.size.h / 2 };
         const r_in = r_out - thick;
-        var sum: f32 = 0;
-        // The first parts ease to new values; any after them move at once.
-        var eased: [32]f32 = undefined;
-        for (parts, 0..) |p, i| {
-            const v = chart.partShare(p.value);
-            const e = if (i < eased.len) ui.motion.number(c, c.print("part-{d}", .{i}), v, .{ .tween = .{ .duration = 0.35 } }) else v;
-            if (i < eased.len) eased[i] = e;
-            sum += e;
-        }
+        var eased: [chart.max_eased]f32 = undefined;
+        const sum = chart.easeParts(c, parts, &eased);
         const whole = if (opts.whole) sum else @max(sum, 1);
         const gap = opts.gap * k / (r_out - thick / 2);
         var from: f32 = 0;
         var drawn: usize = 0;
         if (whole > 0) for (parts, 0..) |p, i| {
-            const sweep = (if (i < eased.len) eased[i] else chart.partShare(p.value)) / whole * std.math.tau;
+            const sweep = chart.eased(parts, &eased, i) / whole * std.math.tau;
             defer from += sweep;
             if (sweep <= gap) continue;
             drawn += 1;
@@ -84,8 +77,8 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
             chart.arc(c, cv, center, r_out, r_in, from + gap / 2, std.math.tau - gap / 2, track);
         }
     }
-    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.size * 0.2), .weight = .semibold, .color = t.foreground });
-    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.size * 0.11), .color = t.muted });
+    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.diameter * 0.2), .weight = .semibold, .color = t.foreground });
+    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.diameter * 0.11), .color = t.muted });
 }
 
 const cyan: ui.Color = .hex(0x22d3ee);

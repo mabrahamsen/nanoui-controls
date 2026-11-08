@@ -33,8 +33,9 @@ pub const Options = struct {
     min: f32 = 0,
     /// The value at the top. A history that goes higher raises the top to
     /// its peak, so a quiet history doesn't fill the chart and a loud one
-    /// isn't cut off, unless `fixed_max`.
-    max: f32 = 1,
+    /// isn't cut off, unless `fixed_max`. Null takes the history's peak,
+    /// as every chart with a scale does.
+    max: ?f32 = 1,
     /// The top stays at `max`, and readings above it are drawn full.
     fixed_max: bool = false,
     /// The shortest bar, as a share of the height, so a reading at `min`
@@ -45,9 +46,20 @@ pub const Options = struct {
     fade: ?f32 = 0.35,
     /// Lines across at these values, behind the bars.
     value_lines: []const chart.ValueLine = &.{},
+    /// The value lines' labels in a gutter beside the chart, and texts
+    /// under it, as `bars`' (`axis`, `start_text`, `end_text`).
+    axis: chart.Axis = .none,
+    start_text: []const u8 = "",
+    end_text: []const u8 = "",
+    /// The user can point at a reading, or take the keyboard and step
+    /// through them, as `bars`: each says its `tips` text in a tooltip and
+    /// to a screen reader, one a reading shown, oldest first.
+    interactive: bool = false,
+    tips: []const []const u8 = &.{},
     /// What a screen reader calls the chart, and says it shows, as `bars`.
     label: []const u8 = "",
     value_text: []const u8 = "",
+    chart_text: []const u8 = "Chart",
     /// Multiplies the chart's lengths, as `bars`.
     scale: f32 = 1,
 };
@@ -61,47 +73,49 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
     const shown = @min(values.len, opts.capacity);
     const skip = values.len - shown;
     const head = if (values.len > 0) opts.head % values.len else 0;
-    var peak = opts.max;
-    if (!opts.fixed_max) for (0..shown) |i| {
+    var most: f32 = -std.math.inf(f32);
+    for (0..shown) |i| {
         const v = values[(head + skip + i) % values.len];
-        if (std.math.isFinite(v)) peak = @max(peak, v);
-    };
-    const empty = opts.capacity - shown;
+        if (std.math.isFinite(v)) most = @max(most, v);
+    }
+    const peak = chart.scaleTop(opts.min, opts.max, opts.fixed_max, most);
     const baseline = if (opts.baseline > 0) @min(opts.baseline, 1) else 0;
+    // Drawn as bars in units from `min`, so the bars rise from the bottom
+    // whatever `min` is, and value lines and an axis sit on the same scale.
+    const range = peak - opts.min;
+    const lines = c.alloc().alloc(chart.ValueLine, opts.value_lines.len) catch @panic("trend: out of memory");
+    for (lines, opts.value_lines[0..lines.len]) |*l, v| l.* = .{ .value = v.value - opts.min, .label = v.label };
     var b = bars_mod.bars(c, .{
         .count = opts.capacity,
+        .readings = shown,
+        .units = true,
+        .max = range,
+        .fixed_max = true,
         .width = opts.width,
         .height = opts.height,
         .gap = opts.gap,
+        .value_lines = lines,
+        .axis = opts.axis,
+        .start_text = opts.start_text,
+        .end_text = opts.end_text,
+        .interactive = opts.interactive,
         .label = opts.label,
         .value_text = opts.value_text,
+        .chart_text = opts.chart_text,
         .scale = opts.scale,
     });
-    if (opts.value_lines.len > 0) {
-        const h = switch (opts.height) {
-            .px => |v| v * opts.scale,
-            else => if (chart.lastSize(c, b.row.index)) |sz| sz.h else 0,
-        };
-        chart.valueLines(c, opts.value_lines, h, 0, opts.min, peak, true);
-    }
     defer b.end();
+    if (b.current) |r| if (r < opts.tips.len) b.tooltip(opts.tips[r]);
     while (b.next()) |slot| {
-        if (slot.index < empty) continue;
-        const v = level(values[(head + skip + slot.index - empty) % values.len], opts.min, peak) orelse continue;
+        const r = chart.slotReading(values, opts.head, opts.capacity, slot.index) orelse continue;
+        const v = chart.level(r, opts.min, peak) orelse continue;
         const base = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, v) else col;
-        slot.bar(&.{.{ .value = @max(baseline, v), .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
+        slot.bar(&.{.{ .value = @max(baseline, v) * range, .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
     }
 }
 
-/// Where `x` falls between `min` and `peak`, from 0 to 1; null for no
-/// reading (not a number, or infinite). A scale with no room between
-/// `min` and `peak` puts every reading at 0.
-pub fn level(x: f32, min: f32, peak: f32) ?f32 {
-    if (!std.math.isFinite(x)) return null;
-    const range = peak - min;
-    if (!std.math.isFinite(range) or !(range > 0)) return 0;
-    return std.math.clamp((x - min) / range, 0, 1);
-}
+/// Where `x` falls between `min` and `peak`, as the charts share it.
+pub const level = chart.level;
 
 /// Slot `i` of `n`'s opacity: `fade` at the oldest, rising to 1 at the
 /// newest; 1 without a fade, or with one slot.

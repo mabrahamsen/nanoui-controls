@@ -4,6 +4,8 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const focus = @import("focus.zig");
+const builtin = @import("builtin");
+const Grid = @import("grid.zig").Grid;
 
 /// What takes the keyboard for a grid with a selection, as the pager
 /// does: from a click in the grid (see `Grid.end`), or Tab (`focus.take`).
@@ -77,7 +79,8 @@ pub const Typing = struct {
 
 /// The text typed so far, with what was typed this frame, while the grid
 /// has the keyboard (`focused`); null when nothing was typed this frame.
-/// A pause of `type_pause` starts it afresh.
+/// A pause of `type_pause` starts it afresh. The text is a copy in the
+/// frame's memory: `typing` lives in nanoui's state, which can move.
 pub fn useTyping(c: *ui.Context, focused: bool, typing: *Typing, count: usize) ?[]const u8 {
     const chars = c.input.chars;
     if (!focused or count == 0 or chars.len == 0 or c.input.cmd or c.input.ctrl) return null;
@@ -85,6 +88,31 @@ pub fn useTyping(c: *ui.Context, focused: bool, typing: *Typing, count: usize) ?
     const n = @min(chars.len, typing.buf.len - typing.len);
     @memcpy(typing.buf[typing.len..][0..n], chars[0..n]);
     typing.len += n;
+    // A character cut in half where the text is full is dropped.
+    while (typing.len > 0 and !std.unicode.utf8ValidateSlice(typing.buf[0..typing.len])) typing.len -= 1;
     typing.at = c.time;
-    return typing.buf[0..typing.len];
+    return c.alloc().dupe(u8, typing.buf[0..typing.len]) catch null;
+}
+
+/// Backspace or Cmd+Up (Alt+Up off the Mac), and Escape, while the
+/// grid has the keyboard.
+pub fn otherKeys(g: *Grid) void {
+    if (!g.focused) return;
+    const c = g.c;
+    const mac = builtin.os.tag.isDarwin();
+    if (c.shortcut(.{ .key = ui.Shortcut.up, .cmd = mac, .alt = !mac })) {
+        g.back = true;
+        return;
+    }
+    const key = c.input.key orelse return;
+    switch (key) {
+        .backspace => g.back = true,
+        .up => if (if (mac) c.input.cmd else c.input.alt) {
+            g.back = true;
+        } else return,
+        .escape => g.escaped = true,
+        else => return,
+    }
+    c.input.key = null;
+    c.changed = true;
 }
