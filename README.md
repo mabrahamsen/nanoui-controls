@@ -39,7 +39,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.5.1"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.6.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -199,7 +199,11 @@ f.end();
 - `row` puts its label in the column and leaves the row open for a control. A `hint` sits under the control, muted, or an `err` in its place in the theme's danger color, and `required` marks the label with "*", as the kit's field has them. `info` adds an ⓘ after the label that says more in a tooltip; `disabled` dims the label and hint beside a control the caller disables; `label_top` puts the label at the top, beside a control taller than a line. An empty label leaves just the control column, for a checkbox with its own title or buttons under the controls.
 - A row's label names its control to a screen reader, whole even when it is cut short, as nanoui names a control by the text before it on its line.
 - `property` shows a label and a value that wraps within the room left, the label beside its first line; a screen reader hears them as one ("Hostname, studio.local"). With `selectable`, the value can be selected and copied; with `wrap = false`, it keeps to a line, ends in "…" and shows whole in a tooltip.
-- `heading` titles the rows after it, with a muted `description` under the title if wanted. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them. `row_lines` draws a line between rows.
+- `heading` titles the rows after it, with a muted `description` under the title if wanted, and a `status` (danger for what can't be undone) that colors its title and its card. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them. `row_lines` draws a line between rows.
+- `foldingHeading` folds the rows after it and opens them again, eased, on a click or Enter or Space; the caller keeps whether it is open and draws its rows while it returns true. A screen reader hears it as a button that says whether it is expanded (`expanded_text`, `collapsed_text`).
+- `link` is a row that leads somewhere, such as another pane: its label, its value and a chevron at its end, clicked as a whole or with Enter or Space; it returns true when it is.
+- `note` puts muted text under the rows before it, under their card when grouped.
+- `control_align = .end` puts controls, values and hints at the rows' ends, as a settings window's cards have them.
 - The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls.
 - Every row is at least the height of the kit's controls at its `size`, so selects, inputs and toggles keep one rhythm; `gap` is the room after the labels and `row_gap` between rows.
 - With `stack_below`, a form narrower than that puts its labels above what they name, as the kit's field has them, for a narrow pane; `stacked` says it did.
@@ -386,7 +390,7 @@ l.end();
 [`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, Form, and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
-- **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)): a text field, swatches, a number input, a select and toggles in rows under headings, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, and properties to read, copy, or read whole in a tooltip. Narrow the window and its labels go above their controls; switch them to the end of their column, and the lines between rows.
+- **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)) in cards, its controls at the rows' ends: a text field, swatches, a number input, a select and toggles in rows under headings with descriptions, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, a note, an "Advanced" section that folds, properties to read, copy, or read whole in a tooltip, a row that leads somewhere, and a danger zone. Narrow the window and its labels go above their controls; switch off the cards, the lines between rows, and the controls at the ends, or put the labels by their controls.
 - **Charts** is a system monitor whose readings change four times a second ([`charts.zig`](examples/gallery/charts.zig)): stats with their trends at the top, the CPU's load as a trend with a line at half, a meter, and bars up and down for how it changed; network traffic as a line chart to point at or step through with the keys; memory as a donut and a breakdown with a legend that runs on to new lines; disk use as a list of bars by folder to click; the fan as a glowing level; and the heat ramp as a strip. Pause it, switch the ramp, the glow and the fade, and set the meter's segments.
 
 ```sh

@@ -103,6 +103,7 @@ pub const FormRow = form_mod.Row;
 pub const FormRowOptions = form_mod.RowOptions;
 pub const FormPropertyOptions = form_mod.PropertyOptions;
 pub const FormHeadingOptions = form_mod.HeadingOptions;
+pub const FormLinkOptions = form_mod.LinkOptions;
 
 const swatches_mod = @import("swatches.zig");
 pub const swatches = swatches_mod.swatches;

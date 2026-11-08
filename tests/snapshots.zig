@@ -533,6 +533,50 @@ test "a form's sections in cards, light and dark" {
     try expectView("form-grouped-dark", .init(&x, Forms.view), .{ .height = 380, .dark = true });
 }
 
+/// A settings pane: sections as cards with their controls at the rows'
+/// ends, a note, a folded heading, a row that leads somewhere, and a
+/// danger zone.
+const SettingsPane = struct {
+    on: bool = true,
+    every: ?usize = 1,
+    advanced: bool = false,
+
+    fn view(x: *SettingsPane, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(12);
+        defer root.end();
+        var f = controls.form(c, .{ .size = .sm, .row_lines = true, .grouped = true, .control_align = .end });
+        f.heading("Backups", .{ .description = "How often, and how many to keep." });
+        {
+            const r = f.row("Back up", .{});
+            _ = ui.toggle(c, "", &x.on);
+            r.end();
+        }
+        {
+            const r = f.row("Every", .{ .hint = "While the computer is awake." });
+            _ = kit.select(c, "every", &.{ "Hour", "Day", "Week" }, &x.every, .{ .width = 100 });
+            r.end();
+        }
+        f.note("Snapshots older than a year are kept monthly.");
+        _ = f.foldingHeading("Advanced", &x.advanced, .{});
+        f.heading("This computer", .{});
+        f.property("Host", "studio.local", .{ .mono = true });
+        _ = f.link("Repository", "studio", .{});
+        f.heading("Danger zone", .{ .status = .danger });
+        {
+            const r = f.row("Snapshots", .{});
+            _ = kit.button(c, "Delete all", .{ .variant = .danger, .size = .sm });
+            r.end();
+        }
+        f.end();
+    }
+};
+
+test "a settings pane: cards, controls at the end, a note, a fold, a link and a danger zone, light and dark" {
+    var x: SettingsPane = .{};
+    try expectView("form-settings", .init(&x, SettingsPane.view), .{ .height = 560 });
+    try expectView("form-settings-dark", .init(&x, SettingsPane.view), .{ .height = 560, .dark = true });
+}
+
 /// Gauges at a few values, one in a ramp's colors, and a stat as a
 /// reading in a color, in a flow.
 const Gauges = struct {

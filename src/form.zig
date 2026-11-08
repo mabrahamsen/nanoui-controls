@@ -20,6 +20,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
+const sections = @import("form_sections.zig");
 
 pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
@@ -32,6 +33,9 @@ pub const Options = struct {
     /// Labels at the start of their column, or at its end, beside what
     /// they name.
     label_align: enum { start, end } = .start,
+    /// Controls and values after the labels' column, or at the row's end,
+    /// as a settings window's cards have them.
+    control_align: enum { start, end } = .start,
     /// The labels' color; null takes the theme's muted text.
     label_color: ?ui.Color = null,
     /// The gap after the labels, and between rows, in points before
@@ -48,6 +52,9 @@ pub const Options = struct {
     /// what they name, as the kit's field has them, for a form in a narrow
     /// pane; null keeps them beside it at any width.
     stack_below: ?f32 = null,
+    /// What a screen reader says of a folding heading, open or not.
+    expanded_text: []const u8 = "expanded",
+    collapsed_text: []const u8 = "collapsed",
     /// Multiplies its lengths, but not its text, for an app that zooms its
     /// layout along with `c.setZoom`, as the grid's does.
     scale: f32 = 1,
@@ -75,6 +82,14 @@ pub const RowOptions = struct {
 pub const HeadingOptions = struct {
     /// What the rows under it are for, muted under the title, wrapping.
     description: []const u8 = "",
+    /// The title's color, and its card's border, as the kit's statuses:
+    /// danger for a section of what can't be undone.
+    status: kit.Status = .neutral,
+};
+
+pub const LinkOptions = struct {
+    /// Dimmed, and takes no click.
+    disabled: bool = false,
 };
 
 pub const PropertyOptions = struct {
@@ -87,8 +102,8 @@ pub const PropertyOptions = struct {
     wrap: bool = true,
 };
 
-/// Opens a form as wide as its parent: add its `row`s, `property`s and
-/// `heading`s, then `end` it.
+/// Opens a form as wide as its parent: add its `row`s, `property`s,
+/// `link`s, `heading`s and `note`s, then `end` it.
 pub fn form(c: *ui.Context, opts: Options) Form {
     const box = ui.div(c).column().wFull().gap(opts.row_gap * opts.scale);
     // Its width as the last frame laid it out, only when it matters.
@@ -126,8 +141,13 @@ pub const Form = struct {
     widest: f32 = 0,
     /// A row has been drawn since the form or its last heading began.
     any: bool = false,
-    /// The card the rows go in, while one is open.
+    /// Anything has been drawn: a heading after it has room above.
+    started: bool = false,
+    /// The card the rows go in, while one is open, and its border.
     card: ?ui.Div = null,
+    card_border: ?ui.Color = null,
+    /// The rows of a folding heading, while its section is open.
+    fold: ?sections.Fold = null,
 
     /// A row with `label` in the form's column, open after it for a
     /// control: draw it, then `end` the row.
@@ -135,9 +155,11 @@ pub const Form = struct {
         const c = f.c;
         const k = f.opts.scale;
         f.before(label, opts.required, opts.info.len > 0);
-        const r = f.open(!opts.label_top);
+        const r = f.openRow(!opts.label_top);
         f.drawLabel(label, .{ .required = opts.required, .info = opts.info, .disabled = opts.disabled, .names = true });
-        return .{ .c = c, .row = r, .opts = opts, .size = f.opts.size, .indent = if (f.stacked) 0 else f.columnWidth() + f.opts.gap * k };
+        const at_end = f.atEnd();
+        if (at_end) ui.spacer(c);
+        return .{ .c = c, .row = r, .opts = opts, .size = f.opts.size, .indent = if (f.stacked) 0 else f.columnWidth() + f.opts.gap * k, .at_end = at_end };
     }
 
     /// `label` in the form's column, then `value`, wrapping within the
@@ -146,18 +168,19 @@ pub const Form = struct {
     pub fn property(f: *Form, label: []const u8, value: []const u8, opts: PropertyOptions) void {
         const c = f.c;
         f.before(label, false, false);
-        const r = f.open(false);
+        const r = f.openRow(false);
         defer r.end();
         ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
         const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
         f.drawLabel(label, .{ .top = f.firstLine(.{ .size = style.size }) });
         var v = ui.div(c).wFull().pt(f.firstLine(style));
+        if (f.atEnd()) v = v.row().justifyEnd();
         if (opts.selectable) c.node(v.index).style.selectable = true;
         defer v.end();
         if (opts.wrap) {
             var s = style;
             s.wrap = true;
-            return ui.text(c, value, s);
+            return endText(c, value, s, f.atEnd(), v.index, 0);
         }
         var s = style;
         s.truncate = .ellipsis;
@@ -168,36 +191,58 @@ pub const Form = struct {
         kit.tooltip(c, it, value, .{});
     }
 
+    /// A row that leads somewhere, such as another pane: its label, its
+    /// value muted at its end and a chevron, clicked as a whole or with
+    /// Enter or Space once Tab reaches it; true when it is.
+    pub fn link(f: *Form, label: []const u8, value: []const u8, opts: LinkOptions) bool {
+        const c = f.c;
+        const k = f.opts.scale;
+        const t = kit.tokens(c);
+        f.before(label, false, false);
+        var r = f.openRow(true);
+        defer r.end();
+        const it = c.interact(r.index, .{ .focusable = !opts.disabled });
+        const live = !opts.disabled;
+        if (live and it.hovered) c.cursor_hand = true;
+        if (it.focused) r = r.border(t.primary.alpha(0.6)).rounded(@max(0, t.radius - 2) * k);
+        ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
+        f.drawLabel(label, .{ .disabled = opts.disabled });
+        {
+            var v = ui.div(c).wFull().row().itemsCenter().justifyEnd().gap(4 * k);
+            if (opts.disabled) v = v.opacity(0.45);
+            defer v.end();
+            const col = if (live and it.hovered) t.foreground else t.muted;
+            ui.text(c, value, .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis });
+            ui.icon(c, "chevron.right", .{ .size = f.opts.size.text() - 3, .color = col });
+        }
+        return live and (it.clicked or sections.activated(c, it.focused));
+    }
+
     /// A heading over the rows after it, its title in the theme's text and
     /// a description under it if it has one, with room above it after
     /// rows. Grouped, its rows go in a card under it.
     pub fn heading(f: *Form, title: []const u8, opts: HeadingOptions) void {
-        const c = f.c;
-        const k = f.opts.scale;
-        const t = kit.tokens(c);
-        const text = f.opts.size.text();
-        f.closeCard();
-        // Grouped, in line with the labels in the card under it.
-        const h = ui.div(c).column().wFull().gap(2 * k).px(if (f.opts.grouped) f.cardPadding() else 0).pt(if (f.any) @round(text * 1.2) * k else 0).pb(@round(text * 0.25) * k);
-        defer h.end();
-        {
-            const head = ui.div(c).wFull();
-            defer head.end();
-            ui.text(c, title, .{ .size = text - 0.5, .weight = .semibold, .color = t.foreground });
-            ui.access.describe(c, head.index, .{ .role = .static_text, .label = title, .header = true });
-        }
-        if (opts.description.len > 0) {
-            const d = ui.div(c).wFull();
-            defer d.end();
-            ui.text(c, opts.description, .{ .size = text - 1.5, .color = t.muted, .wrap = true });
-        }
-        f.any = false;
+        sections.heading(f, title, opts);
+    }
+
+    /// A heading that folds the rows after it and opens them again, eased:
+    /// a click on it, or Enter or Space once Tab reaches it, turns
+    /// `open.*`, which the caller keeps. True while its rows show: draw
+    /// them only then. It is known by its title, so give each its own.
+    pub fn foldingHeading(f: *Form, title: []const u8, open: *bool, opts: HeadingOptions) bool {
+        return sections.foldingHeading(f, title, open, opts);
+    }
+
+    /// A note under the rows before it, muted, wrapping: under their card,
+    /// when grouped. Rows after it start a card of their own.
+    pub fn note(f: *Form, text: []const u8) void {
+        sections.note(f, text);
     }
 
     /// Ends the form, keeping its widest label for the next frame's column.
     pub fn end(f: *Form) void {
         // Its state is in its own box, out of the last card.
-        f.closeCard();
+        sections.closeSection(f);
         const widest = @min(f.widest, f.opts.max_label_width * f.opts.scale);
         const kept = state(f.c);
         if (f.opts.label_width == null and kept.width != widest) {
@@ -207,14 +252,9 @@ pub const Form = struct {
         f.box.end();
     }
 
-    /// Room inside a card, either side of its rows.
-    fn cardPadding(f: *const Form) f32 {
-        return @round(f.opts.size.text() * 0.9) * f.opts.scale;
-    }
-
-    fn closeCard(f: *Form) void {
-        if (f.card) |card| card.end();
-        f.card = null;
+    /// Controls and values go at the row's end.
+    fn atEnd(f: *const Form) bool {
+        return f.opts.control_align == .end and !f.stacked;
     }
 
     /// The labels' column, in points.
@@ -227,7 +267,7 @@ pub const Form = struct {
 
     /// Opens a row: the label beside what it names, at least the kit's
     /// height and `centered` on it, or stacked above it.
-    fn open(f: *const Form, centered: bool) ui.Div {
+    fn openRow(f: *const Form, centered: bool) ui.Div {
         const c = f.c;
         const k = f.opts.scale;
         if (f.stacked) return ui.div(c).column().wFull().gap(4 * k);
@@ -296,14 +336,25 @@ pub const Form = struct {
             if (info) w += infoWidth(size, k) + 2 * k;
             f.widest = @max(f.widest, w);
         }
-        if (f.opts.grouped and f.card == null) {
-            const t = kit.tokens(c);
-            f.card = ui.div(c).column().wFull().px(f.cardPadding()).py(4 * k).gap(f.opts.row_gap * k).bg(t.surface).border(t.border).rounded(t.radius * k);
-        }
+        sections.openCard(f);
         if (f.opts.row_lines and f.any) ui.div(c).wFull().h(1 * k).bg(kit.tokens(c).border).end();
         f.any = true;
+        f.started = true;
     }
 };
+
+/// Wrapping `text` in the open row `holder`, at its end when `at_end`: in
+/// a box as wide as the text, or as the room the row had last frame
+/// (after `inset`) when that is less, as wrapping text takes all the room
+/// it is given and a row's end can't move it.
+fn endText(c: *ui.Context, text: []const u8, style: ui.TextStyle, at_end: bool, holder: u32, inset: f32) void {
+    if (!at_end) return ui.text(c, text, style);
+    var w = @ceil(c.text.width(text, style)) + 1;
+    if (c.rects.get(c.node(holder).id)) |r| w = @min(w, @max(0, r.w - inset));
+    const box = ui.div(c).w(w);
+    defer box.end();
+    ui.text(c, text, style);
+}
 
 /// The ⓘ's box beside a label of `size`: the icon, a point under the
 /// text, is drawn a point wider either side, after a gap of 2.
@@ -319,6 +370,8 @@ pub const Row = struct {
     size: kit.Size,
     /// Where the control starts, for the hint under it.
     indent: f32,
+    /// The control is at the row's end, and its hint under it there.
+    at_end: bool,
 
     /// Ends the row, then puts its hint or error under the control.
     pub fn end(r: Row) void {
@@ -327,12 +380,14 @@ pub const Row = struct {
         if (msg.len == 0) return;
         const t = kit.tokens(r.c);
         var under = ui.div(r.c).row().wFull().pl(r.indent);
+        if (r.at_end) under = under.justifyEnd();
         if (r.opts.disabled) under = under.opacity(0.45);
         defer under.end();
-        ui.text(r.c, msg, .{ .size = r.size.text() - 1, .color = if (r.opts.err.len > 0) t.danger else t.muted, .wrap = true });
+        endText(r.c, msg, .{ .size = r.size.text() - 1, .color = if (r.opts.err.len > 0) t.danger else t.muted, .wrap = true }, r.at_end, under.index, r.indent);
     }
 };
 
 test {
     _ = @import("form_tests.zig");
+    _ = @import("form_sections_tests.zig");
 }

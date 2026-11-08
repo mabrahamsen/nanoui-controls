@@ -2,12 +2,14 @@
 //! row of swatches to pick a color from, and properties to read. Leave
 //! the name empty to see an error in place of its hint; rest on the ⓘ by
 //! "Keep latest" for more; switch off backups to dim the rows that
-//! depend on them. The host and the version can be selected and copied,
-//! and the repository's path, cut short, shows whole in a tooltip.
+//! depend on them; open "Advanced", which folds; click "Repository",
+//! which leads somewhere. The host and the version can be selected and
+//! copied, and the path, cut short, shows whole in a tooltip. Its last
+//! section is a danger zone.
 //! Narrow the window (or widen the sidebar) and the labels go above
 //! their controls. Above the form, put its labels at the end of their
-//! column, by their controls, draw lines between its rows, or put each
-//! heading's rows in a card under it.
+//! column, by their controls, draw lines between its rows, put each
+//! heading's rows in a card under it, or its controls at the rows' ends.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const controls = @import("nanoui_controls");
@@ -24,6 +26,12 @@ pub const Settings = struct {
     labels_at_end: bool = false,
     lines: bool = true,
     cards: bool = true,
+    controls_at_end: bool = true,
+    advanced: bool = false,
+    compression: ?usize = 1,
+    limit: f64 = 0,
+    opened: usize = 0,
+    deleted: usize = 0,
 
     const colors = [_]controls.Swatch{
         .{ .color = .hex(0xef4444), .label = "Red" },
@@ -46,8 +54,9 @@ pub const Settings = struct {
             _ = ui.checkbox(c, "Labels by their controls", &s.labels_at_end);
             _ = ui.checkbox(c, "Lines between rows", &s.lines);
             _ = ui.checkbox(c, "Sections as cards", &s.cards);
+            _ = ui.checkbox(c, "Controls at the end", &s.controls_at_end);
         }
-        var f = controls.form(c, .{ .label_align = if (s.labels_at_end) .end else .start, .row_lines = s.lines, .grouped = s.cards, .size = .sm, .stack_below = 420 });
+        var f = controls.form(c, .{ .label_align = if (s.labels_at_end) .end else .start, .row_lines = s.lines, .grouped = s.cards, .control_align = if (s.controls_at_end) .end else .start, .size = .sm, .stack_below = 420 });
         f.heading("Account", .{ .description = "How you appear to others on this computer." });
         {
             const empty = s.name.text().len == 0;
@@ -82,11 +91,31 @@ pub const Settings = struct {
             _ = ui.toggle(c, "", &s.notify);
             r.end();
         }
+        f.note("Snapshots older than a year are thinned to one a month.");
+        if (f.foldingHeading("Advanced", &s.advanced, .{ .description = "Rarely needed: how snapshots are packed and sent." })) {
+            {
+                const r = f.row("Compression", .{});
+                _ = kit.select(c, "compression", &.{ "None", "Fast", "Small" }, &s.compression, .{ .width = 120 });
+                r.end();
+            }
+            {
+                const r = f.row("Upload limit", .{ .hint = "In MB/s; 0 for none." });
+                _ = kit.numberInput(c, &s.limit, .{ .min = 0, .max = 1000, .step = 5, .width = 120 });
+                r.end();
+            }
+        }
         f.heading("This computer", .{});
         f.property("Version", "1.4.2", .{ .mono = true, .selectable = true });
         f.property("Host", "studio.local", .{ .mono = true, .selectable = true });
-        f.property("Repository", "/Volumes/Backup/kopia/repositories/studio/snapshots", .{ .mono = true, .wrap = false });
-        f.property("About", "Every snapshot of this computer is kept in the repository, and the oldest are deleted as new ones are made.", .{});
+        f.property("Path", "/Volumes/Backup/kopia/repositories/studio/snapshots/latest", .{ .mono = true, .wrap = false });
+        if (f.link("Repository", "studio", .{})) s.opened += 1;
+        if (s.opened > 0) f.note(c.print("Opened the repository's settings {d} times.", .{s.opened}));
+        f.heading("Danger zone", .{ .status = .danger, .description = "These can't be undone." });
+        {
+            const r = f.row("Snapshots", .{ .hint = if (s.deleted > 0) c.print("Deleted {d} times; there were none to delete.", .{s.deleted}) else "" });
+            if (kit.button(c, "Delete all", .{ .variant = .danger, .size = .sm }).clicked) s.deleted += 1;
+            r.end();
+        }
         f.end();
     }
 };
