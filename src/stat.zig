@@ -3,7 +3,13 @@
 //! trend of its history under it. A dashboard's row of them says how
 //! things stand.
 //!
+//! The figure can have a unit after it and a line of detail under it, and
+//! shows a spinner while it is loading; `statButton` is a stat that can be
+//! clicked, to lead to more.
+//!
 //!     controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .history = per_minute });
+//!     controls.stat(c, "Peak", "87", .{ .unit = "%", .detail = "over the last hour" });
+//!     if (controls.statButton(c, "Alerts", "3", .{}).clicked) show(.alerts);
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -37,27 +43,91 @@ pub const Options = struct {
     /// A tile with a background and a border; without, the stat sits on
     /// what it is drawn on.
     card: bool = true,
+    /// After the figure, smaller and muted, on its line: "87" then "%".
+    unit: []const u8 = "",
+    /// A line of muted text under the figure: "over the last hour".
+    detail: []const u8 = "",
+    /// A spinner in place of the figure, which isn't known yet: a figure
+    /// still loading never reads as 0.
+    loading: bool = false,
+    /// What a screen reader says while it is loading.
+    loading_text: []const u8 = "loading",
 };
 
 /// Draws the stat `label` reading `value`.
 pub fn stat(c: *ui.Context, label: []const u8, value: []const u8, opts: Options) void {
+    const box = open(c, opts, false);
+    defer box.end();
+    draw(c, box, label, value, opts, false);
+}
+
+/// Draws the stat `label` reading `value` as something to click, which
+/// leads to more: the tile lightens under the pointer, shows a pointing
+/// hand, and takes the keyboard as a button does (Tab, then Enter or
+/// Space). A screen reader hears it as a button.
+pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Options) ui.Interaction {
+    const t = kit.tokens(c);
+    var box = open(c, opts, true);
+    defer box.end();
+    var it = c.interact(box.index, .{ .focusable = true });
+    if (it.hovered) {
+        c.cursor_hand = true;
+        box = box.bg(if (opts.card) t.surface_hover else t.surface_hover.alpha(0.6));
+    }
+    if (it.focused) {
+        box = box.border(t.primary.alpha(0.6));
+        if (c.input.key == .enter or (c.input.chars.len == 1 and c.input.chars[0] == ' ')) {
+            it.clicked = true;
+            c.input.key = null;
+            c.input.chars = "";
+            c.changed = true;
+        }
+    }
+    draw(c, box, label, value, opts, true);
+    return it;
+}
+
+/// The stat's box: a tile, or padding enough to light up when it can be
+/// clicked.
+fn open(c: *ui.Context, opts: Options, clickable: bool) ui.Div {
     const t = kit.tokens(c);
     var box = ui.div(c).column().gap(4);
     c.node(box.index).style.width = opts.width;
-    if (opts.card) box = box.p(12).rounded(t.radius).bg(t.surface).border(t.border);
-    defer box.end();
+    if (opts.card) {
+        box = box.p(12).rounded(t.radius).bg(t.surface).border(t.border);
+    } else if (clickable) box = box.p(6).rounded(t.radius);
+    return box;
+}
+
+fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts: Options, clickable: bool) void {
+    const t = kit.tokens(c);
+    const figure = if (opts.loading) opts.loading_text else if (opts.unit.len > 0) c.print("{s} {s}", .{ value, opts.unit }) else value;
     ui.access.describe(c, box.index, .{
-        .role = .static_text,
+        .role = if (clickable) .button else .static_text,
         .label = label,
-        .value = if (opts.change.len > 0) c.print("{s}, {s}", .{ value, opts.change }) else value,
+        .value = if (opts.change.len > 0 and !opts.loading) c.print("{s}, {s}", .{ figure, opts.change }) else figure,
     });
     ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
     {
+        const size = opts.size.text() * 2;
         const row = ui.div(c).row().itemsCenter().gap(8);
         defer row.end();
-        ui.text(c, value, .{ .size = opts.size.text() * 2, .weight = .semibold, .color = opts.value_color orelse t.foreground });
-        if (opts.change.len > 0) kit.tag(c, opts.change, .{ .status = opts.status, .size = .xs, .pill = true });
+        if (opts.loading) {
+            const slot = ui.div(c).h(@round(size * 1.2)).row().itemsCenter();
+            defer slot.end();
+            kit.spinner(c, .{ .size = @round(size * 0.7) });
+        } else if (opts.unit.len > 0) {
+            // The unit on the figure's line, at its foot.
+            const fig = ui.div(c).row().itemsEnd().gap(3);
+            defer fig.end();
+            ui.text(c, value, .{ .size = size, .weight = .semibold, .color = opts.value_color orelse t.foreground });
+            const u = ui.div(c).pb(@round(size * 0.12));
+            defer u.end();
+            ui.text(c, opts.unit, .{ .size = @round(size * 0.55), .weight = .medium, .color = t.muted });
+        } else ui.text(c, value, .{ .size = size, .weight = .semibold, .color = opts.value_color orelse t.foreground });
+        if (opts.change.len > 0 and !opts.loading) kit.tag(c, opts.change, .{ .status = opts.status, .size = .xs, .pill = true });
     }
+    if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
     if (opts.history.len > 0) {
         ui.div(c).h(2).end();
         trend_mod.trend(c, opts.history, .{

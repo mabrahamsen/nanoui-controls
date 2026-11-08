@@ -130,15 +130,17 @@ pub const Monitor = struct {
             defer row.end();
             // Since the oldest reading kept: a quarter of a minute ago, or less.
             const minute = (load - m.load.ago(m.load.len -| 1)) * 100;
-            controls.stat(c, "CPU", c.print("{d:.0}%", .{load * 100}), .{
+            controls.stat(c, "CPU", c.print("{d:.0}", .{load * 100}), .{
+                .unit = "%",
                 .change = c.print("{s}{d:.0} pts", .{ if (minute >= 0) "+" else "−", @abs(minute) }),
                 .status = if (minute > 5) .warning else .neutral,
                 .history = m.load.slice(),
                 .history_head = m.load.head,
                 .size = .sm,
             });
-            controls.stat(c, "Memory", c.print("{d:.1} GB", .{used}), .{ .change = c.print("{d:.0}% free", .{(total - used) / total * 100}), .size = .sm });
-            controls.stat(c, "Network", c.print("{d:.1} MB/s", .{traffic}), .{
+            controls.stat(c, "Memory", c.print("{d:.1}", .{used}), .{ .unit = "GB", .detail = c.print("of {d} GB", .{total}), .change = c.print("{d:.0}% free", .{(total - used) / total * 100}), .size = .sm });
+            controls.stat(c, "Network", c.print("{d:.1}", .{traffic}), .{
+                .unit = "MB/s",
                 .change = if (traffic > 30) "busy" else "quiet",
                 .status = if (traffic > 30) .info else .neutral,
                 .history = m.read.slice(),
@@ -161,14 +163,27 @@ pub const Monitor = struct {
         });
         controls.meter(c, load, .{ .segments = @intFromFloat(@round(m.segments)), .ramp = ramp, .glow = glow, .label = "CPU load" });
         {
-            var b = controls.bars(c, .{ .count = capacity, .height = .{ .px = 36 }, .below = 0.5, .interactive = true, .label = "CPU load change" });
-            const empty = capacity - m.change.len;
+            // In points of load, on a fixed scale either side of no change,
+            // the newest at the right.
+            var b = controls.bars(c, .{
+                .count = capacity,
+                .readings = m.change.len,
+                .min = -25,
+                .max = 25,
+                .fixed_max = true,
+                .height = .{ .px = 44 },
+                .value_lines = &.{ .{ .value = 25, .label = "+25" }, .{ .value = 0, .label = "0" }, .{ .value = -25, .label = "−25" } },
+                .axis = .start,
+                .start_text = "−15 s",
+                .end_text = "now",
+                .interactive = true,
+                .label = "CPU load change",
+            });
             while (b.next()) |slot| {
-                if (slot.index < empty) continue;
-                const d = m.change.at(slot.index - empty);
-                slot.bar(&.{.{ .value = d * 2, .color = if (d < 0) t.success else t.warning }});
+                const d = m.change.at(slot.reading.?) * 100;
+                slot.bar(&.{.{ .value = d, .color = if (d < 0) t.success else t.warning }});
             }
-            if (b.current) |i| b.tooltip(if (i >= empty) c.print("{s}{d:.1} pts", .{ if (m.change.at(i - empty) >= 0) "+" else "−", @abs(m.change.at(i - empty)) * 100 }) else "no reading");
+            if (b.current) |i| b.tooltip(c.print("{s}{d:.1} pts", .{ if (m.change.at(i) >= 0) "+" else "−", @abs(m.change.at(i)) * 100 }));
             b.end();
         }
 
@@ -181,7 +196,10 @@ pub const Monitor = struct {
                 .capacity = capacity,
                 .height = .{ .px = 72 },
                 .max = traffic_top,
-                .value_lines = &.{.{ .value = 20, .label = "20 MB/s" }},
+                .value_lines = &.{ .{ .value = 40, .label = "40" }, .{ .value = 20, .label = "20" } },
+                .axis = .end,
+                .start_text = "−15 s",
+                .end_text = "now",
                 .interactive = true,
                 .label = "Network traffic",
                 .value_text = c.print("{d:.1} MB/s", .{traffic}),
@@ -226,7 +244,7 @@ pub const Monitor = struct {
         section(c, "Disk", if (m.opened) |i| c.print("opened {s}", .{folders[i].name}) else "click a folder");
         {
             var items: [folders.len]controls.BarListItem = undefined;
-            for (folders, &items) |f, *it| it.* = .{ .label = f.name, .value = f.gb, .value_text = c.print("{d:.1} GB", .{f.gb}) };
+            for (folders, &items) |f, *it| it.* = .{ .label = f.name, .icon = "folder", .value = f.gb, .value_text = c.print("{d:.1} GB", .{f.gb}) };
             if (controls.barList(c, &items, .{ .clickable = true })) |i| m.opened = i;
         }
 
@@ -302,26 +320,60 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
         .histories => "Histories",
         .parts => "Parts",
     }, .{ .size = 16, .weight = .semibold });
+    // The histories, unless only the parts are asked for.
     if (shelf != .parts) {
-        const row = ui.div(c).row().wFull().gap(10).itemsStretch();
-        defer row.end();
-        controls.stat(c, "stat", "12,480", .{ .change = "+8%", .status = .success, .history = &history, .size = .sm });
-        controls.stat(c, "stat, without a history", "37", .{ .change = "+3", .status = .danger, .size = .sm });
-    }
-    section(c, "trend", "a history as bars");
-    controls.trend(c, &history, .{ .capacity = 24, .height = .{ .px = 40 }, .ramp = &heat, .value_lines = &.{.{ .value = 0.5, .label = "50%" }} });
-    section(c, "line", "histories as lines, filled under");
-    {
-        var l = controls.line(c, &.{ .{ .values = &history, .area = 0.15 }, .{ .values = &other, .color = t.success } }, .{ .capacity = 16, .height = .{ .px = 64 }, .interactive = true, .label = "Two histories" });
-        if (l.current) |i| l.tooltip(c.print("{d:.0}% and {d:.0}%", .{ history[i] * 100, other[i] * 100 }));
-        l.end();
-    }
-    section(c, "bars", "slots of parts, up from zero and down below it");
-    {
-        var b = controls.bars(c, .{ .count = change.len, .height = .{ .px = 48 }, .gap = 3, .below = 0.4, .interactive = true, .label = "Change" });
-        while (b.next()) |slot| slot.bar(&.{.{ .value = change[slot.index], .color = if (change[slot.index] < 0) t.danger else t.success }});
-        if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{change[i] * 100}));
-        b.end();
+        {
+            const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+            defer row.end();
+            controls.stat(c, "stat", "12,480", .{ .change = "+8%", .status = .success, .history = &history, .size = .sm });
+            controls.stat(c, "stat, without a history", "37", .{ .change = "+3", .status = .danger, .size = .sm });
+        }
+        {
+            const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+            defer row.end();
+            controls.stat(c, "with a unit", "87", .{ .unit = "%", .detail = "over the last hour", .size = .sm, .value_color = controls.rampColor(&heat, 0.87) });
+            controls.stat(c, "loading", "0", .{ .loading = true, .detail = "asking the server", .size = .sm });
+            _ = controls.statButton(c, "statButton", "3", .{ .unit = "alerts", .detail = "click, or Tab and Enter", .size = .sm });
+        }
+        section(c, "trend", "a history as bars");
+        controls.trend(c, &history, .{ .capacity = 24, .height = .{ .px = 40 }, .ramp = &heat, .value_lines = &.{.{ .value = 0.5, .label = "50%" }} });
+        section(c, "line", "histories as lines, filled under");
+        {
+            var l = controls.line(c, &.{ .{ .values = &history, .area = 0.15 }, .{ .values = &other, .color = t.success } }, .{ .capacity = 16, .height = .{ .px = 64 }, .interactive = true, .label = "Two histories" });
+            if (l.current) |i| l.tooltip(c.print("{d:.0}% and {d:.0}%", .{ history[i] * 100, other[i] * 100 }));
+            l.end();
+        }
+        section(c, "bars, in units", "a short history, an axis, and times under it");
+        {
+            const load = [_]f32{ 22, 35, 30, 58, 64, 41, 77, 92, 70, 55 };
+            var b = controls.bars(c, .{
+                .count = 24,
+                .readings = load.len,
+                .max = 100,
+                .fixed_max = true,
+                .height = .{ .px = 56 },
+                .gap = 2,
+                .axis = .start,
+                .value_lines = &.{ .{ .value = 100, .label = "100%" }, .{ .value = 50, .label = "50%" }, .{ .value = 0, .label = "0%" } },
+                .start_text = "−24 s",
+                .end_text = "now",
+                .interactive = true,
+                .label = "Load",
+            });
+            while (b.next()) |slot| {
+                const v = load[slot.reading.?];
+                slot.bar(&.{.{ .value = v, .color = controls.rampColor(&heat, v / 100) }});
+            }
+            if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{load[i]}));
+            b.end();
+        }
+        section(c, "bars", "slots of parts, up from zero and down below it");
+        {
+            var b = controls.bars(c, .{ .count = change.len, .height = .{ .px = 48 }, .gap = 3, .below = 0.4, .interactive = true, .label = "Change" });
+            while (b.next()) |slot| slot.bar(&.{.{ .value = change[slot.index], .color = if (change[slot.index] < 0) t.danger else t.success }});
+            if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{change[i] * 100}));
+            b.end();
+        }
     }
     if (shelf == .histories) return;
     section(c, "breakdown", "a total by kind, a whole by source, a level");
@@ -350,10 +402,36 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
             .{ .label = "Documents", .value = 4.4, .value_text = "4.4 GB" },
         }, .{});
     }
-    section(c, "meter", "segments lit to a value, and a strip without gaps");
+    section(c, "barList, levels", "icons, badges, details, a scale from a minimum, a ramp, and meters");
+    _ = controls.barList(c, &.{
+        .{ .label = "CPU", .icon = "cpu", .badge = "P", .value = 74, .value_text = "74 °C", .detail = "max 94", .value_color = controls.rampColor(&heat, 0.6) },
+        .{ .label = "GPU", .icon = "cube", .badge = "G", .value = 52, .value_text = "52 °C", .detail = "max 81" },
+        .{ .label = "Disk", .icon = "internaldrive", .value = 38, .value_text = "38 °C" },
+    }, .{ .min = 20, .max = 110, .ramp = &heat, .glow = 0.5 });
+    _ = controls.barList(c, &.{
+        .{ .label = "Fan 1", .value = 0.62, .value_text = "2,480 rpm" },
+        .{ .label = "Fan 2", .value = 0.3, .value_text = "1,200 rpm" },
+    }, .{ .max = 1, .style = .meter, .segments = 16, .ramp = &heat });
+    section(c, "meter", "segments lit to a value, a strip without gaps, rounded, and zones");
     controls.meter(c, 0.62, .{});
     controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
     controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
+    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 4, .height = 8 });
+    controls.meter(c, 0.55, .{ .segments = 20, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &strength });
+    {
+        const row = ui.div(c).row().wFull().itemsCenter().gap(12);
+        defer row.end();
+        ui.text(c, "A legend that fits", .{ .size = 13, .weight = .semibold });
+        var lg = controls.legend(c, .{ .width = .fit });
+        lg.item(t.primary, "App");
+        lg.item(t.warning, "Wired");
+        lg.end();
+        ui.spacer(c);
+        ui.text(c, "swatches", .{ .size = 12, .color = t.muted });
+        controls.swatch(c, t.primary, .{});
+        controls.swatch(c, t.success, .{ .shape = .dot });
+        controls.swatch(c, t.danger, .{ .shape = .line });
+    }
     section(c, "gauge and flow", "ticks lit to a value, in cells that wrap to the width");
     {
         var f = controls.flow(c, 110, .{ .gap = 16 });

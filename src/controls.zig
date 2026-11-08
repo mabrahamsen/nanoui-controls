@@ -39,6 +39,8 @@ const chart_mod = @import("chart.zig");
 pub const BarPart = chart_mod.Part;
 /// A line across a chart at a value, with an optional label.
 pub const ValueLine = chart_mod.ValueLine;
+/// Where a chart's axis goes, for `bars` and `line`.
+pub const ChartAxis = chart_mod.Axis;
 /// The color at a place (0 to 1) along a ramp of colors, as the charts
 /// take it: for the same color elsewhere, such as in a legend.
 pub const rampColor = chart_mod.rampColor;
@@ -71,6 +73,7 @@ const bar_list_mod = @import("bar_list.zig");
 pub const barList = bar_list_mod.barList;
 pub const BarListItem = bar_list_mod.Item;
 pub const BarListOptions = bar_list_mod.Options;
+pub const BarListStyle = bar_list_mod.Style;
 
 const meter_mod = @import("meter.zig");
 pub const meter = meter_mod.meter;
@@ -82,6 +85,7 @@ pub const GaugeOptions = gauge_mod.Options;
 
 const stat_mod = @import("stat.zig");
 pub const stat = stat_mod.stat;
+pub const statButton = stat_mod.statButton;
 pub const StatOptions = stat_mod.Options;
 
 const sidebar_mod = @import("sidebar.zig");
@@ -99,6 +103,9 @@ const legend_mod = @import("legend.zig");
 pub const legend = legend_mod.legend;
 pub const Legend = legend_mod.Legend;
 pub const LegendOptions = legend_mod.Options;
+pub const swatch = legend_mod.swatch;
+pub const SwatchShape = legend_mod.SwatchShape;
+pub const SwatchOptions = legend_mod.SwatchOptions;
 
 // Forms, pickers and layout: labels beside their controls, colors to
 // pick, and cells that wrap.

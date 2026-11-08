@@ -1,6 +1,9 @@
 //! A bar list: rows of a label, a bar across and a figure, the bars
 //! scaled to the largest. The busiest processes, disk use by folder,
 //! visits by page. Rows can be clicked, to open what they stand for.
+//! A row can lead with an icon or a badge and end with a detail, and the
+//! bars can take a ramp's colors, glow, or be meters lit in steps: a
+//! level per row, such as a temperature or a fan's speed.
 //!
 //!     const items = [_]controls.BarListItem{
 //!         .{ .label = "Photos", .value = 41.2, .value_text = "41.2 GB" },
@@ -12,6 +15,8 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const breakdown_mod = @import("breakdown.zig");
+const meter_mod = @import("meter.zig");
+const chart = @import("chart.zig");
 
 /// One row of the list.
 pub const Item = struct {
@@ -21,13 +26,36 @@ pub const Item = struct {
     value: f32,
     /// The figure at the end ("41.2 GB"), and what a screen reader says.
     value_text: []const u8 = "",
-    /// Its bar's color; null takes the list's.
+    /// Its bar's color; null takes the list's, or its ramp's.
     color: ?ui.Color = null,
+    /// A symbol before the label, in a slot of its own, so labels line up
+    /// whatever the icons.
+    icon: ?[]const u8 = null,
+    /// A short text before the label in a small tinted tag ("P", "GPU"),
+    /// in `badge_color`, or the row's color.
+    badge: []const u8 = "",
+    badge_color: ?ui.Color = null,
+    /// A second, muted figure after the first, such as a maximum ("max 94").
+    detail: []const u8 = "",
+    /// The figure's color, such as the ramp's for its level; null takes
+    /// the theme's muted text.
+    value_color: ?ui.Color = null,
+};
+
+/// How a row's bar is drawn.
+pub const Style = enum {
+    /// A bar across, filled to the value.
+    bar,
+    /// A meter of `segments`, lit to the value: a level read in steps.
+    meter,
 };
 
 pub const Options = struct {
     /// The value of a full bar; null takes the largest item's.
     max: ?f32 = null,
+    /// The value of an empty bar: a temperature from 20 to 110 fills the
+    /// bar from its start.
+    min: f32 = 0,
     /// The labels' column, wide enough for most labels; longer ones are
     /// cut short with an ellipsis.
     label_width: f32 = 120,
@@ -40,12 +68,34 @@ pub const Options = struct {
     size: kit.Size = .sm,
     /// The bars' color; null takes the theme's accent.
     color: ?ui.Color = null,
+    /// Colors from an empty bar to a full one: each bar takes the color
+    /// at its level, as a meter's segments do. A row's own color wins.
+    ramp: []const ui.Color = &.{},
+    /// Where no bar is; null takes the kit's progress track.
+    track: ?ui.Color = null,
+    /// The opacity of a glow around each bar, in its color; 0 draws none.
+    glow: f32 = 0,
+    /// The bars' corners; null rounds their ends.
+    bar_radius: ?f32 = null,
+    style: Style = .bar,
+    /// With `.meter`, how many segments a row's meter has.
+    segments: usize = 12,
+    /// The details' column, at the end; nothing is kept for it when no row
+    /// has a detail.
+    detail_width: f32 = 56,
     /// Rows light up under the pointer and can be clicked, or reached
     /// with Tab and clicked with Enter.
     clickable: bool = false,
     /// Multiplies its lengths but not its text, as the charts'.
     scale: f32 = 1,
 };
+
+/// Where `v` falls between `min` and `max`, from 0 to 1; 0 for a value
+/// that is not a number, or a scale with no room.
+fn level(v: f32, min: f32, max: f32) f32 {
+    if (!std.math.isFinite(v) or !(max > min)) return 0;
+    return std.math.clamp((v - min) / (max - min), 0, 1);
+}
 
 /// Draws a row for each of `items`, and returns the one clicked this
 /// frame, with `clickable`.
@@ -62,6 +112,14 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     defer col.end();
     var clicked: ?usize = null;
     const text = opts.size.text();
+    // Slots and columns only when a row has something for them, so the
+    // rest line up.
+    var icons = false;
+    var details = false;
+    for (items) |it| {
+        icons = icons or it.icon != null;
+        details = details or it.detail.len > 0;
+    }
     for (items, 0..) |it, i| {
         ui.keyInt(c, i);
         var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(6 * k).py(@round(text * 0.35) * k).rounded(@max(0, t.radius - 2));
@@ -77,19 +135,56 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             if (in.clicked or (in.focused and c.input.key == .enter)) clicked = i;
         }
         defer row.end();
+        if (icons) {
+            const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
+            defer slot.end();
+            if (it.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = t.muted });
+        }
+        const share = level(it.value, opts.min, max);
+        const bar_color = it.color orelse if (opts.ramp.len > 0) chart.rampColor(opts.ramp, share) else opts.color orelse t.primary;
         {
-            const l = ui.div(c).w(opts.label_width * k);
+            const l = ui.div(c).w(opts.label_width * k).row().itemsCenter().gap(@round(text * 0.4) * k);
             defer l.end();
+            if (it.badge.len > 0) {
+                const tint = it.badge_color orelse bar_color;
+                const b = ui.div(c).px(@round(text * 0.35) * k).py(1 * k).rounded(3 * k).bg(tint.alpha(0.15)).border(tint.alpha(0.4));
+                defer b.end();
+                ui.text(c, it.badge, .{ .size = text - 3, .weight = .bold, .mono = true, .color = tint });
+            }
             ui.text(c, it.label, .{ .size = text, .color = t.foreground, .truncate = .ellipsis });
         }
-        const share = if (max > 0 and std.math.isFinite(it.value) and it.value > 0) @min(it.value / max, 1) else 0;
-        breakdown_mod.breakdown(c, &.{.{ .value = share, .color = it.color orelse opts.color orelse t.primary }}, .{ .height = opts.bar_height, .scale = k });
+        switch (opts.style) {
+            .bar => breakdown_mod.breakdown(c, &.{.{ .value = share, .color = bar_color }}, .{
+                .height = opts.bar_height,
+                .radius = opts.bar_radius,
+                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse opts.bar_height / 2) else 0,
+                .glow = opts.glow,
+                .track = opts.track,
+                .scale = k,
+            }),
+            .meter => meter_mod.meter(c, share, .{
+                .segments = opts.segments,
+                .height = opts.bar_height,
+                .color = if (it.color != null or opts.ramp.len == 0) bar_color else null,
+                .ramp = if (it.color == null) opts.ramp else &.{},
+                .glow = opts.glow,
+                .track = opts.track,
+                .radius = opts.bar_radius orelse 2,
+                .scale = k,
+            }),
+        }
         {
             const v = ui.div(c).w(opts.value_width * k).row().justifyEnd();
             defer v.end();
-            ui.text(c, it.value_text, .{ .size = text - 1, .mono = true, .color = t.muted });
+            ui.text(c, it.value_text, .{ .size = text - 1, .mono = true, .color = it.value_color orelse t.muted });
         }
-        ui.access.describe(c, row.index, .{ .role = if (opts.clickable) .button else .static_text, .label = it.label, .value = it.value_text });
+        if (details) {
+            const d = ui.div(c).w(opts.detail_width * k).row().justifyEnd();
+            defer d.end();
+            ui.text(c, it.detail, .{ .size = text - 2, .mono = true, .color = t.muted.alpha(0.8), .truncate = .ellipsis });
+        }
+        const value = if (it.detail.len > 0) c.print("{s}, {s}", .{ it.value_text, it.detail }) else it.value_text;
+        ui.access.describe(c, row.index, .{ .role = if (opts.clickable) .button else .static_text, .label = it.label, .value = value });
     }
     return clicked;
 }

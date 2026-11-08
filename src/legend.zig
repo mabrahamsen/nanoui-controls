@@ -7,6 +7,9 @@
 //!     l.itemDetail(t.warning, "Wired 3.0 GB", "▲4.2");
 //!     l.trailing("Free 7.0 GB");
 //!     l.end();
+//!
+//! With `width = .fit`, it is only as wide as its items, for a legend
+//! beside a chart's title. `swatch` draws a legend's swatch on its own.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -26,15 +29,51 @@ pub const Options = struct {
     color: ?ui.Color = null,
     /// Multiplies the legend's lengths but not its text, as the charts'.
     scale: f32 = 1,
+    /// As wide as its parent, or only as wide as its items: they still
+    /// run on to a new line where the parent's width ends.
+    width: Width = .fill,
+
+    pub const Width = enum { fill, fit };
 };
 
-/// Opens a legend as wide as its parent: add items with `item` or
-/// `itemDetail`, then `end`.
+/// Opens a legend: add items with `item` or `itemDetail`, then `end`.
 pub fn legend(c: *ui.Context, opts: Options) Legend {
+    if (opts.width == .fit) {
+        // The parent's width, measured by a box across it that takes no
+        // room, as the legend itself is only as wide as its items.
+        const probe = ui.div(c).absolute().wFull().h(0);
+        const room = if (chart.lastSize(c, probe.index)) |s| s.w else c.size.w;
+        probe.end();
+        const box = ui.div(c).column().gap(opts.row_gap * opts.scale);
+        return .{ .c = c, .box = box, .opts = opts, .width = room };
+    }
     const box = ui.div(c).column().wFull().gap(opts.row_gap * opts.scale);
     // The width as the last frame laid it out; until then, the window's.
     const width = if (chart.lastSize(c, box.index)) |s| s.w else c.size.w;
     return .{ .c = c, .box = box, .opts = opts, .width = width };
+}
+
+/// A swatch's shape: a rounded square, as a legend's, a dot, or a short
+/// line, for a line chart's series.
+pub const SwatchShape = enum { square, dot, line };
+
+pub const SwatchOptions = struct {
+    /// Sized as a legend's labels at this size.
+    size: kit.Size = .xs,
+    shape: SwatchShape = .square,
+    scale: f32 = 1,
+};
+
+/// A swatch of `color` on its own, as a legend draws it: in a chart's
+/// title, a table's cell or a tooltip. A decoration to a screen reader.
+pub fn swatch(c: *ui.Context, color: ui.Color, opts: SwatchOptions) void {
+    const sw = @round(opts.size.text() * 0.72) * opts.scale;
+    const d = switch (opts.shape) {
+        .square => ui.div(c).w(sw).h(sw).rounded(sw / 4),
+        .dot => ui.div(c).w(sw).h(sw).roundedFull(),
+        .line => ui.div(c).w(sw * 1.4).h(@max(2, @round(sw / 4))).roundedFull(),
+    };
+    d.bg(color).end();
 }
 
 pub const Legend = struct {
@@ -69,7 +108,7 @@ pub const Legend = struct {
         l.place(w);
         const it = ui.div(c).row().itemsCenter().gap(inner);
         defer it.end();
-        ui.div(c).w(sw).h(sw).rounded(sw / 4).bg(color).end();
+        swatch(c, color, .{ .size = l.opts.size, .scale = k });
         ui.text(c, label, style);
         if (detail.len > 0) ui.text(c, detail, detail_style);
     }
@@ -98,7 +137,9 @@ pub const Legend = struct {
         // A point to spare: text measured and laid out may round apart.
         if (l.line == null or (l.used > 0 and l.used + gap + w > l.width - 1)) {
             if (l.line) |r| r.end();
-            l.line = ui.div(l.c).row().wFull().itemsCenter().gap(gap);
+            var line = ui.div(l.c).row().itemsCenter().gap(gap);
+            if (l.opts.width == .fill) line = line.wFull();
+            l.line = line;
             l.used = 0;
             l.lines += 1;
         }

@@ -46,6 +46,12 @@ pub const Options = struct {
     line_width: f32 = 1.5,
     /// Lines across at these values, behind the lines.
     value_lines: []const chart.ValueLine = &.{},
+    /// The value lines' labels in a gutter at the chart's start or end,
+    /// as `bars`' axis.
+    axis: chart.Axis = .none,
+    /// Under the chart at its two ends, as `bars`' ("-60 s", "now").
+    start_text: []const u8 = "",
+    end_text: []const u8 = "",
     /// The user can point at a reading, or take the keyboard and move
     /// from one to the next with Left and Right, as `bars`: `Line.current`
     /// is its index in the slots, and the chart marks it.
@@ -61,11 +67,6 @@ pub const Options = struct {
 pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
     const t = kit.tokens(c);
     const k = opts.scale;
-    const box = ui.div(c);
-    const st = &c.node(box.index).style;
-    st.width = chart.scaled(opts.width, k);
-    st.height = chart.scaled(opts.height, k);
-    const in: chart.Inspect = if (opts.interactive) .begin(c, box.index, opts.capacity, true) else .{};
     var peak = opts.max;
     if (!opts.fixed_max) for (series) |s| {
         for (0..@min(s.values.len, opts.capacity)) |j| {
@@ -74,13 +75,17 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
         }
     };
     const pad = inset(opts);
+    const frame: chart.Frame = .open(c, opts.width, .{ .axis = opts.axis, .lines = opts.value_lines, .lo = opts.min, .hi = peak, .top = pad, .start_text = opts.start_text, .end_text = opts.end_text, .scale = k }, opts.height != .px);
+    const box = ui.div(c);
+    frame.size(c, box.index, opts.width, opts.height);
+    const in: chart.Inspect = if (opts.interactive) .begin(c, box.index, opts.capacity, true) else .{};
     // The value lines first, so the canvas draws over them.
     if (opts.value_lines.len > 0) {
         const lines_h = switch (opts.height) {
             .px => |v| v * k,
             else => if (chart.lastSize(c, box.index)) |sz| sz.h else 0,
         };
-        chart.valueLines(c, opts.value_lines, lines_h, pad, opts.min, peak);
+        chart.valueLines(c, opts.value_lines, lines_h, pad, opts.min, peak, opts.axis == .none);
     }
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
     const w = cv.size.w;
@@ -130,7 +135,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
             cv.circle(.{ .x = x, .y = at.y(f, h, pad) }, 2.5 * k, s.color orelse t.primary);
         }
     };
-    return .{ .current = in.current, .focused = in.focused, .c = c, .box = box, .opts = opts, .inspect = in };
+    return .{ .current = in.current, .focused = in.focused, .c = c, .box = box, .frame = frame, .opts = opts, .inspect = in };
 }
 
 /// How far the readings sit in from the chart's sides and top, so the
@@ -158,6 +163,7 @@ pub const Line = struct {
     // The rest is the chart's own.
     c: *ui.Context,
     box: ui.Div,
+    frame: chart.Frame,
     opts: Options,
     inspect: chart.Inspect,
     tip: []const u8 = "",
@@ -180,6 +186,7 @@ pub const Line = struct {
         };
         chart.describe(c, l.box.index, l.opts.label, if (tip) l.tip else l.opts.value_text, l.opts.interactive);
         l.box.end();
+        l.frame.close(c);
     }
 };
 
