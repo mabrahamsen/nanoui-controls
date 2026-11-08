@@ -53,7 +53,7 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
         if (l.frozen == null) inner = inner.pl(opts.padding * k);
         defer inner.end();
         for (l.order) |i| {
-            if (i == l.frozen or !shown(c, columns, opts, i)) continue;
+            if (i == l.frozen or !shown(c, columns, opts, i, l.grid_w)) continue;
             if (before) |b| if (b != l.frozen) edge(c, columns, opts, b, i, opts.column_lines, &head);
             before = i;
             titles[i] = title(c, columns, opts, l, i, &drag, &head);
@@ -77,7 +77,7 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
 fn nextShown(c: *const ui.Context, columns: []const Column, opts: Options, l: Layout, i: usize) ?usize {
     var past = false;
     for (l.order) |j| {
-        if (past and shown(c, columns, opts, j)) return j;
+        if (past and shown(c, columns, opts, j, l.grid_w)) return j;
         if (j == i) past = true;
     }
     return null;
@@ -181,7 +181,7 @@ const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0 };
 fn dropBefore(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, dragged: usize) ?usize {
     const mx = c.input.mouse.x - l.left;
     for (l.order) |i| {
-        if (i == dragged or !shown(c, columns, opts, i)) continue;
+        if (i == dragged or !shown(c, columns, opts, i, l.grid_w)) continue;
         if (mx < l.at(i) + l.w[i] / 2) return i;
     }
     return null;
@@ -195,7 +195,7 @@ fn dropLine(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, d
     if (dropBefore(c, columns, opts, l, dragged)) |b| {
         x = l.at(b) - gap / 2;
     } else for (l.order) |i| {
-        if (i != dragged and shown(c, columns, opts, i)) x = l.at(i) + l.w[i] + gap / 2;
+        if (i != dragged and shown(c, columns, opts, i, l.grid_w)) x = l.at(i) + l.w[i] + gap / 2;
     }
     // In the scrolled titles' row, whose boxes start past the frozen
     // column, or past the padding, and scroll.

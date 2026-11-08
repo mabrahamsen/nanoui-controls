@@ -4,6 +4,13 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ## Unreleased
 
+- `grid` groups that fold (`groups`, with `GridGroups`): headings with a chevron, a title and a detail, or the title in the first cell with the group's totals in the others; rows stepped in a level, groups in groups, and a group of one shown without its heading if wanted. A click folds or opens a group and its rows fade in; Left, Right, Enter and Space fold, open and move between a heading and its rows. The selection stays on its row as groups above it fold, and goes to its heading when folded away. A screen reader hears a heading with its detail and whether it is open.
+- `grid` `loading`, told apart from empty: with no rows yet, a spinner, a label and a progress bar over sketched rows; with rows in, a thin progress line under the titles. A screen reader hears the label as loading starts.
+- `grid` columns hide by the grid's own width (`min_grid_width`), so a pane beside the grid can make room.
+- `grid` rows of two lines (`lines`, `twoLines`), rows as cards (`rows = .cards`), no titles (`header = false`), and a status on a row's edge (`row.status`).
+- `grid` reports Backspace or Cmd+Up (`back`) and Escape (`escaped`) while it has the keyboard.
+- `grid` can be shorter than its rows in a column that grows, without the caller setting its minimum height.
+- The gallery has a Grouped view under Grid: pull requests in groups that fold, as cards or rows of two lines, reloading with sketched rows and loading more with a line under the titles. The file grid shows the line while its pages arrive.
 - `sidebar` branches (`branch`): a row with rows under it, to any depth, as an option. A branch has an item's icon, label and count, can be chosen and selected, and folds by the chevron at its end; its rows are indented a step, and ease open and closed as a group's do. A click on the chevron folds or opens it, and a click elsewhere chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint. Left and Right fold and open branches and move between a branch and its rows, at each level, as a tree's keys do. A screen reader hears a branch as a row, with its count and whether it is open. Groups and headings inside a branch are indented with it. With `null` for `open`, a branch is fixed: always open, without a chevron, for a tree that doesn't fold. A sidebar without branches looks and behaves as it did.
 - The gallery puts the charts of histories and of parts under Every chart, a branch, and has a Sidebar view: the sidebar's options in a form, which the gallery's own sidebar takes as they change, fixed branches among them.
 

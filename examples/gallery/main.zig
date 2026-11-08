@@ -1,6 +1,8 @@
 //! The gallery: each of the library's controls in an app, picked from a
 //! sidebar, itself the library's. "Grid" is a grid of ten thousand files
-//! with a pager (grid.zig); "Form" a settings pane in a form, with
+//! with a pager (grid.zig), and under it "Grouped" pull requests in
+//! groups that fold, as cards or rows of two lines, loading
+//! (groups.zig); "Form" a settings pane in a form, with
 //! swatches (form.zig); "Sidebar" the sidebar's own options, which the
 //! sidebar takes as they change (sidebar.zig); under "Charts", "Monitor" is a system monitor
 //! whose charts move with its readings, its alerts (readings over 80%) in
@@ -22,12 +24,14 @@ const grid = @import("grid.zig");
 const charts = @import("charts.zig");
 const form = @import("form.zig");
 const sidebar = @import("sidebar.zig");
+const groups = @import("groups.zig");
 
 const Gallery = struct {
     /// The key of the view shown, as the sidebar chose it.
     shown: []const u8 = "grid",
     charts_open: bool = true,
     every_open: bool = false,
+    grid_open: bool = true,
     /// The sidebar's width as the splitter set it; below `narrow` it shows
     /// only its icons, `icons_width` wide.
     side_width: f32 = 210,
@@ -39,6 +43,7 @@ const Gallery = struct {
     monitor: charts.Monitor,
     settings: form.Settings,
     tuning: sidebar.Tuning = .{},
+    pulls: groups.Pulls = .{},
 
     const narrow = 120;
     const icons_width = 52;
@@ -54,7 +59,10 @@ const Gallery = struct {
             defer side.end();
             var sb = controls.sidebar(c, "gallery", g.shown, opts);
             sb.heading("Controls");
-            sb.item("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len });
+            if (sb.branch("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len }, if (g.tuning.fixed) null else &g.grid_open)) |grids| {
+                sb.item("grouped", "Grouped", .{ .icon = "list.bullet" });
+                grids.end();
+            }
             sb.item("form", "Form", .{ .icon = "slider.horizontal.3" });
             sb.item("sidebar", "Sidebar", .{ .icon = "sidebar.left" });
             if (sb.group("charts", "Charts", &g.charts_open)) |group| {
@@ -98,6 +106,8 @@ const Gallery = struct {
             charts.catalog(c, .parts);
         } else if (std.mem.eql(u8, g.shown, "form")) {
             g.settings.view(c);
+        } else if (std.mem.eql(u8, g.shown, "grouped")) {
+            g.pulls.view(c);
         } else if (std.mem.eql(u8, g.shown, "sidebar")) {
             g.tuning.view(c);
         } else g.browser.view(c);
