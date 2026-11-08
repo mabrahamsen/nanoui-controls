@@ -1,15 +1,16 @@
-//! A sidebar: rows to pick what a window shows, under headings and in
-//! groups that fold. One row is selected, by a key the caller keeps, never
-//! by position: rows come and go as data changes, and a position would
-//! then point at another row.
+//! A sidebar: rows to pick what a window shows, under headings, in groups
+//! that fold, and in branches: rows with rows under them, to any depth.
+//! One row is selected, by a key the caller keeps, never by position: rows
+//! come and go as data changes, and a position would then point at another
+//! row.
 //!
 //! It moves as the kit does: the selection slides from row to row as
 //! `kit.tabs`' marker does, a row eases into a wash under the pointer, and
 //! a group opens to its rows' height and closes back as `kit.collapsible`
 //! does. It takes the keyboard as the grid does, from a click or Tab:
-//! Up and Down move between rows and group headings, Home and End go to
-//! the ends, Left folds a group and Right opens it, and Enter or Space
-//! chooses. The keys choose a row as they reach it, or, with
+//! Up and Down move between rows, branches and group headings, Home and
+//! End go to the ends, Left folds a group or branch and Right opens it,
+//! and Enter or Space chooses. The keys choose a row as they reach it, or, with
 //! `choose_on_enter`, only on Enter or Space.
 //!
 //!     var sb = controls.sidebar(c, "nav", selected, .{});
@@ -17,6 +18,10 @@
 //!     sb.item("inbox", "Inbox", .{ .icon = "doc.text", .count = unread });
 //!     if (sb.group("folders", "Folders", &folders_open)) |g| {
 //!         for (folders) |f| sb.item(f.id, f.name, .{ .icon = "folder" });
+//!         g.end();
+//!     }
+//!     if (sb.branch("archive", "Archive", .{ .icon = "folder" }, &archive_open)) |g| {
+//!         for (years) |y| sb.item(y.id, y.name, .{});
 //!         g.end();
 //!     }
 //!     if (sb.end()) |key| selected = key;
@@ -40,12 +45,13 @@ pub const Options = struct {
     /// Rows show only their icon, centered, for a sidebar narrowed to a
     /// strip: the label shows in a tooltip and is still what a screen
     /// reader says. Headings become lines, a group's heading a chevron
-    /// that folds it, and counts dots.
+    /// that folds it, and counts dots; a branch's rows aren't indented,
+    /// and only the keys fold it.
     icons_only: bool = false,
     /// Between the rows.
     gap: f32 = 2,
-    /// What a screen reader says of a group's heading while its rows show,
-    /// and while they are folded away.
+    /// What a screen reader says of a group's heading or a branch while
+    /// its rows show, and while they are folded away.
     expanded_text: []const u8 = "expanded",
     collapsed_text: []const u8 = "collapsed",
     /// Multiplies the sidebar's lengths, for an app that zooms its layout
@@ -84,14 +90,25 @@ const Kept = struct {
     cursor: u64 = 0,
 };
 
-/// A row or a group's heading, as the keys move between them.
+/// What a branch keeps between frames: the selected row it last showed
+/// among its rows, by `entryHash`, or 0. Folded, it shows the selection
+/// is in it.
+const Held = struct {
+    of: u64 = 0,
+};
+
+/// A row, a branch or a group's heading, as the keys move between them.
 const Entry = struct {
     hash: u64,
     key: []const u8,
-    /// A heading's group, open or not; null for a row.
+    /// A branch or a group's heading, open or not; null for a row or a
+    /// fixed branch.
     open: ?*bool = null,
-    /// The heading of the group a row is in.
-    group: ?usize = null,
+    /// A row or a branch, which the keys choose; not a group's heading,
+    /// nor a disabled branch, which they only fold.
+    choosable: bool = true,
+    /// The branch or group heading it is in.
+    parent: ?usize = null,
     /// The box, to keep it in view.
     index: u32,
 };
@@ -105,6 +122,14 @@ fn state(c: *ui.Context) *Kept {
     // Looking a state up doesn't take the key, as a new box would.
     defer c.next_key = null;
     return c.state(Kept, "sidebar");
+}
+
+/// A branch's `Held`, found by a key of its own in the branch's box. Use
+/// it at once, as `state`'s.
+fn held(c: *ui.Context) *Held {
+    ui.key(c, "sidebar-held");
+    defer c.next_key = null;
+    return c.state(Held, "held");
 }
 
 fn entryHash(heading: bool, key: []const u8) u64 {
@@ -177,15 +202,65 @@ pub const Sidebar = struct {
     marked: bool = false,
     /// The selected row was drawn this frame.
     found: bool = false,
-    /// The group whose rows are being drawn, by its heading's entry.
-    group_at: ?usize = null,
-    /// The group being drawn is folding away: its rows can't be reached.
+    /// The selected row was drawn this frame, or a folded branch it is in:
+    /// what a branch around them keeps it holds.
+    seen: bool = false,
+    /// The branch or group whose rows are being drawn, by its entry.
+    parent: ?usize = null,
+    /// The rows being drawn are folding away: they can't be reached.
     folding: bool = false,
+    /// How many branches the rows being drawn are in, for their indent.
+    depth: u8 = 0,
     /// A row chosen this frame.
     chosen: ?[]const u8 = null,
 
     /// A row keyed `key`, reading `label`.
     pub fn item(sb: *Sidebar, key: []const u8, label: []const u8, opts: Item) void {
+        ui.key(sb.c, key);
+        _ = sb.row(key, label, opts, null, false);
+    }
+
+    /// A branch: a row keyed `key`, reading `label`, with rows under it,
+    /// as `group` has. Draw them, then `end` the group, while it returns
+    /// one; they are indented a step, and can be branches in turn.
+    /// `open.*`, kept by the caller, says whether they show. The chevron
+    /// at its end folds and opens it; a click elsewhere on it chooses it,
+    /// and opens it if folded. A disabled branch isn't chosen, but still
+    /// folds.
+    ///
+    /// With `open` null, the branch is fixed: its rows always show, it has
+    /// no chevron, and it doesn't fold. A tree that doesn't fold is all
+    /// fixed branches; it always returns a group.
+    pub fn branch(sb: *Sidebar, key: []const u8, label: []const u8, opts: Item, open: ?*bool) ?Group {
+        const c = sb.c;
+        ui.key(c, key);
+        const wrap = ui.div(c).column().wFull().gap(sb.opts.gap * sb.opts.scale);
+        const o = open orelse {
+            const at = sb.row(key, label, opts, null, false);
+            return sb.fold(wrap, true, at, true);
+        };
+        // Folded, it shows the selected row is in it, if it was when open.
+        const s = sb.selected;
+        const holds = !o.* and s != null and !std.mem.eql(u8, s.?, key) and held(c).of == entryHash(false, s.?);
+        const at = sb.row(key, label, opts, o, holds);
+        return sb.fold(wrap, o.*, at, true);
+    }
+
+    /// The left of a row or heading, indented a step for each branch it
+    /// is in: an icon's slot and the gap after it, so a row's icon sits
+    /// under its branch's label.
+    fn inset(sb: *const Sidebar) f32 {
+        const k = sb.opts.scale;
+        const text = sb.opts.size.text();
+        const pad = @round(text * 0.8) * k;
+        if (sb.opts.icons_only) return pad;
+        return pad + @as(f32, @floatFromInt(sb.depth)) * (@round(text * 1.3) + @round(text * 0.6)) * k;
+    }
+
+    /// Draws a row, or with `open` a branch's, and adds it for the keys:
+    /// its entry, if it has one. `holds`: a folded branch the selected row
+    /// is in, which shows it in the selection's tint.
+    fn row(sb: *Sidebar, key: []const u8, label: []const u8, opts: Item, open: ?*bool, holds: bool) ?usize {
         const c = sb.c;
         const k = sb.opts.scale;
         const t = kit.tokens(c);
@@ -194,36 +269,43 @@ pub const Sidebar = struct {
         const narrow = sb.opts.icons_only;
         const on = if (sb.selected) |s| std.mem.eql(u8, s, key) else false;
         const hash = entryHash(false, key);
-        const at_cursor = sb.focused and !opts.disabled and sb.cursorIs(hash, on);
+        // A disabled branch is still reached by the keys, to fold it.
+        const reached = !opts.disabled or open != null;
+        const at_cursor = sb.focused and reached and sb.cursorIs(hash, on);
         const tint = sb.opts.color orelse t.primary;
-        ui.key(c, key);
-        var row = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(@round(text * @as(f32, if (narrow) 0.3 else 0.8)) * k).h(size.height() * k).rounded(radius(c, k));
-        if (narrow) row = row.justifyCenter();
+        const pad = @round(text * @as(f32, if (narrow) 0.3 else 0.8)) * k;
+        var row_box = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(pad).pl(if (narrow) pad else sb.inset()).h(size.height() * k).rounded(radius(c, k));
+        if (narrow) row_box = row_box.justifyCenter();
         // A disabled row still shows its tooltip, but takes no clicks.
-        var it = row.interaction();
+        var it = row_box.interaction();
         if (opts.disabled) {
             it.clicked = false;
             it.secondary_clicked = false;
         } else if (it.hovered) c.cursor_hand = true;
-        if (!sb.folding and !opts.disabled) sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .group = sb.group_at, .index = row.index }) catch {};
+        var at: ?usize = null;
+        if (!sb.folding and reached) {
+            sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index }) catch {};
+            at = sb.entries.items.len - 1;
+        }
         // A wash eases in under the pointer, and on the row the keys are on
         // when they don't choose as they move.
         const wash = motion.number(c, "wash", if (!on and !opts.disabled and (it.hovered or (at_cursor and sb.opts.choose_on_enter))) 1 else 0, .{ .tween = .{ .duration = 0.12 } });
         if (on and !sb.marked) {
-            row = row.bg(tint.alpha(0.12));
+            row_box = row_box.bg(tint.alpha(0.12));
         } else if (wash > 0.001) {
             const base = sb.opts.background orelse t.foreground.alpha(0);
-            row = row.bg(base.mix(t.foreground.alpha(0.07), wash));
-        } else if (sb.opts.background) |bg| row = row.bg(bg);
-        if (at_cursor) row = row.border(tint.alpha(0.45));
-        if (opts.disabled) c.node(row.index).style.opacity = 0.45;
-        defer row.end();
+            row_box = row_box.bg(base.mix(t.foreground.alpha(0.07), wash));
+        } else if (sb.opts.background) |bg| row_box = row_box.bg(bg);
+        if (at_cursor) row_box = row_box.border(tint.alpha(0.45));
+        if (opts.disabled) c.node(row_box.index).style.opacity = 0.45;
+        defer row_box.end();
+        if (holds) sb.seen = true;
         const pill = opts.count_style == .pill;
         const count_col = opts.count_color orelse if (pill) tint else t.muted;
         {
             const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
             defer slot.end();
-            if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = if (on) tint else t.muted.mix(t.foreground, wash * 0.5) });
+            if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = if (on or holds) tint else t.muted.mix(t.foreground, wash * 0.5) });
             // Narrowed, a count is a dot at the icon's corner.
             if (narrow) if (opts.count) |n| if (n > 0) {
                 const dot = @round(text * 0.45) * k;
@@ -236,7 +318,7 @@ pub const Sidebar = struct {
             ui.text(c, label, .{
                 .size = text,
                 .weight = if (on) .semibold else .regular,
-                .color = if (on) t.foreground else t.foreground.alpha(0.85).mix(t.foreground, wash),
+                .color = if (on) t.foreground else if (holds) tint else t.foreground.alpha(0.85).mix(t.foreground, wash),
                 .truncate = .ellipsis,
             });
             ui.spacer(c);
@@ -245,11 +327,32 @@ pub const Sidebar = struct {
                 defer p.end();
                 ui.textf(c, .{ .size = text - 2, .weight = .semibold, .color = t.primary_foreground }, "{d}", .{n});
             } else ui.textf(c, .{ .size = text - 2, .mono = true, .color = count_col }, "{d}", .{n});
+            // A branch's chevron, which folds and opens it: a box of its
+            // own, so its click isn't the row's.
+            if (open) |o| {
+                // Its icon at the row's end, as a group heading's is.
+                const chev = ui.div(c).row().w(@round(text * 1.1) * k).h(text * k).itemsCenter().justifyEnd();
+                defer chev.end();
+                const ci = chev.interaction();
+                if (ci.hovered) c.cursor_hand = true;
+                ui.icon(c, if (o.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = if (ci.hovered) t.foreground else t.muted });
+                ui.access.hide(c, chev.index);
+                if (ci.clicked) {
+                    o.* = !o.*;
+                    c.changed = true;
+                    c.focus = sb.own;
+                    sb.kept.cursor = hash;
+                }
+            }
         }
-        ui.access.describe(c, row.index, .{
+        const value = if (open) |o| blk: {
+            const state_text = if (o.*) sb.opts.expanded_text else sb.opts.collapsed_text;
+            break :blk if (opts.count) |n| c.print("{d}, {s}", .{ n, state_text }) else state_text;
+        } else if (opts.count) |n| c.print("{d}", .{n}) else "";
+        ui.access.describe(c, row_box.index, .{
             .role = .tab,
             .label = label,
-            .value = if (opts.count) |n| c.print("{d}", .{n}) else "",
+            .value = value,
             .selected = on,
             .enabled = !opts.disabled,
         });
@@ -257,16 +360,24 @@ pub const Sidebar = struct {
             c.focus = sb.own;
             sb.kept.cursor = hash;
             if (!on) sb.choose(key);
+            if (open) |o| if (!o.*) {
+                o.* = true;
+                c.changed = true;
+            };
         }
         if (it.secondary_clicked) sb.secondary_clicked = key;
         if (on and !sb.folding) {
             sb.found = true;
+            sb.seen = true;
             if (it.rect) |r| if (sb.inner_rect) |br| {
-                sb.kept = .{ .y = r.y - br.y, .h = r.h, .known = true, .cursor = sb.kept.cursor };
+                sb.kept.y = r.y - br.y;
+                sb.kept.h = r.h;
+                sb.kept.known = true;
                 // The marker is drawn from the next frame: ask for it.
                 if (!sb.marked) c.animationFrame();
             };
         }
+        return at;
     }
 
     /// A heading over the rows that follow ("Mailboxes"): text, which takes
@@ -276,7 +387,7 @@ pub const Sidebar = struct {
         const k = sb.opts.scale;
         const t = kit.tokens(c);
         const text = sb.opts.size.text();
-        const h = ui.div(c).row().wFull().px(@round(text * 0.8) * k).pt(@round(text * 0.7) * k).pb(@round(text * 0.2) * k);
+        const h = ui.div(c).row().wFull().px(@round(text * 0.8) * k).pl(sb.inset()).pt(@round(text * 0.7) * k).pb(@round(text * 0.2) * k);
         defer h.end();
         // Narrowed, a line where the heading was.
         if (sb.opts.icons_only) {
@@ -298,8 +409,9 @@ pub const Sidebar = struct {
         const at_cursor = sb.focused and sb.cursorIs(hash, false);
         ui.key(c, key);
         const wrap = ui.div(c).column().wFull().gap(sb.opts.gap * k);
+        var at: ?usize = null;
         {
-            const head = ui.div(c).row().wFull().itemsCenter().gap(6 * k).px(@round(text * 0.8) * k).pt(@round(text * 0.7) * k).pb(@round(text * 0.2) * k).rounded(radius(c, k));
+            const head = ui.div(c).row().wFull().itemsCenter().gap(6 * k).px(@round(text * 0.8) * k).pl(sb.inset()).pt(@round(text * 0.7) * k).pb(@round(text * 0.2) * k).rounded(radius(c, k));
             defer head.end();
             const it = head.interaction();
             if (it.hovered) c.cursor_hand = true;
@@ -310,7 +422,10 @@ pub const Sidebar = struct {
                 c.focus = sb.own;
                 sb.kept.cursor = hash;
             }
-            sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .index = head.index }) catch {};
+            if (!sb.folding) {
+                sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = false, .parent = sb.parent, .index = head.index }) catch {};
+                at = sb.entries.items.len - 1;
+            }
             const col = if (it.hovered) t.foreground else t.muted;
             // Narrowed, the chevron alone, centered, its title in a tooltip.
             if (sb.opts.icons_only) {
@@ -323,9 +438,17 @@ pub const Sidebar = struct {
             ui.icon(c, if (open.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = col });
             ui.access.describe(c, head.index, .{ .role = .button, .label = title, .value = if (open.*) sb.opts.expanded_text else sb.opts.collapsed_text });
         }
+        return sb.fold(wrap, open.*, at, false);
+    }
+
+    /// The rows under a group's heading or a branch, in `wrap` after it:
+    /// a box that is the share of their height the fold has eased to.
+    /// `at` is the heading's or branch's entry; `indent` steps the rows in.
+    fn fold(sb: *Sidebar, wrap: ui.Div, open: bool, at: ?usize, indent: bool) ?Group {
+        const c = sb.c;
         // How far open, easing: the rows' box is that share of their height.
-        const shown = motion.number(c, "fold", if (open.*) 1 else 0, .{ .tween = .{ .duration = 0.22, .ease = .ease_in_out } });
-        if (!open.* and shown < 0.001) {
+        const shown = motion.number(c, "fold", if (open) 1 else 0, .{ .tween = .{ .duration = 0.22, .ease = .ease_in_out } });
+        if (!open and shown < 0.001) {
             wrap.end();
             return null;
         }
@@ -335,10 +458,12 @@ pub const Sidebar = struct {
             c.node(body.index).style.height = .{ .px = r.h * shown };
             c.node(body.index).style.opacity = shown;
         };
-        const rows = ui.div(c).column().wFull().gap(sb.opts.gap * k);
-        sb.group_at = sb.entries.items.len - 1;
-        sb.folding = !open.*;
-        return .{ .sb = sb, .wrap = wrap, .body = body, .rows = rows };
+        const rows = ui.div(c).column().wFull().gap(sb.opts.gap * sb.opts.scale);
+        const g: Group = .{ .sb = sb, .wrap = wrap, .body = body, .rows = rows, .parent = sb.parent, .folding = sb.folding, .depth = sb.depth, .branch = indent, .seen = sb.seen };
+        if (at) |i| sb.parent = i;
+        sb.folding = sb.folding or !open;
+        if (indent) sb.depth +|= 1;
+        return g;
     }
 
     /// Ends the sidebar: the key of a row chosen this frame, by a click or
@@ -365,8 +490,8 @@ pub const Sidebar = struct {
         sb.c.changed = true;
     }
 
-    /// The keys, while the sidebar has the keyboard: on the rows and
-    /// headings drawn this frame.
+    /// The keys, while the sidebar has the keyboard: on the rows, branches
+    /// and headings drawn this frame.
     fn keys(sb: *Sidebar) void {
         const c = sb.c;
         const list = sb.entries.items;
@@ -379,7 +504,7 @@ pub const Sidebar = struct {
                 at = i;
                 break;
             }
-            if (sb.kept.cursor == 0 and e.open == null and sb.selected != null and std.mem.eql(u8, e.key, sb.selected.?)) at = i;
+            if (sb.kept.cursor == 0 and e.choosable and sb.selected != null and std.mem.eql(u8, e.key, sb.selected.?)) at = i;
         }
         const e = list[at];
         var to: ?usize = null;
@@ -396,30 +521,37 @@ pub const Sidebar = struct {
             .home => to = 0,
             .end => to = list.len - 1,
             .enter => enter = true,
-            .left => if (e.open) |o| {
-                if (o.*) o.* = false;
+            // Left folds what is open, else goes to what the entry is
+            // in; Right opens what is folded, else goes to its first row,
+            // as on a fixed branch.
+            .left => if (e.open != null and e.open.?.*) {
+                e.open.?.* = false;
                 c.changed = true;
-            } else if (e.group) |g| {
-                to = g;
+            } else if (e.parent) |p| {
+                to = p;
             },
-            .right => if (e.open) |o| {
-                if (!o.*) o.* = true;
+            .right => if (e.open != null and !e.open.?.*) {
+                e.open.?.* = true;
                 c.changed = true;
+            } else if (at + 1 < list.len and list[at + 1].parent == at) {
+                to = at + 1;
             },
             else => {},
         };
         if (enter) {
-            if (e.open) |o| {
+            if (e.choosable) {
+                if (!sb.isSelected(e.key)) sb.choose(e.key);
+            } else if (e.open) |o| {
                 o.* = !o.*;
                 c.changed = true;
-            } else if (!sb.isSelected(e.key)) sb.choose(e.key);
+            }
             sb.kept.cursor = e.hash;
         }
         const i = to orelse return;
         const next = list[i];
         sb.kept.cursor = next.hash;
         c.changed = true;
-        if (next.open == null and !sb.opts.choose_on_enter and !sb.isSelected(next.key)) sb.choose(next.key);
+        if (next.choosable and !sb.opts.choose_on_enter and !sb.isSelected(next.key)) sb.choose(next.key);
         sb.reveal(next.index);
     }
 
@@ -442,18 +574,34 @@ pub const Sidebar = struct {
     }
 };
 
-/// A group's rows, while it returns one: draw them, then `end` it.
+/// A group's or a branch's rows, while it returns one: draw them, then
+/// `end` it.
 pub const Group = struct {
     sb: *Sidebar,
     wrap: ui.Div,
     body: ui.Div,
     rows: ui.Div,
+    /// The sidebar's, as they were before: what `end` puts back.
+    parent: ?usize,
+    folding: bool,
+    depth: u8,
+    /// A branch's rows, not a group's.
+    branch: bool,
+    /// The selected row, or a folded branch it is in, was drawn before
+    /// these rows.
+    seen: bool,
 
     pub fn end(g: Group) void {
-        g.sb.group_at = null;
-        g.sb.folding = false;
+        const sb = g.sb;
+        const shown = !sb.folding;
+        const holds = !g.seen and sb.seen;
+        sb.parent = g.parent;
+        sb.folding = g.folding;
+        sb.depth = g.depth;
         g.rows.end();
         g.body.end();
+        // Open, a branch keeps whether the selected row is among its rows.
+        if (g.branch and shown) held(sb.c).of = if (holds) entryHash(false, sb.selected.?) else 0;
         g.wrap.end();
     }
 };

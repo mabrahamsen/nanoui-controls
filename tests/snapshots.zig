@@ -459,6 +459,85 @@ const Narrowed = struct {
     }
 };
 
+/// A settings sidebar with branches: one open with a branch open in it,
+/// one folded with the selected row in it, and one in a group.
+const Branches = struct {
+    privacy: bool = true,
+    apps: bool = true,
+    sharing: bool = false,
+    more: bool = true,
+    network: bool = true,
+    frames: u32 = 0,
+
+    fn view(x: *Branches, c: *ui.Context) void {
+        const root = ui.div(c).column().w(220).hFull().p(8);
+        defer root.end();
+        // Open in the first frame, so it knows it holds the selected row
+        // once folded.
+        if (x.frames < 2) x.sharing = x.frames == 0;
+        x.frames += 1;
+        var sb = controls.sidebar(c, "settings", "airdrop", .{});
+        sb.item("general", "General", .{ .icon = "gearshape" });
+        if (sb.branch("privacy", "Privacy", .{ .icon = "hand.raised", .count = 3 }, &x.privacy)) |g| {
+            sb.item("location", "Location", .{ .icon = "bookmark" });
+            if (sb.branch("apps", "Apps", .{ .icon = "square.grid.2x2" }, &x.apps)) |g2| {
+                sb.item("camera", "Camera", .{ .icon = "photo" });
+                sb.item("microphone", "Microphone", .{ .icon = "waveform.path.ecg" });
+                g2.end();
+            }
+            g.end();
+        }
+        if (sb.branch("sharing", "Sharing", .{ .icon = "square.and.arrow.up" }, &x.sharing)) |g| {
+            sb.item("airdrop", "AirDrop", .{ .icon = "arrow.up" });
+            g.end();
+        }
+        if (sb.group("more", "More", &x.more)) |g| {
+            if (sb.branch("network", "Network", .{ .icon = "globe" }, &x.network)) |g2| {
+                sb.item("wifi", "Wi-Fi", .{ .icon = "network" });
+                g2.end();
+            }
+            g.end();
+        }
+        _ = sb.end();
+    }
+};
+
+test "a sidebar with branches, open and folded, light and dark" {
+    var x: Branches = .{};
+    try expectView("sidebar-branches", .init(&x, Branches.view), .{ .height = 330 });
+    x = .{};
+    try expectView("sidebar-branches-dark", .init(&x, Branches.view), .{ .height = 330, .dark = true });
+}
+
+/// A docs site's sidebar: a fixed tree, its branches always open and
+/// without chevrons, a row three levels in selected.
+fn fixedTree(_: *u8, c: *ui.Context) void {
+    const root = ui.div(c).column().w(220).hFull().p(8);
+    defer root.end();
+    var sb = controls.sidebar(c, "docs", "docker", .{});
+    sb.item("intro", "Introduction", .{ .icon = "doc.text" });
+    if (sb.branch("guides", "Guides", .{ .icon = "folder", .count = 3 }, null)) |g| {
+        sb.item("start", "Getting started", .{ .icon = "doc.text" });
+        if (sb.branch("deploy", "Deploying", .{ .icon = "folder" }, null)) |g2| {
+            sb.item("docker", "Docker", .{ .icon = "cube" });
+            sb.item("cloud", "To the cloud", .{ .icon = "globe" });
+            g2.end();
+        }
+        g.end();
+    }
+    if (sb.branch("reference", "Reference", .{ .icon = "folder" }, null)) |g| {
+        sb.item("api", "API", .{ .icon = "code" });
+        g.end();
+    }
+    _ = sb.end();
+}
+
+test "a sidebar that is a fixed tree, light and dark" {
+    var x: u8 = 0;
+    try expectView("sidebar-fixed", .init(&x, fixedTree), .{ .height = 300 });
+    try expectView("sidebar-fixed-dark", .init(&x, fixedTree), .{ .height = 300, .dark = true });
+}
+
 test "a sidebar narrowed to its icons, and wide, light and dark" {
     var x: Narrowed = .{};
     try expectView("sidebar-icons", .init(&x, Narrowed.view), .{ .height = 230 });

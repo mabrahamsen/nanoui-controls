@@ -276,9 +276,19 @@ pub fn init() Monitor {
     return m;
 }
 
-/// Each chart once, as figures that don't change: what each looks like,
-/// side by side, in the theme's colors.
-pub fn catalog(c: *ui.Context) void {
+/// Which of the charts `catalog` shows.
+pub const Shelf = enum {
+    all,
+    /// Those that draw a history: stat, trend, line and bars.
+    histories,
+    /// Those that draw parts of a whole, or a level: breakdown, legend,
+    /// donut, bar list, meter and gauge.
+    parts,
+};
+
+/// Each chart once, or those on `shelf`, as figures that don't change:
+/// what each looks like, side by side, in the theme's colors.
+pub fn catalog(c: *ui.Context, shelf: Shelf) void {
     const t = kit.tokens(c);
     const history = [_]f32{ 0.2, 0.35, 0.3, 0.5, 0.45, 0.7, 0.65, 0.9, 0.6, 0.8, 0.55, 0.75, 0.6, 0.7, 0.5, 0.65 };
     const other = [_]f32{ 0.1, 0.15, 0.2, 0.15, 0.3, 0.25, 0.4, 0.35, 0.3, 0.45, 0.4, 0.5, 0.45, 0.4, 0.35, 0.45 };
@@ -287,8 +297,12 @@ pub fn catalog(c: *ui.Context) void {
     defer scroll.end();
     const root = ui.div(c).column().wFull().p(16).gap(12);
     defer root.end();
-    ui.text(c, "Every chart", .{ .size = 16, .weight = .semibold });
-    {
+    ui.text(c, switch (shelf) {
+        .all => "Every chart",
+        .histories => "Histories",
+        .parts => "Parts",
+    }, .{ .size = 16, .weight = .semibold });
+    if (shelf != .parts) {
         const row = ui.div(c).row().wFull().gap(10).itemsStretch();
         defer row.end();
         controls.stat(c, "stat", "12,480", .{ .change = "+8%", .status = .success, .history = &history, .size = .sm });
@@ -309,6 +323,7 @@ pub fn catalog(c: *ui.Context) void {
         if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{change[i] * 100}));
         b.end();
     }
+    if (shelf == .histories) return;
     section(c, "breakdown", "a total by kind, a whole by source, a level");
     const parts = [_]controls.BarPart{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.warning }, .{ .value = 0.1, .color = t.info } };
     controls.breakdown(c, &parts, .{ .height = 8 });
