@@ -1,6 +1,6 @@
-//! The grid's tests of groups that fold, loading, columns that hide by
-//! the grid's width, fitting a column that grows, two-line cells, cards,
-//! no titles, and Backspace and Escape.
+//! The grid's tests of groups that fold, columns that hide by the grid's
+//! width, fitting a column that grows, two-line cells, cards, no titles,
+//! Backspace and Escape, and its titles to a screen reader.
 const std = @import("std");
 const builtin = @import("builtin");
 const nanoui = @import("nanoui");
@@ -190,70 +190,6 @@ test "without singles, a group of one shows its row alone; a heading can fill ce
     try std.testing.expect(t.hasText("total"));
     // The total sits in the Age column, at its end.
     try std.testing.expectApproxEqAbs(t.findText("Age").?.x + t.findText("Age").?.w, t.findText("total").?.x + t.findText("total").?.w, 1);
-}
-
-/// Fruit, loading: with none, or with some in.
-const Loader = struct {
-    count: usize = 0,
-    loading: ?g_mod.Loading = .{ .label = "Asking the orchard…" },
-
-    const columns = [_]Column{
-        .{ .title = "Fruit" },
-        .{ .title = "Count", .width = 80, .alignment = .end },
-    };
-
-    fn view(x: *Loader, c: *ui.Context) void {
-        const root = ui.div(c).column().sizeFull();
-        defer root.end();
-        var g = grid(c, &columns, .{ .count = x.count, .loading = x.loading, .empty = "No fruit" });
-        while (g.next()) |row| {
-            g.cell();
-            ui.text(c, c.print("fruit {d}", .{row.index}), .{});
-            g.cell();
-            ui.text(c, "1", .{});
-        }
-        g.end();
-    }
-};
-
-test "a grid loading with no rows sketches them under its label, and is empty only once loaded" {
-    var x: Loader = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&x, Loader.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.frame();
-    try std.testing.expect(std.mem.indexOf(u8, t.ctx.access.announcement[0..t.ctx.access.announcement_len], "Asking the orchard") != null);
-    t.settle(1);
-    try std.testing.expect(t.hasText("Asking the orchard…"));
-    try std.testing.expect(!t.hasText("No fruit"));
-    // Sketched rows fill the view: placeholder bars, a pair a row.
-    var bars: usize = 0;
-    for (t.ctx.nodes.items) |n| if (n.style.height == .px and n.style.height.px == 10 and n.style.background != null) {
-        bars += 1;
-    };
-    try std.testing.expect(bars >= 2 * 7);
-    x.loading = null;
-    t.settle(1);
-    try std.testing.expect(t.hasText("No fruit"));
-    try std.testing.expect(!t.hasText("Asking the orchard…"));
-}
-
-test "a grid loading with rows in shows a thin line, and doesn't move its rows" {
-    var x: Loader = .{ .count = 3, .loading = null };
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&x, Loader.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.settle(1);
-    const y = t.findText("fruit 0").?.y;
-    x.loading = .{ .label = "More", .done = 1, .total = 4 };
-    t.settle(1);
-    try std.testing.expectEqual(y, t.findText("fruit 0").?.y);
-    try std.testing.expect(!t.hasText("More"));
-    var line = false;
-    for (t.ctx.nodes.items) |n| if (n.style.height == .px and n.style.height.px == 2) {
-        line = true;
-    };
-    try std.testing.expect(line);
 }
 
 /// A grid beside a pane the caller widens, its third column hiding when
@@ -523,44 +459,6 @@ test "with max_rows, a selection past the rows shown moves back to the last show
     try std.testing.expectEqual(@as(?usize, 4), x.selected);
 }
 
-/// Cards loading, then in.
-const CardLoader = struct {
-    count: usize = 0,
-
-    fn view(x: *CardLoader, c: *ui.Context) void {
-        const root = ui.div(c).column().sizeFull();
-        defer root.end();
-        var g = grid(c, &Loader.columns, .{ .count = x.count, .rows = .cards, .loading = if (x.count == 0) .{} else null });
-        while (g.next()) |row| {
-            g.cell();
-            ui.text(c, c.print("fruit {d}", .{row.index}), .{});
-        }
-        g.end();
-    }
-};
-
-test "sketched rows take the room real rows do, cards' gap included, and an empty label isn't said" {
-    var x: CardLoader = .{};
-    var t: ui.Tester = undefined;
-    try t.init(std.testing.allocator, .init(&x, CardLoader.view), .{ .width = 400, .height = 300 });
-    defer t.deinit();
-    t.frame();
-    try std.testing.expectEqual(@as(usize, 0), t.ctx.access.announcement_len);
-    t.settle(1);
-    // The sketched rows' bars, a pair a row: one row's to the next.
-    var ys: [64]f32 = undefined;
-    var n: usize = 0;
-    for (t.ctx.nodes.items) |node| if (node.style.height == .px and node.style.height.px == 10 and node.style.background != null) {
-        const y = t.ctx.rects.get(node.id).?.y;
-        if (n == 0 or ys[n - 1] != y) {
-            ys[n] = y;
-            n += 1;
-        }
-    };
-    try std.testing.expect(n >= 3);
-    try std.testing.expectApproxEqAbs(@as(f32, 28 + 6), ys[1] - ys[0], 0.5);
-}
-
 test "a heading's chevron follows the grid's scale" {
     const T = struct {
         open: [1]bool = .{true},
@@ -620,4 +518,8 @@ test "column titles are headers to a screen reader, in the caller's words" {
     try std.testing.expect(list.items[0].header);
     try std.testing.expectEqualStrings("croissant", list.items[0].value);
     try std.testing.expectEqualStrings("trie", list.items[0].hint);
+}
+
+test {
+    _ = @import("grid_loading_tests.zig");
 }

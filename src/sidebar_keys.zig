@@ -1,0 +1,101 @@
+//! The sidebar's keys, while it has the keyboard: where they start, the
+//! rows, branches and headings they move between, folding and choosing,
+//! and scrolling the row they reach into view.
+const std = @import("std");
+const nanoui = @import("nanoui");
+const ui = nanoui.ui;
+const Sidebar = @import("sidebar.zig").Sidebar;
+
+/// Where the keys are among the entries drawn: the entry they moved
+/// to, else the selected row, else none.
+pub fn place(sb: *const Sidebar) ?usize {
+    const list = sb.entries.items;
+    if (sb.kept.cursor != 0) for (list, 0..) |e, i| if (e.hash == sb.kept.cursor) return i;
+    const s = sb.selected orelse return null;
+    for (list, 0..) |e, i| if (e.choosable and std.mem.eql(u8, e.key, s)) return i;
+    return null;
+}
+
+/// The keys, while the sidebar has the keyboard: on the rows, branches
+/// and headings drawn this frame. The keys it acts on are its own:
+/// nothing after it sees them.
+pub fn keys(sb: *Sidebar) void {
+    const c = sb.c;
+    const list = sb.entries.items;
+    if (list.len == 0) return;
+    const last = list.len - 1;
+    const at = place(sb);
+    // A cursor whose entry is gone follows the selection again.
+    if (at == null or list[at.?].hash != sb.kept.cursor) sb.kept.cursor = 0;
+    var to: ?usize = null;
+    var enter = false;
+    if (c.shortcut(.{ .key = ui.Shortcut.down })) {
+        to = if (at) |a| @min(a + 1, last) else 0;
+    } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
+        to = if (at) |a| a -| 1 else last;
+    } else if (c.shortcut(.{ .key = ' ' })) {
+        enter = true;
+    } else if (c.input.key) |key| {
+        switch (key) {
+            .down => to = if (at) |a| @min(a + 1, last) else 0,
+            .up => to = if (at) |a| a -| 1 else last,
+            .home => to = 0,
+            .end => to = last,
+            .enter => enter = true,
+            // Left folds what is open, else goes to what the entry is
+            // in; Right opens what is folded, else goes to its first
+            // row, as on a fixed branch.
+            .left => if (at) |a| {
+                const e = list[a];
+                if (e.open != null and e.open.?.*) {
+                    e.open.?.* = false;
+                    c.changed = true;
+                } else if (e.parent) |p| to = p;
+            },
+            .right => if (at) |a| {
+                const e = list[a];
+                if (e.open != null and !e.open.?.*) {
+                    e.open.?.* = true;
+                    c.changed = true;
+                } else if (a + 1 < list.len and list[a + 1].parent == a) to = a + 1;
+            },
+            else => return,
+        }
+        c.input.key = null;
+    }
+    if (enter) if (at) |a| {
+        const e = list[a];
+        if (e.choosable) {
+            if (!sb.isSelected(e.key)) sb.choose(e.key);
+        } else if (e.open) |o| {
+            o.* = !o.*;
+            c.changed = true;
+        }
+        sb.kept.cursor = e.hash;
+    };
+    // Nothing to start from: the first row shows the ring until a key
+    // moves.
+    const start = at == null and to == null;
+    if (start != sb.kept.start) c.changed = true;
+    sb.kept.start = start;
+    const i = to orelse return;
+    const next = list[i];
+    sb.kept.cursor = next.hash;
+    c.changed = true;
+    if (next.choosable and !sb.opts.choose_on_enter and !sb.isSelected(next.key)) sb.choose(next.key);
+    reveal(sb, next.index);
+}
+
+/// Scrolls the sidebar so box `index`, as last laid out, is in view.
+pub fn reveal(sb: *Sidebar, index: u32) void {
+    const c = sb.c;
+    const box_id = c.node(sb.outer.index).id;
+    const view = c.rects.get(box_id) orelse return;
+    const r = c.rects.get(c.node(index).id) orelse return;
+    const offset = c.scroll.get(box_id) orelse 0;
+    if (r.y < view.y) {
+        c.scroll.put(c.gpa, box_id, @max(0, offset - (view.y - r.y))) catch {};
+    } else if (r.y + r.h > view.y + view.h) {
+        c.scroll.put(c.gpa, box_id, offset + (r.y + r.h - view.y - view.h)) catch {};
+    }
+}

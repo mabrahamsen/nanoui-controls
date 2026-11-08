@@ -4,6 +4,8 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const focus = @import("focus.zig");
+const builtin = @import("builtin");
+const Grid = @import("grid.zig").Grid;
 
 /// What takes the keyboard for a grid with a selection, as the pager
 /// does: from a click in the grid (see `Grid.end`), or Tab (`focus.take`).
@@ -90,4 +92,27 @@ pub fn useTyping(c: *ui.Context, focused: bool, typing: *Typing, count: usize) ?
     while (typing.len > 0 and !std.unicode.utf8ValidateSlice(typing.buf[0..typing.len])) typing.len -= 1;
     typing.at = c.time;
     return c.alloc().dupe(u8, typing.buf[0..typing.len]) catch null;
+}
+
+/// Backspace or Cmd+Up (Alt+Up off the Mac), and Escape, while the
+/// grid has the keyboard.
+pub fn otherKeys(g: *Grid) void {
+    if (!g.focused) return;
+    const c = g.c;
+    const mac = builtin.os.tag.isDarwin();
+    if (c.shortcut(.{ .key = ui.Shortcut.up, .cmd = mac, .alt = !mac })) {
+        g.back = true;
+        return;
+    }
+    const key = c.input.key orelse return;
+    switch (key) {
+        .backspace => g.back = true,
+        .up => if (if (mac) c.input.cmd else c.input.alt) {
+            g.back = true;
+        } else return,
+        .escape => g.escaped = true,
+        else => return,
+    }
+    c.input.key = null;
+    c.changed = true;
 }
