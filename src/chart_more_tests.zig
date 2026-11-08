@@ -403,3 +403,118 @@ test "a meter without gaps rounds only its ends, and zones label runs of its seg
     // fifth of the width.
     try std.testing.expectApproxEqAbs(@as(f32, 30), t.findText("<20").?.x + t.findText("<20").?.w / 2, 3);
 }
+
+test "a donut and a gauge with no room don't ask for frame after frame" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(300);
+            defer root.end();
+            @import("donut.zig").donut(c, &.{.{ .value = 0.5, .color = blue }}, .{ .size = 0 });
+            @import("gauge.zig").gauge(c, 0.5, .{ .size = 0 });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    t.frame();
+    try std.testing.expectEqual(@as(?f32, null), t.ctx.frame_in);
+}
+
+/// A line of three readings in eight slots.
+const Short = struct {
+    current: ?usize = null,
+    read: ?f32 = null,
+
+    fn view(x: *Short, c: *ui.Context) void {
+        const root = ui.div(c).column().w(200).p(10);
+        defer root.end();
+        var l = line(c, &.{.{ .values = &.{ 0.2, 0.5, 0.8 } }}, .{ .capacity = 8, .interactive = true });
+        x.current = l.current;
+        x.read = if (l.current) |i| l.reading(0, i) else null;
+        l.end();
+    }
+};
+
+test "an interactive line with a short history stops only on its readings, and says each" {
+    var x: Short = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Short.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    t.ctx.focusCycle(false);
+    t.settle(1);
+    t.key(.home);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 5), x.current);
+    try std.testing.expectEqual(@as(?f32, 0.2), x.read);
+    t.key(.left);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 5), x.current);
+    t.key(.end);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?f32, 0.8), x.read);
+}
+
+test "a box's measured size is kept by the box, not by where it is looked up" {
+    const T = struct {
+        extra: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const box = ui.div(c).column().w(120).h(40);
+            defer box.end();
+            // A child before the lookup, from some frame on, as a caller's
+            // content changes.
+            if (x.extra) ui.div(c).h(4).end();
+            _ = chart.lastSize(c, box.index);
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    // The box's size hasn't changed: no frame is asked for.
+    x.extra = true;
+    t.frame();
+    try std.testing.expectEqual(@as(?f32, null), t.ctx.frame_in);
+}
+
+test "bars on a fixed scale don't ask for a frame when their tallest bar changes" {
+    var x: Units = .{};
+    var t: ui.Tester = undefined;
+    try startUnits(&x, &t);
+    defer t.deinit();
+    x.values = &.{ 90, 10 };
+    t.frame();
+    try std.testing.expectEqual(@as(?f32, null), t.ctx.frame_in);
+}
+
+test "a meter's zones keep its segments one width when they don't divide evenly, and no value says nothing" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(300);
+            defer root.end();
+            meter(c, 1, .{ .segments = 7, .gap = 2, .zone_gap = 2, .zones = &.{ "a", "b", "c" }, .color = blue });
+            meter(c, std.math.nan(f32), .{ .label = "Load" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    var lo: f32 = 1000;
+    var hi: f32 = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.background) |b| if (std.meta.eql(b, blue)) {
+        const w = t.ctx.rects.get(node.id).?.w;
+        lo = @min(lo, w);
+        hi = @max(hi, w);
+    };
+    try std.testing.expect(hi - lo < 1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    for (list.items) |e| if (std.mem.eql(u8, e.label, "Load")) try std.testing.expectEqualStrings("", e.value);
+}

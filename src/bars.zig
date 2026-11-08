@@ -259,7 +259,7 @@ pub const Bars = struct {
         b.row.end();
         b.frame.close(c);
         // A new tallest bar on a scale that rises: draw again with it.
-        if (b.opts.max != null and b.peak != b.last_peak) {
+        if (b.opts.max != null and !b.opts.fixed_max and b.peak != b.last_peak) {
             kept(c).peak = b.peak;
             c.frameIn(0);
         }

@@ -61,8 +61,8 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
     const eased = ui.motion.number(c, "gauge", v, .{ .tween = .{ .duration = 0.35 } });
     const shown = if (known) eased else 0;
     const cv = ui.canvas(c, .{ .absolute = true, .width = .fill, .height = .fill });
-    // In its first frame it has no size: draw it again once it has.
-    if (cv.size.w == 0) c.frameIn(0);
+    // In its first frame it has no size: the canvas asks for the frame
+    // that gives it one.
     // In proportion to the size: at 116 points, ticks 11 long and 2.5 wide
     // with a glow 7 wide, its round end touching the edge.
     const unit = @min(cv.size.w, cv.size.h) / 116;

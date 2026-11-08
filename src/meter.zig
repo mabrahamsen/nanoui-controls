@@ -72,7 +72,11 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     c.node(r.index).style.width = if (zones > 0) .fill else chart.scaled(opts.width, k);
     // A strip rounded at its ends only: the segments square, cut by it.
     if (strip) r = r.rounded(opts.radius * k).clip();
-    chart.describe(c, r.index, opts.label, if (opts.value_text.len > 0) opts.value_text else c.print("{d}%", .{@round(v * 100)}), false);
+    // A value that isn't a number says nothing, as a gauge's; one without
+    // a label isn't said at all.
+    const known = !std.math.isNan(value);
+    const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
+    chart.describe(c, r.index, opts.label, said, false);
     const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
     var run: ?ui.Div = null;
     var zone: usize = 0;
@@ -81,7 +85,9 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
         if (zones > 0 and (run == null or i * zones / opts.segments != zone)) {
             if (run) |x| x.end();
             zone = i * zones / opts.segments;
-            run = ui.div(c).row().w(0).grow().hFull().gap(if (opts.gap > 0) opts.gap * k else -1);
+            // As wide as its share of the segments, so they are one width
+            // whatever the zones.
+            run = chart.weighted(ui.div(c).row().w(0).hFull().gap(if (opts.gap > 0) opts.gap * k else -1), @floatFromInt(zoneSize(zone, zones, opts.segments)));
         }
         const at = (@as(f32, @floatFromInt(i)) + 0.5) / n;
         var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else opts.radius * k);
@@ -100,11 +106,19 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     defer labels.end();
     ui.access.hide(c, labels.index);
     const t = kit.tokens(c);
-    for (opts.zones[0..zones]) |label| {
-        const cell = ui.div(c).w(0).grow().row().justifyCenter();
+    for (opts.zones[0..zones], 0..) |label, z| {
+        const cell = chart.weighted(ui.div(c).w(0).row().justifyCenter(), @floatFromInt(zoneSize(z, zones, opts.segments)));
         defer cell.end();
         ui.text(c, label, .{ .size = 9.5, .mono = true, .color = t.muted });
     }
+}
+
+/// How many of `segments` fall in zone `z` of `zones`, as `meter` deals
+/// them out.
+fn zoneSize(z: usize, zones: usize, segments: usize) usize {
+    var n: usize = 0;
+    for (0..segments) |i| n += @intFromBool(i * zones / segments == z);
+    return n;
 }
 
 const Color = ui.Color;

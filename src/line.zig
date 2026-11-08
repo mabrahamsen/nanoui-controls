@@ -9,9 +9,8 @@
 //!         .interactive = true,
 //!         .label = "Disk",
 //!     });
-//!     // `current` is a slot: with a history shorter than `capacity`, its
-//!     // readings start `capacity - read.len` slots in.
-//!     if (l.current) |i| if (i >= 60 - read.len) l.tooltip(c.print("{d:.1} MB/s", .{read[i - (60 - read.len)]}));
+//!     // `current` is a slot; `reading` is a series' reading in it.
+//!     if (l.current) |i| if (l.reading(0, i)) |r| l.tooltip(c.print("{d:.1} MB/s", .{r}));
 //!     l.end();
 const std = @import("std");
 const nanoui = @import("nanoui");
@@ -70,7 +69,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
     var peak = opts.max;
     if (!opts.fixed_max) for (series) |s| {
         for (0..@min(s.values.len, opts.capacity)) |j| {
-            const v = reading(s, opts.capacity, opts.capacity - @min(s.values.len, opts.capacity) + j) orelse continue;
+            const v = readingOf(s, opts.capacity, opts.capacity - @min(s.values.len, opts.capacity) + j) orelse continue;
             peak = @max(peak, v);
         }
     };
@@ -78,7 +77,11 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
     const frame: chart.Frame = .open(c, opts.width, .{ .axis = opts.axis, .lines = opts.value_lines, .lo = opts.min, .hi = peak, .top = pad, .start_text = opts.start_text, .end_text = opts.end_text, .scale = k }, opts.height != .px);
     const box = ui.div(c);
     frame.size(c, box.index, opts.width, opts.height);
-    const in: chart.Inspect = if (opts.interactive) .begin(c, box.index, opts.capacity, true) else .{};
+    // The slots before the longest history are empty: the pointer and the
+    // keys don't stop on them.
+    var longest: usize = 0;
+    for (series) |s| longest = @max(longest, @min(s.values.len, opts.capacity));
+    const in: chart.Inspect = if (opts.interactive) .beginFrom(c, box.index, opts.capacity, opts.capacity - longest, true) else .{};
     // The value lines first, so the canvas draws over them.
     if (opts.value_lines.len > 0) {
         const lines_h = switch (opts.height) {
@@ -105,7 +108,7 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
         var pts: std.ArrayList(ui.Point) = .empty;
         var i: usize = n - @min(s.values.len, n);
         while (i <= n) : (i += 1) {
-            const v = if (i < n) reading(s, n, i) else null;
+            const v = if (i < n) readingOf(s, n, i) else null;
             if (v) |r| {
                 const f = trend_mod.level(r, opts.min, peak) orelse 0;
                 pts.append(c.alloc(), .{ .x = at.x(i, n, w, pad), .y = at.y(f, h, pad) }) catch break;
@@ -129,13 +132,13 @@ pub fn line(c: *ui.Context, series: []const Series, opts: Options) Line {
         const x = at.x(i, n, w, pad);
         cv.line(.{ .x = x, .y = 0 }, .{ .x = x, .y = h }, .{ .width = 1, .color = t.muted.alpha(0.6) });
         for (series) |s| {
-            const r = reading(s, n, i) orelse continue;
+            const r = readingOf(s, n, i) orelse continue;
             const f = trend_mod.level(r, opts.min, peak) orelse continue;
             cv.circle(.{ .x = x, .y = at.y(f, h, pad) }, 3.5 * k, t.background);
             cv.circle(.{ .x = x, .y = at.y(f, h, pad) }, 2.5 * k, s.color orelse t.primary);
         }
     };
-    return .{ .current = in.current, .focused = in.focused, .c = c, .box = box, .frame = frame, .opts = opts, .inspect = in };
+    return .{ .current = in.current, .focused = in.focused, .c = c, .box = box, .frame = frame, .opts = opts, .series = series, .inspect = in };
 }
 
 /// How far the readings sit in from the chart's sides and top, so the
@@ -146,7 +149,7 @@ fn inset(opts: Options) f32 {
 
 /// Series `s`'s reading in slot `i` of `n`, right-aligned; null where it
 /// has none, or one that is not a number.
-fn reading(s: Series, n: usize, i: usize) ?f32 {
+fn readingOf(s: Series, n: usize, i: usize) ?f32 {
     const shown = @min(s.values.len, n);
     if (i < n - shown or i >= n) return null;
     const skip = s.values.len - shown;
@@ -165,8 +168,18 @@ pub const Line = struct {
     box: ui.Div,
     frame: chart.Frame,
     opts: Options,
+    series: []const Series,
     inspect: chart.Inspect,
     tip: []const u8 = "",
+
+    /// Series `s`'s reading in slot `i`, as drawn: null where it has none,
+    /// or one that is not a number. For a tooltip on `current`, without
+    /// the arithmetic of a history shorter than the slots or kept in a
+    /// ring.
+    pub fn reading(l: *const Line, s: usize, i: usize) ?f32 {
+        if (s >= l.series.len) return null;
+        return readingOf(l.series[s], l.opts.capacity, i);
+    }
 
     /// Says `text` in a tooltip by the current reading, and to a screen
     /// reader, as `Bars.tooltip`.
