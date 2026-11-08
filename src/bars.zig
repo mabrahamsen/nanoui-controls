@@ -30,7 +30,8 @@ pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 26 },
-    /// Between the slots; null keeps a hairline of one point at any scale.
+    /// Between the slots; null keeps a hairline of one point at any scale,
+    /// and 0 none, without seams, as the other charts' gaps.
     gap: ?f32 = null,
     /// The parts are in units, on a scale from `min` at the bottom to
     /// `max` at the top: a bar of 40 on a scale of 0 to 100 is 40% of the
@@ -184,7 +185,8 @@ pub fn bars(c: *ui.Context, opts: Options) Bars {
     const peak = kept(c).peak;
     const sc = Scale.of(opts, peak);
     const frame: chart.Frame = .open(c, .fill, .{ .axis = opts.axis, .lines = opts.value_lines, .lo = sc.lo, .hi = sc.hi, .start_text = opts.start_text, .end_text = opts.end_text, .scale = k }, opts.height != .px);
-    const row = ui.div(c).row().gap(if (opts.gap) |g| g * k else 1);
+    // Without gaps, the slots overlap by a point, as a meter's segments.
+    const row = ui.div(c).row().gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);
     frame.size(c, row.index, .fill, if (framed) opts.height else .fill);
     const in: chart.Inspect = if (opts.interactive) .beginFrom(c, row.index, opts.count, empty, false) else .{};
     if (opts.value_lines.len > 0) {

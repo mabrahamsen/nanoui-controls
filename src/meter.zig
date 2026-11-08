@@ -23,11 +23,12 @@ pub const Options = struct {
     segments: usize = 24,
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
-    height: f32 = 8,
+    height: ui.Length = .{ .px = 8 },
     /// Between the segments; 0 makes a strip without seams.
     gap: f32 = 3,
-    /// The segments' corner radius; without gaps, the strip's ends'.
-    radius: f32 = 2,
+    /// The segments' corner radius; without gaps, the strip's ends'. Null
+    /// rounds their ends, as a breakdown's.
+    radius: ?f32 = 2,
     /// Labels under equal runs of the segments, one a run ("<20", "<40",
     /// "80+"), the runs `zone_gap` apart: a scale in bands.
     zones: []const []const u8 = &.{},
@@ -62,16 +63,19 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     const lit = opts.color orelse kit.tokens(c).primary;
     const off = opts.track orelse chart.track(c);
     const n: f32 = @floatFromInt(opts.segments);
-    const strip = opts.gap == 0 and opts.radius > 0;
+    const strip = opts.gap == 0 and (opts.radius orelse 1) > 0;
     const zones = @min(opts.zones.len, opts.segments);
     const outer = if (zones > 0) ui.div(c).column().gap(3 * k) else null;
     if (outer) |o| c.node(o.index).style.width = chart.scaled(opts.width, k);
     // Without gaps, the segments overlap by a point: edges that fall
     // between pixels would otherwise show the background through.
-    var r = ui.div(c).row().h(opts.height * k).gap(if (zones > 0) opts.zone_gap * k else if (opts.gap > 0) opts.gap * k else -1);
+    var r = ui.div(c).row().gap(if (zones > 0) opts.zone_gap * k else if (opts.gap > 0) opts.gap * k else -1);
     c.node(r.index).style.width = if (zones > 0) .fill else chart.scaled(opts.width, k);
+    c.node(r.index).style.height = chart.scaled(opts.height, k);
+    const h = chart.linesHeight(c, opts.height, k, r.index);
+    const radius = if (opts.radius) |rad| rad * k else h / 2;
     // A strip rounded at its ends only: the segments square, cut by it.
-    if (strip) r = r.rounded(opts.radius * k).clip();
+    if (strip) r = r.rounded(radius).clip();
     // A value that isn't a number says nothing, as a gauge's; one without
     // a label isn't said at all.
     const known = !std.math.isNan(value);
@@ -90,7 +94,7 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
             run = chart.weighted(ui.div(c).row().w(0).hFull().gap(if (opts.gap > 0) opts.gap * k else -1), @floatFromInt(zoneSize(zone, zones, opts.segments)));
         }
         const at = (@as(f32, @floatFromInt(i)) + 0.5) / n;
-        var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else opts.radius * k);
+        var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else radius);
         if (at <= shown + 1e-6) {
             const col = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, at) else lit;
             seg = seg.bg(col);

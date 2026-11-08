@@ -333,7 +333,7 @@ controls.breakdown(c, &.{
 A ring of parts, clockwise from the top, with a figure (`text`) and a word under it (`caption`) in its middle. Its parts take a share of the ring as a breakdown's do, `whole` included. It is drawn with `ui.canvas`.
 
 ```zig
-controls.donut(c, &parts, .{ .size = 104, .text = "56%", .caption = "used", .label = "Memory", .value_text = "56% used" });
+controls.donut(c, &parts, .{ .diameter = 104, .text = "56%", .caption = "used", .label = "Memory", .value_text = "56% used" });
 ```
 
 - `size` is its width across, `thickness` the ring's, and `gap` the room between parts.

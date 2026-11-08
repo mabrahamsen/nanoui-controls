@@ -13,7 +13,7 @@ const chart = @import("chart.zig");
 pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
-    height: f32 = 6,
+    height: ui.Length = .{ .px = 6 },
     /// The bar's corner radius; null rounds its ends.
     radius: ?f32 = null,
     /// Between the parts; null keeps a hairline of one point at any scale,
@@ -44,9 +44,12 @@ pub const Options = struct {
 /// fit, each keeping its share.
 pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     const k = opts.scale;
-    const h = opts.height * k;
-    var r = ui.div(c).row().h(h).rounded(if (opts.radius) |rad| rad * k else h / 2).bg(opts.track orelse chart.track(c));
+    var r = ui.div(c).row().bg(opts.track orelse chart.track(c));
     c.node(r.index).style.width = chart.scaled(opts.width, k);
+    c.node(r.index).style.height = chart.scaled(opts.height, k);
+    // Its ends round at half its height, as laid out for one that fills.
+    const h = chart.linesHeight(c, opts.height, k, r.index);
+    r = r.rounded(if (opts.radius) |rad| rad * k else h / 2);
     if (opts.glow == 0) r = r.clip();
     // Without gaps, the parts overlap by a point, as a meter's segments.
     r = r.gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);

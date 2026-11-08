@@ -194,7 +194,8 @@ fn drawn(values: []const f32, opts: trend_mod.Options) ![10]?struct { f32, f32 }
     T.o = opts;
     T.o.capacity = 10;
     T.o.height = .{ .px = 100 };
-    T.o.gap = 0;
+    // A hairline between slots: slot i starts within its tenth.
+    T.o.gap = null;
     var x: T = .{};
     var t: ui.Tester = undefined;
     try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 200, .height = 120 });

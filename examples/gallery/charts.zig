@@ -225,7 +225,7 @@ pub const Monitor = struct {
             const row = ui.div(c).row().wFull().gap(20).itemsCenter();
             defer row.end();
             controls.donut(c, &parts, .{
-                .size = 104,
+                .diameter = 104,
                 .text = c.print("{d:.0}%", .{used / total * 100}),
                 .caption = "used",
                 .label = "Memory",
@@ -233,7 +233,7 @@ pub const Monitor = struct {
             });
             const right = ui.div(c).column().wFull().gap(10);
             defer right.end();
-            controls.breakdown(c, &parts, .{ .height = 10, .label = "Memory by kind", .value_text = c.print("{d:.1} of {d} GB", .{ used, total }) });
+            controls.breakdown(c, &parts, .{ .height = .{ .px = 10 }, .label = "Memory by kind", .value_text = c.print("{d:.1} of {d} GB", .{ used, total }) });
             var l = controls.legend(c, .{ .mono = true });
             l.item(t.primary, c.print("App {d:.1} GB", .{m.memory[0]}));
             l.item(t.warning, c.print("Wired {d:.1} GB", .{m.memory[1]}));
@@ -254,7 +254,7 @@ pub const Monitor = struct {
         controls.breakdown(c, &.{.{ .value = m.fan, .color = fan_color }}, .{ .part_radius = 3, .glow = glow, .label = "Fan", .value_text = c.print("{d:.0}%", .{m.fan * 100}) });
 
         section(c, "Heat ramp", "");
-        controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
+        controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = .{ .px = 6 } });
     }
 
     /// How many readings kept were over 80%: the alerts, for the sidebar.
@@ -380,8 +380,8 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
     if (shelf == .histories) return;
     section(c, "breakdown", "a total by kind, a whole by source, a level");
     const parts = [_]controls.BarPart{ .{ .value = 0.4, .color = t.primary }, .{ .value = 0.2, .color = t.warning }, .{ .value = 0.1, .color = t.info } };
-    controls.breakdown(c, &parts, .{ .height = 8 });
-    controls.breakdown(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.warning }, .{ .value = 1, .color = t.info } }, .{ .height = 8, .whole = true });
+    controls.breakdown(c, &parts, .{ .height = .{ .px = 8 } });
+    controls.breakdown(c, &.{ .{ .value = 3, .color = t.primary }, .{ .value = 2, .color = t.warning }, .{ .value = 1, .color = t.info } }, .{ .height = .{ .px = 8 }, .whole = true });
     controls.breakdown(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
     {
         var l = controls.legend(c, .{});
@@ -395,7 +395,7 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
     {
         const row = ui.div(c).row().wFull().gap(20).itemsCenter();
         defer row.end();
-        controls.donut(c, &parts, .{ .size = 96, .text = "70%", .caption = "used" });
+        controls.donut(c, &parts, .{ .diameter = 96, .text = "70%", .caption = "used" });
         const right = ui.div(c).column().wFull();
         defer right.end();
         _ = controls.barList(c, &.{
@@ -417,8 +417,8 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
     section(c, "meter", "segments lit to a value, a strip without gaps, rounded, and zones");
     controls.meter(c, 0.62, .{});
     controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
-    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
-    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 4, .height = 8 });
+    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 0, .height = .{ .px = 6 } });
+    controls.meter(c, 1, .{ .segments = 48, .ramp = &heat, .gap = 0, .radius = 4, .height = .{ .px = 8 } });
     controls.meter(c, 0.55, .{ .segments = 20, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &strength });
     {
         const row = ui.div(c).row().wFull().itemsCenter().gap(12);
@@ -439,7 +439,7 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
         var f = controls.flow(c, 110, .{ .gap = 16 });
         for ([_]struct { f32, []const u8, []const u8 }{ .{ 0.62, "B", "62 bits" }, .{ 0.25, "25%", "battery" }, .{ 0.9, "A", "strong" }, .{ 0.45, "45°", "heat" } }, 0..) |g, i| {
             const cell = f.cell();
-            controls.gauge(c, g[0], .{ .size = 110, .ramp = if (i == 1) &.{} else if (i == 3) &heat else &strength, .text = g[1], .caption = g[2], .label = g[2] });
+            controls.gauge(c, g[0], .{ .diameter = 110, .ramp = if (i == 1) &.{} else if (i == 3) &heat else &strength, .text = g[1], .caption = g[2], .label = g[2] });
             cell.end();
         }
         {

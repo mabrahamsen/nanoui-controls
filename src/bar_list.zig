@@ -66,7 +66,7 @@ pub const Options = struct {
     label_width: f32 = 120,
     /// The figures' column, at the end.
     value_width: f32 = 64,
-    bar_height: f32 = 6,
+    bar_height: ui.Length = .{ .px = 6 },
     /// Between the rows.
     gap: f32 = 2,
     /// The text's size, as the kit's.
@@ -94,6 +94,15 @@ pub const Options = struct {
     /// Multiplies its lengths but not its text, as the charts'.
     scale: f32 = 1,
 };
+
+/// Half a bar's height, for its rounded ends; a bar that fills rounds as
+/// much as it can.
+fn barHalf(h: ui.Length) f32 {
+    return switch (h) {
+        .px => |v| v / 2,
+        else => 999,
+    };
+}
 
 /// Draws a row for each of `items`, and returns the one clicked this
 /// frame, with `clickable`.
@@ -165,7 +174,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             .bar => breakdown_mod.breakdown(c, &.{.{ .value = share, .color = bar_color }}, .{
                 .height = opts.bar_height,
                 .radius = opts.bar_radius,
-                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse opts.bar_height / 2) else 0,
+                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse barHalf(opts.bar_height)) else 0,
                 .glow = opts.glow,
                 .track = opts.track,
                 .scale = k,
@@ -177,7 +186,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 .ramp = if (it.color == null) opts.ramp else &.{},
                 .glow = opts.glow,
                 .track = opts.track,
-                .radius = opts.bar_radius orelse 2,
+                .radius = opts.bar_radius,
                 .scale = k,
             }),
         }

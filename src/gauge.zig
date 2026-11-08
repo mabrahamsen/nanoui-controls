@@ -14,7 +14,7 @@ const chart = @import("chart.zig");
 
 pub const Options = struct {
     /// Across, in points.
-    size: f32 = 116,
+    diameter: f32 = 116,
     /// How many ticks, from the first to the last.
     ticks: usize = 40,
     /// The ticks' length; null takes about a tenth of the size.
@@ -52,7 +52,7 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
     const k = opts.scale;
     const known = !std.math.isNan(value);
     const v = if (known) std.math.clamp(value, 0, 1) else 0;
-    const size = opts.size * k;
+    const size = opts.diameter * k;
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();
     const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
@@ -88,8 +88,8 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
         const r = inner - 7 * unit;
         chart.arc(c, cv, mid, r + 0.5 * k, r - 0.5 * k, 0, std.math.tau, t.border);
     }
-    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.size * 0.2), .weight = .semibold, .color = colorAt(opts, t, v) });
-    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.size * 0.09), .color = t.muted });
+    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.diameter * 0.2), .weight = .semibold, .color = colorAt(opts, t, v) });
+    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.diameter * 0.09), .color = t.muted });
 }
 
 /// A lit tick's color at `at`, 0 to 1.
@@ -162,7 +162,7 @@ test "a gauge eases to a new value, and moves at once with reduced motion" {
 }
 
 test "a gauge draws nothing outside its box" {
-    var d: Dial = .{ .value = 1, .opts = .{ .size = 40, .color = red, .inner_line = false } };
+    var d: Dial = .{ .value = 1, .opts = .{ .diameter = 40, .color = red, .inner_line = false } };
     var t: ui.Tester = undefined;
     try startDial(&d, &t);
     defer t.deinit();

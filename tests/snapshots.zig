@@ -324,7 +324,7 @@ const Charts = struct {
         controls.breakdown(c, &.{.{ .value = 0.65, .color = t.danger }}, .{ .part_radius = 3, .glow = 0.6 });
         controls.meter(c, 0.62, .{});
         controls.meter(c, 0.8, .{ .ramp = &heat, .glow = 0.6 });
-        controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 0, .height = 6 });
+        controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 0, .height = .{ .px = 6 } });
         var l = controls.legend(c, .{});
         l.item(t.primary, "Read");
         l.item(t.success, "Write");
@@ -353,7 +353,7 @@ const MoreCharts = struct {
         {
             const row = ui.div(c).row().wFull().gap(12).itemsCenter();
             defer row.end();
-            controls.donut(c, &.{ .{ .value = 0.45, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.06, .color = t.warning } }, .{ .size = 84, .text = "71%", .caption = "used" });
+            controls.donut(c, &.{ .{ .value = 0.45, .color = t.primary }, .{ .value = 0.2, .color = t.success }, .{ .value = 0.06, .color = t.warning } }, .{ .diameter = 84, .text = "71%", .caption = "used" });
             const right = ui.div(c).column().wFull().gap(2);
             defer right.end();
             _ = controls.barList(c, &folders, .{ .label_width = 74, .value_width = 54, .size = .xs });
@@ -668,7 +668,7 @@ const Gauges = struct {
         var f = controls.flow(c, 104, .{ .gap = 12 });
         for ([_]struct { f32, []const u8, []const u8 }{ .{ 0.62, "B", "62 bits" }, .{ 0.25, "25%", "battery" }, .{ 0.9, "A", "strong" } }, 0..) |g, i| {
             const cell = f.cell();
-            controls.gauge(c, g[0], .{ .size = 104, .ramp = if (i == 1) &.{} else &strength, .text = g[1], .caption = g[2] });
+            controls.gauge(c, g[0], .{ .diameter = 104, .ramp = if (i == 1) &.{} else &strength, .text = g[1], .caption = g[2] });
             cell.end();
         }
         {
@@ -858,7 +858,7 @@ fn richerCharts(_: *u8, c: *ui.Context) void {
         controls.legendSwatch(c, t.success, .{ .shape = .dot });
         controls.legendSwatch(c, t.danger, .{ .shape = .line });
     }
-    controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 4, .height = 8, .segments = 40 });
+    controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 4, .height = .{ .px = 8 }, .segments = 40 });
     controls.meter(c, 0.5, .{ .segments = 15, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &heat });
 }
 

@@ -24,8 +24,8 @@ test "a donut and a gauge with no room don't ask for frame after frame" {
         fn view(_: *@This(), c: *ui.Context) void {
             const root = ui.div(c).column().w(300);
             defer root.end();
-            @import("donut.zig").donut(c, &.{.{ .value = 0.5, .color = blue }}, .{ .size = 0 });
-            @import("gauge.zig").gauge(c, 0.5, .{ .size = 0 });
+            @import("donut.zig").donut(c, &.{.{ .value = 0.5, .color = blue }}, .{ .diameter = 0 });
+            @import("gauge.zig").gauge(c, 0.5, .{ .diameter = 0 });
         }
     };
     var x: T = .{};

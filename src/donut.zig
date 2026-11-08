@@ -17,7 +17,7 @@ const chart = @import("chart.zig");
 
 pub const Options = struct {
     /// Across, in points.
-    size: f32 = 96,
+    diameter: f32 = 96,
     /// The ring's thickness.
     thickness: f32 = 12,
     /// Between the parts, at the ring's middle.
@@ -44,7 +44,7 @@ pub const Options = struct {
 pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
     const t = kit.tokens(c);
     const k = opts.scale;
-    const size = opts.size * k;
+    const size = opts.diameter * k;
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();
     chart.describe(c, box.index, opts.label, opts.value_text, false, "");
@@ -77,8 +77,8 @@ pub fn donut(c: *ui.Context, parts: []const chart.Part, opts: Options) void {
             chart.arc(c, cv, center, r_out, r_in, from + gap / 2, std.math.tau - gap / 2, track);
         }
     }
-    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.size * 0.2), .weight = .semibold, .color = t.foreground });
-    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.size * 0.11), .color = t.muted });
+    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.diameter * 0.2), .weight = .semibold, .color = t.foreground });
+    if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.diameter * 0.11), .color = t.muted });
 }
 
 const cyan: ui.Color = .hex(0x22d3ee);
