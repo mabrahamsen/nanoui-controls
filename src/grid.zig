@@ -292,24 +292,26 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         c.node(box.index).style.min_height = 0;
     }
     follow(c, opts);
-    if (opts.selected) |s| if (s.*) |i| if (i >= opts.count) {
-        s.* = if (opts.count > 0) opts.count - 1 else null;
+    // A selection past the rows shown moves back to the last of them.
+    const shown = lay_mod.rowsShown(opts);
+    if (opts.selected) |s| if (s.*) |i| if (i >= shown) {
+        s.* = if (shown > 0) shown - 1 else null;
         c.changed = true;
     };
     const own = keys.take(c, box, opts.selected != null);
-    if (opts.selection) |m| if (own.focused and opts.count > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m, true);
+    if (opts.selection) |m| if (own.focused and shown > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m[0..shown], true);
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;
     const press: Press = if (c.input.down) lay_mod.state(c, Press).* else .{};
     const opening = lay_mod.state(c, Opening).*;
-    if (opts.loading) |l| if (!kept.loading) ui.access.announce(c, l.label);
+    if (opts.loading) |l| if (!kept.loading and l.label.len > 0) ui.access.announce(c, l.label);
     const lay = lay_mod.layout(c, columns, opts, box, kept.sx);
     const head: @import("grid_header.zig").Head = if (opts.header) header(c, columns, opts, lay) else .{};
     if (opts.header and opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     if (opts.loading) |l| if (opts.count > 0) loading_mod.line(c, opts, l);
     var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .fit_w = head.fit_w };
     g.fadeFrom(opening);
-    const row_gap = rowGap(opts);
+    const row_gap = lay_mod.rowGap(opts);
     if (g.anchor) |a| if (a >= opts.count) {
         g.anchor = null;
     };
@@ -363,13 +365,6 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         }
     }
     return g;
-}
-
-/// The room between rows: none with lines between them, which the rows
-/// meet, and more between cards.
-fn rowGap(opts: Options) f32 {
-    if (opts.rows == .cards) return @max(opts.gap, 6);
-    return if (opts.row_lines) 0 else opts.gap;
 }
 
 /// Keeps `selected` on the row it was on when the rows in view changed
@@ -534,7 +529,9 @@ pub const Grid = struct {
         g.row = r;
         g.row_hovered = it.hovered;
         g.row_index = i;
-        g.row_clicked = it.clicked;
+        // The second click of a double click is a click too: a heading
+        // folds or opens on the first only.
+        g.row_clicked = it.clicked and !it.double_clicked;
         g.row_depth = if (item) |x| x.depth() else 0;
         g.column = 0;
         return .{ .index = i, .clicked = it.clicked, .hovered = it.hovered, .selected = selected, .opened = !is_heading and (it.double_clicked or g.opened == i), .secondary_clicked = it.secondary_clicked, .drag_started = drag_started, .grid = g };
@@ -565,7 +562,7 @@ pub const Grid = struct {
     /// Selects row `i` alone, if rows select, and scrolls it into view:
     /// where `typed` leads. The grid is drawn again to show it.
     pub fn jump(g: *Grid, i: usize) void {
-        if (i >= g.opts.count) return;
+        if (i >= lay_mod.rowsShown(g.opts)) return;
         g.pick(i, .only);
         g.jump_to = i;
         g.c.changed = true;
@@ -683,7 +680,7 @@ pub const Grid = struct {
         {
             const slot = ui.div(c).w((indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
             defer slot.end();
-            ui.icon(c, if (open) "chevron.down" else "chevron.right", .{ .size = 9.5, .color = t.muted });
+            ui.icon(c, if (open) "chevron.down" else "chevron.right", .{ .size = 9.5 * k, .color = t.muted });
         }
         ui.text(c, opts.title, .{ .size = 13, .weight = .semibold, .truncate = .ellipsis });
         if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = 12, .color = t.muted, .truncate = .ellipsis });

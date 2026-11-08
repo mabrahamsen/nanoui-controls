@@ -483,3 +483,111 @@ test "Backspace and Cmd+Up go back, and Escape is reported, while the grid has t
     t.key(.backspace);
     try std.testing.expectEqual(@as(usize, 2), x.backs);
 }
+
+test "a double click on a heading folds it once, not back open" {
+    var x: Repos = .{};
+    var t: ui.Tester = undefined;
+    try start(&x, &t, Repos.view);
+    defer t.deinit();
+    const r = t.findText("beta").?;
+    t.doubleClick(r.x + 2, r.y + r.h / 2);
+    t.settle(1);
+    try std.testing.expect(!x.open[1]);
+}
+
+/// Ten rows, five shown.
+const Few = struct {
+    selected: ?usize = 8,
+    cards: bool = false,
+    scale: f32 = 1,
+
+    const columns = [_]Column{.{ .title = "Name" }};
+
+    fn view(x: *Few, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull();
+        defer root.end();
+        var g = grid(c, &columns, .{ .count = 10, .max_rows = 5, .selected = &x.selected });
+        while (g.next()) |row| {
+            g.cell();
+            ui.text(c, c.print("row {d}", .{row.index}), .{});
+        }
+        g.end();
+    }
+};
+
+test "with max_rows, a selection past the rows shown moves back to the last shown" {
+    var x: Few = .{};
+    var t: ui.Tester = undefined;
+    try start(&x, &t, Few.view);
+    defer t.deinit();
+    try std.testing.expectEqual(@as(?usize, 4), x.selected);
+}
+
+/// Cards loading, then in.
+const CardLoader = struct {
+    count: usize = 0,
+
+    fn view(x: *CardLoader, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull();
+        defer root.end();
+        var g = grid(c, &Loader.columns, .{ .count = x.count, .rows = .cards, .loading = if (x.count == 0) .{} else null });
+        while (g.next()) |row| {
+            g.cell();
+            ui.text(c, c.print("fruit {d}", .{row.index}), .{});
+        }
+        g.end();
+    }
+};
+
+test "sketched rows take the room real rows do, cards' gap included, and an empty label isn't said" {
+    var x: CardLoader = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, CardLoader.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.frame();
+    try std.testing.expectEqual(@as(usize, 0), t.ctx.access.announcement_len);
+    t.settle(1);
+    // The sketched rows' bars, a pair a row: one row's to the next.
+    var ys: [64]f32 = undefined;
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.height == .px and node.style.height.px == 10 and node.style.background != null) {
+        const y = t.ctx.rects.get(node.id).?.y;
+        if (n == 0 or ys[n - 1] != y) {
+            ys[n] = y;
+            n += 1;
+        }
+    };
+    try std.testing.expect(n >= 3);
+    try std.testing.expectApproxEqAbs(@as(f32, 28 + 6), ys[1] - ys[0], 0.5);
+}
+
+test "a heading's chevron follows the grid's scale" {
+    const T = struct {
+        open: [1]bool = .{true},
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().sizeFull();
+            defer root.end();
+            const gs = Groups.init(c, &.{.{ .size = 1 }}, &x.open, .{});
+            var g = grid(c, &Repos.columns, .{ .count = gs.count(), .groups = gs, .scale = 2 });
+            while (g.next()) |row| switch (gs.at(row.index)) {
+                .heading => g.heading(.{ .title = "alpha" }),
+                .row => {
+                    g.cell();
+                    ui.text(c, "a", .{});
+                },
+            };
+            g.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    var size: f32 = 0;
+    for (t.ctx.nodes.items) |node| switch (node.content) {
+        .icon => |ic| size = ic.size,
+        else => {},
+    };
+    try std.testing.expectEqual(@as(f32, 19), size);
+}
