@@ -246,3 +246,44 @@ test "a trend with a label is one image to a screen reader, with its value" {
     try std.testing.expectEqualStrings("Temperature", list.items[0].label);
     try std.testing.expectEqualStrings("62 °C, peak 81 °C", list.items[0].value);
 }
+
+test "a trend takes an axis and texts under it, and says each reading's tip as it is stepped through" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(200).p(10);
+            defer root.end();
+            trend(c, &.{ 30, 60, 90 }, .{
+                .capacity = 5,
+                .min = 20,
+                .max = 110,
+                .fixed_max = true,
+                .height = .{ .px = 50 },
+                .value_lines = &.{.{ .value = 65, .label = "65" }},
+                .axis = .end,
+                .end_text = "now",
+                .interactive = true,
+                .tips = &.{ "30 °C", "60 °C", "90 °C" },
+                .label = "Heat",
+            });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expect(t.hasText("65") and t.hasText("now"));
+    t.ctx.focusCycle(false);
+    t.settle(1);
+    t.key(.home);
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var said: []const u8 = "";
+    for (list.items) |e| if (std.mem.eql(u8, e.label, "Heat")) {
+        said = e.value;
+    };
+    try std.testing.expectEqualStrings("30 °C", said);
+}

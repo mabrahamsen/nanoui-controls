@@ -21,6 +21,10 @@ const chart = @import("chart.zig");
 pub const Options = struct {
     /// How many segments.
     segments: usize = 24,
+    /// The values of an unlit meter and a full one: a temperature from 20
+    /// to 110 needs no scaling to 0 and 1.
+    min: f32 = 0,
+    max: f32 = 1,
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 8 },
@@ -61,7 +65,8 @@ pub const Options = struct {
 /// lights none.
 pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     const k = opts.scale;
-    const v = if (std.math.isNan(value)) 0 else std.math.clamp(value, 0, 1);
+    // Its place between `min` and `max`; none for one that isn't a number.
+    const v = chart.level(value, opts.min, opts.max) orelse 0;
     const lit = opts.color orelse kit.tokens(c).primary;
     const off = opts.track orelse chart.track(c);
     const n: f32 = @floatFromInt(opts.segments);
@@ -80,7 +85,7 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     if (strip) r = r.rounded(radius).clip();
     // A value that isn't a number says nothing, as a gauge's; one without
     // a label isn't said at all.
-    const known = !std.math.isNan(value);
+    const known = std.math.isFinite(value);
     const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
     chart.describe(c, r.index, opts.label, said, false, "");
     const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });

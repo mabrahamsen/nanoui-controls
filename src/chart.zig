@@ -311,7 +311,10 @@ pub const Frame = struct {
 /// decoration.
 pub fn describe(c: *ui.Context, index: u32, label: []const u8, value: []const u8, interactive: bool, unnamed: []const u8) void {
     if (label.len == 0 and !interactive) return ui.access.hide(c, index);
-    ui.access.describe(c, index, .{ .role = .image, .label = if (label.len > 0) label else unnamed, .value = value });
+    // An interactive chart is adjustable: a screen reader's swipes step
+    // through its slots, saying each one's tooltip as its value.
+    if (interactive) return c.adjustable(index, .{ .role = .image, .label = if (label.len > 0) label else unnamed, .value = value });
+    ui.access.describe(c, index, .{ .role = .image, .label = label, .value = value });
 }
 
 /// What the pointer or the keys point at in a chart of `count` slots
@@ -336,7 +339,9 @@ pub const Inspect = struct {
         const it = c.interact(index, .{ .focusable = true });
         // The slot pointed at or moved to, and where the pointer was when
         // it last picked one (none while it is off the chart).
-        const kept = c.state(struct { slot: ?usize = null, x: ?f32 = null }, "chart-slot");
+        // Whether a screen reader stepped to it: the slot stays current
+        // while its reader is on the chart, as the pointer's does under it.
+        const kept = c.state(struct { slot: ?usize = null, x: ?f32 = null, voiced: bool = false }, "chart-slot");
         if (count == 0 or first >= count) return .{ .focused = it.focused, .id = it.id };
         if (kept.slot) |s| if (s >= count) {
             kept.slot = count - 1;
@@ -351,13 +356,23 @@ pub const Inspect = struct {
                 const n: f32 = @floatFromInt(count);
                 const x = (c.input.mouse.x - r.x) / r.w;
                 kept.slot = @intFromFloat(std.math.clamp(if (points) @round(x * (n - 1)) else x * n, 0, n - 1));
+                kept.voiced = false;
             };
         }
         if (it.focused) kept.slot = keys(c, kept.slot orelse count - 1, count, first);
+        // A screen reader's swipe up or down steps from slot to slot, as
+        // Right and Left do.
+        if (it.a11y_step != 0) {
+            const up = it.a11y_step > 0;
+            // From nothing, the first swipe lands on an end.
+            kept.slot = if (kept.slot) |at| (if (up) @min(at + 1, count - 1) else @max(first, at -| 1)) else if (up) first else count - 1;
+            kept.voiced = true;
+            c.changed = true;
+        }
         if (kept.slot) |s| if (s < first) {
             kept.slot = if (it.focused) first else null;
         };
-        if (!it.hovered and !it.focused) return .{ .id = it.id };
+        if (!it.hovered and !it.focused and !kept.voiced) return .{ .id = it.id };
         return .{ .current = kept.slot, .focused = it.focused, .id = it.id };
     }
 

@@ -46,9 +46,20 @@ pub const Options = struct {
     fade: ?f32 = 0.35,
     /// Lines across at these values, behind the bars.
     value_lines: []const chart.ValueLine = &.{},
+    /// The value lines' labels in a gutter beside the chart, and texts
+    /// under it, as `bars`' (`axis`, `start_text`, `end_text`).
+    axis: chart.Axis = .none,
+    start_text: []const u8 = "",
+    end_text: []const u8 = "",
+    /// The user can point at a reading, or take the keyboard and step
+    /// through them, as `bars`: each says its `tips` text in a tooltip and
+    /// to a screen reader, one a reading shown, oldest first.
+    interactive: bool = false,
+    tips: []const []const u8 = &.{},
     /// What a screen reader calls the chart, and says it shows, as `bars`.
     label: []const u8 = "",
     value_text: []const u8 = "",
+    chart_text: []const u8 = "Chart",
     /// Multiplies the chart's lengths, as `bars`.
     scale: f32 = 1,
 };
@@ -68,24 +79,38 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
         if (std.math.isFinite(v)) most = @max(most, v);
     }
     const peak = chart.scaleTop(opts.min, opts.max, opts.fixed_max, most);
-    const empty = opts.capacity - shown;
     const baseline = if (opts.baseline > 0) @min(opts.baseline, 1) else 0;
+    // Drawn as bars in units from `min`, so the bars rise from the bottom
+    // whatever `min` is, and value lines and an axis sit on the same scale.
+    const range = peak - opts.min;
+    const lines = c.alloc().alloc(chart.ValueLine, opts.value_lines.len) catch @panic("trend: out of memory");
+    for (lines, opts.value_lines[0..lines.len]) |*l, v| l.* = .{ .value = v.value - opts.min, .label = v.label };
     var b = bars_mod.bars(c, .{
         .count = opts.capacity,
+        .readings = shown,
+        .units = true,
+        .max = range,
+        .fixed_max = true,
         .width = opts.width,
         .height = opts.height,
         .gap = opts.gap,
+        .value_lines = lines,
+        .axis = opts.axis,
+        .start_text = opts.start_text,
+        .end_text = opts.end_text,
+        .interactive = opts.interactive,
         .label = opts.label,
         .value_text = opts.value_text,
+        .chart_text = opts.chart_text,
         .scale = opts.scale,
     });
-    if (opts.value_lines.len > 0) chart.valueLines(c, opts.value_lines, chart.linesHeight(c, opts.height, opts.scale, b.row.index), 0, opts.min, peak, true);
     defer b.end();
+    if (b.current) |r| if (r < opts.tips.len) b.tooltip(opts.tips[r]);
     while (b.next()) |slot| {
-        if (slot.index < empty) continue;
-        const v = chart.level(chart.slotReading(values, opts.head, opts.capacity, slot.index) orelse continue, opts.min, peak) orelse continue;
+        const r = chart.slotReading(values, opts.head, opts.capacity, slot.index) orelse continue;
+        const v = chart.level(r, opts.min, peak) orelse continue;
         const base = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, v) else col;
-        slot.bar(&.{.{ .value = @max(baseline, v), .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
+        slot.bar(&.{.{ .value = @max(baseline, v) * range, .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
     }
 }
 

@@ -65,3 +65,30 @@ test "a meter's zones keep its segments one width when they don't divide evenly,
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
     for (list.items) |e| if (std.mem.eql(u8, e.label, "Load")) try std.testing.expectEqualStrings("", e.value);
 }
+
+test "a meter and a gauge take their own min and max" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(200);
+            defer root.end();
+            meter(c, 65, .{ .min = 20, .max = 110, .segments = 10, .color = blue, .label = "Heat" });
+            @import("gauge.zig").gauge(c, 65, .{ .min = 20, .max = 110, .label = "Gauge" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Halfway: five of ten lit.
+    var lit: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.background) |b| if (std.meta.eql(b, blue)) {
+        lit += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 5), lit);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    for (list.items) |e| try std.testing.expectEqualStrings("50%", e.value);
+}

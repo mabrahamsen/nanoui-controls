@@ -17,6 +17,10 @@ pub const Options = struct {
     diameter: f32 = 116,
     /// How many ticks, from the first to the last.
     ticks: usize = 40,
+    /// The values of an unlit gauge and a full one: a temperature from 20
+    /// to 110 needs no scaling to 0 and 1.
+    min: f32 = 0,
+    max: f32 = 1,
     /// The ticks' length, in points before `scale`; null takes about a
     /// tenth of the diameter.
     thickness: ?f32 = null,
@@ -51,8 +55,9 @@ pub const Options = struct {
 pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
     const t = kit.tokens(c);
     const k = opts.scale;
-    const known = !std.math.isNan(value);
-    const v = if (known) std.math.clamp(value, 0, 1) else 0;
+    const known = std.math.isFinite(value);
+    // Its place between `min` and `max`; none for one that isn't a number.
+    const v = chart.level(value, opts.min, opts.max) orelse 0;
     const size = opts.diameter * k;
     const box = ui.div(c).w(size).h(size).column().center();
     defer box.end();

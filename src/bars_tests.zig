@@ -476,3 +476,40 @@ test "a line chart takes an axis and texts under it, as bars do" {
     try std.testing.expect(t.findText("100").?.x >= r.x + r.w - 0.5);
     try std.testing.expect(t.findText("now").?.y >= r.y + r.h);
 }
+
+test "a screen reader's swipes step through an interactive chart's slots, saying each" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(200).p(10);
+            defer root.end();
+            const values = [_]f32{ 0.2, 0.5, 0.8 };
+            var b = bars(c, .{ .count = 3, .interactive = true, .label = "Load" });
+            while (b.next()) |slot| slot.bar(&.{.{ .value = values[slot.index], .color = blue }});
+            if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{values[i] * 100}));
+            b.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expect(list.items[0].adjustable);
+    const id = list.items[0].id;
+    t.ctx.a11yStep(id, 1);
+    t.settle(1);
+    t.ctx.a11yStep(id, 1);
+    t.settle(1);
+    list = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqualStrings("50%", list.items[0].value);
+    t.ctx.a11yStep(id, -1);
+    t.settle(1);
+    list = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqualStrings("20%", list.items[0].value);
+}
