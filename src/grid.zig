@@ -75,7 +75,8 @@ pub const Column = struct {
     /// Its share of the room left, against the other columns without a
     /// width: 2 takes twice what 1 does.
     flex: f32 = 1,
-    /// The narrowest it gets, taking room or resized, in points.
+    /// The narrowest it gets, taking room or resized, in points before
+    /// `scale`.
     min_width: f32 = 40,
     /// Where its cells' contents and its title sit: numbers line up at
     /// the end, a mark or a short status may sit in the center.
@@ -102,14 +103,16 @@ pub const Sort = struct {
 };
 
 pub const Options = struct {
+    /// How many rows.
     count: usize,
+    /// A row's height, in points before `scale`.
     row_height: f32 = 28,
     /// Lines of text a row has room for: each past the first adds to
     /// `row_height`, for cells drawn with `twoLines`.
     lines: u8 = 1,
-    /// Between rows.
+    /// Between rows, in points before `scale`.
     gap: f32 = 2,
-    /// Between columns.
+    /// Between columns, in points before `scale`.
     column_gap: f32 = 10,
     /// The order the rows are in, which the header shows and changes.
     sort: ?*Sort = null,
@@ -206,7 +209,8 @@ pub const Options = struct {
     /// kit sizes its controls with a `kit.Size`, as the pager does, but
     /// has no sizes for a grid.
     scale: f32 = 1,
-    /// How far the header and the rows start their cells in.
+    /// How far the header and the rows start their cells in, in points
+    /// before `scale`.
     padding: f32 = 10,
     /// A line under the header.
     header_line: bool = true,

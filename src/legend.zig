@@ -18,9 +18,9 @@ const kit = nanoui.kit;
 const chart = @import("chart.zig");
 
 pub const Options = struct {
-    /// Between the items on a line.
+    /// Between the items on a line, in points before `scale`.
     gap: f32 = 14,
-    /// Between the lines.
+    /// Between the lines, in points before `scale`.
     row_gap: f32 = 4,
     /// The labels' size, as the kit's; the swatches go with it.
     size: kit.Size = .xs,

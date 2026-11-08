@@ -16,11 +16,11 @@ const kit = nanoui.kit;
 const chart = @import("chart.zig");
 
 pub const Options = struct {
-    /// Across, in points.
+    /// Across, in points before `scale`.
     diameter: f32 = 96,
-    /// The ring's thickness.
+    /// The ring's thickness, in points before `scale`.
     thickness: f32 = 12,
-    /// Between the parts, at the ring's middle.
+    /// Between the parts, at the ring's middle, in points before `scale`.
     gap: f32 = 2,
     /// Where no part is; null takes the track of the kit's progress bar.
     track: ?ui.Color = null,

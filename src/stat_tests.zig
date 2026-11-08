@@ -65,3 +65,33 @@ test "a stat button is clicked by the pointer and the keys, and is a button to a
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
     try std.testing.expectEqual(ui.access.Role.button, list.items[1].role);
 }
+
+test "a stat's history takes a scale, and its lengths follow scale" {
+    const T = struct {
+        k: f32 = 1,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(240);
+            defer root.end();
+            stat_mod.stat(c, "Load", "1%", .{ .history = &.{ 0.005, 0.01 }, .history_max = null, .color = blue, .scale = x.k });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Scaled to its peak: the newest bar is full, the older half.
+    // The trend fades its older bars: their color, at any opacity.
+    var h: [2]f32 = undefined;
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.background) |bg| if (bg.r == blue.r and bg.g == blue.g and bg.b == blue.b) {
+        if (n < 2) h[n] = t.ctx.rects.get(node.id).?.h;
+        n += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 2), n);
+    try std.testing.expect(h[1] > h[0] * 1.8);
+    const pad = t.findText("Load").?.y;
+    x.k = 2;
+    t.settle(1);
+    try std.testing.expect(t.findText("Load").?.y > pad + 10);
+}

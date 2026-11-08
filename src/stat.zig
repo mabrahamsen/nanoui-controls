@@ -32,6 +32,13 @@ pub const Options = struct {
     history_capacity: usize = 0,
     /// The trend's color; null takes the theme's accent.
     color: ?ui.Color = null,
+    /// The trend's scale, as a trend takes it: `history_max` rising to the
+    /// history's peak unless `history_fixed_max`, null taking the peak.
+    history_min: f32 = 0,
+    history_max: ?f32 = 1,
+    history_fixed_max: bool = false,
+    /// The trend's colors by height, as a trend's `ramp`; over `color`.
+    history_ramp: []const ui.Color = &.{},
     /// The figure's color, for one that says how something stands
     /// ("Nominal" in the success color); null takes the theme's text.
     value_color: ?ui.Color = null,
@@ -53,6 +60,8 @@ pub const Options = struct {
     loading: bool = false,
     /// What a screen reader says while it is loading.
     loading_text: []const u8 = "loading",
+    /// Multiplies its lengths but not its text, as the charts'.
+    scale: f32 = 1,
 };
 
 /// Draws the stat `label` reading `value`.
@@ -92,11 +101,12 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
 /// clicked.
 fn open(c: *ui.Context, opts: Options, clickable: bool) ui.Div {
     const t = kit.tokens(c);
-    var box = ui.div(c).column().gap(4);
+    const k = opts.scale;
+    var box = ui.div(c).column().gap(4 * k);
     c.node(box.index).style.width = opts.width;
     if (opts.card) {
-        box = box.p(12).rounded(t.radius).bg(t.surface).border(t.border);
-    } else if (clickable) box = box.p(6).rounded(t.radius);
+        box = box.p(12 * k).rounded(t.radius * k).bg(t.surface).border(t.border);
+    } else if (clickable) box = box.p(6 * k).rounded(t.radius * k);
     return box;
 }
 
@@ -111,7 +121,7 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
     ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
     {
         const size = opts.size.text() * 2;
-        const row = ui.div(c).row().itemsCenter().gap(8);
+        const row = ui.div(c).row().itemsCenter().gap(8 * opts.scale);
         defer row.end();
         if (opts.loading) {
             const slot = ui.div(c).h(@round(size * 1.2)).row().itemsCenter();
@@ -119,7 +129,7 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
             kit.spinner(c, .{ .size = @round(size * 0.7) });
         } else if (opts.unit.len > 0) {
             // The unit on the figure's line, at its foot.
-            const fig = ui.div(c).row().itemsEnd().gap(3);
+            const fig = ui.div(c).row().itemsEnd().gap(3 * opts.scale);
             defer fig.end();
             ui.text(c, value, .{ .size = size, .weight = .semibold, .color = opts.value_color orelse t.foreground });
             const u = ui.div(c).pb(@round(size * 0.12));
@@ -130,12 +140,17 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
     }
     if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
     if (opts.history.len > 0) {
-        ui.div(c).h(2).end();
+        ui.div(c).h(2 * opts.scale).end();
         trend_mod.trend(c, opts.history, .{
             .capacity = if (opts.history_capacity > 0) opts.history_capacity else opts.history.len,
             .head = opts.history_head,
             .height = .{ .px = @round(opts.size.height() * 0.85) },
             .color = opts.color,
+            .min = opts.history_min,
+            .max = opts.history_max,
+            .fixed_max = opts.history_fixed_max,
+            .ramp = opts.history_ramp,
+            .scale = opts.scale,
         });
     }
 }

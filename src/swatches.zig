@@ -32,6 +32,9 @@ pub const Options = struct {
     selected_border: ?ui.Color = null,
     /// Each named in a tooltip under the pointer.
     tooltips: bool = true,
+    /// Shown dimmed, it takes no clicks or keys, and a screen reader says
+    /// it is disabled.
+    disabled: bool = false,
     /// Multiplies its lengths, for an app that zooms its layout along with
     /// `c.setZoom`, as the grid's does.
     scale: f32 = 1,
@@ -43,9 +46,11 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
     const k = opts.scale;
     const t = kit.tokens(c);
     // Unkeyed, so `c.focusNext` just before names it.
-    const row = ui.div(c).row().gap(opts.gap * k).itemsCenter();
+    var row = ui.div(c).row().gap(opts.gap * k).itemsCenter();
+    if (opts.disabled) row = row.opacity(focus.dimmed);
     defer row.end();
-    const own = focus.take(c, row);
+    // Without colors, or disabled, it doesn't take Tab.
+    const own = focus.takeIf(c, row, !opts.disabled and colors.len > 0);
     const before = selected.*;
     // An index past the colors is none chosen.
     const at: ?usize = if (selected.*) |i| (if (i < colors.len) i else null) else null;
@@ -77,8 +82,8 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
         defer dot.end();
-        const it = dot.interaction();
-        if (it.hovered) c.cursor_hand = true;
+        var it = dot.interaction();
+        if (opts.disabled) it.clicked = false else if (it.hovered) c.cursor_hand = true;
         if (it.clicked) {
             selected.* = i;
             // Taking the keyboard shows in the ring, drawn again at once.
@@ -86,7 +91,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
             c.focus = own.id;
         }
         if (opts.tooltips) kit.tooltip(c, it, sw.label, .{});
-        ui.access.describe(c, dot.index, .{ .role = .radio_button, .label = sw.label, .selected = chosen });
+        ui.access.describe(c, dot.index, .{ .role = .radio_button, .label = sw.label, .selected = chosen, .enabled = !opts.disabled });
     }
     const changed = selected.* != before;
     if (changed) c.changed = true;
@@ -231,4 +236,38 @@ test "each swatch is named in a tooltip and to a screen reader, the chosen one s
         try std.testing.expectEqual(std.mem.eql(u8, e.label, "Amber"), e.selected);
     };
     try std.testing.expectEqual(palette.len, radios);
+}
+
+test "disabled swatches take no clicks or keys, and none at all don't take Tab" {
+    const T = struct {
+        chosen: ?usize = null,
+        empty: bool = false,
+        field: ui.TextBuffer = .{},
+        field_focused: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column();
+            defer root.end();
+            _ = swatches(c, if (x.empty) &.{} else &palette, &x.chosen, .{ .disabled = !x.empty });
+            x.field_focused = ui.textField(c, &x.field, .{}).focused;
+        }
+    };
+    var x: T = .{};
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    t.click(Picker.at(2), 11);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, null), x.chosen);
+    // Tab passes them by, to the field.
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+    x.empty = true;
+    t.ctx.focus = 0;
+    t.settle(1);
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
 }

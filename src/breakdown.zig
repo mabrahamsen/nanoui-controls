@@ -14,7 +14,8 @@ pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 6 },
-    /// The bar's corner radius; null rounds its ends.
+    /// The bar's corner radius, in points before `scale`; null rounds its
+    /// ends.
     radius: ?f32 = null,
     /// Between the parts; null keeps a hairline of one point at any scale,
     /// and 0 none.
@@ -25,7 +26,8 @@ pub const Options = struct {
     /// none of the bar is left. Otherwise each is `value` of the bar (0 to
     /// 1), and what they leave stays empty.
     whole: bool = false,
-    /// Each part's corner radius, for a level's rounded end.
+    /// Each part's corner radius, for a level's rounded end, in points
+    /// before `scale`.
     part_radius: f32 = 0,
     /// The opacity of a glow around each part, in its color; 0 draws none.
     /// A glowing bar doesn't clip its parts, so the glow shows around it:

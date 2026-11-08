@@ -13,11 +13,12 @@ const kit = nanoui.kit;
 const chart = @import("chart.zig");
 
 pub const Options = struct {
-    /// Across, in points.
+    /// Across, in points before `scale`.
     diameter: f32 = 116,
     /// How many ticks, from the first to the last.
     ticks: usize = 40,
-    /// The ticks' length; null takes about a tenth of the size.
+    /// The ticks' length, in points before `scale`; null takes about a
+    /// tenth of the diameter.
     thickness: ?f32 = null,
     /// Colors from the first tick to the last, blended between, as a
     /// trend's ramp; empty takes `color`.

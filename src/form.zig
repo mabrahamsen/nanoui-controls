@@ -224,7 +224,12 @@ pub const Form = struct {
             if (opts.disabled) v = v.opacity(focus.dimmed);
             defer v.end();
             const col = if (live and it.hovered) t.foreground else t.muted;
-            ui.text(c, value, .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis });
+            const style: ui.TextStyle = .{ .size = f.opts.size.text(), .color = col, .truncate = .ellipsis };
+            ui.text(c, value, style);
+            // Whole in a tooltip, when the last frame cut it short.
+            var tip = it;
+            tip.hovered = it.hovered and measure.cutOff(c, value, style);
+            kit.tooltip(c, tip, value, .{});
             ui.icon(c, "chevron.right", .{ .size = f.opts.size.text() - 3, .color = col });
         }
         return live and (it.clicked or sections.activated(c, it.focused));

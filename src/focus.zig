@@ -26,10 +26,17 @@ pub const dimmed = 0.45;
 /// and is moved to it. It has no size, as `box` taking clicks would take
 /// them from what is in it, such as a scrollbar.
 pub fn take(c: *ui.Context, box: ui.Div) ui.Interaction {
+    return takeIf(c, box, true);
+}
+
+/// As `take`, when the control `wants` the keyboard: one that is disabled
+/// or has nothing in it doesn't take Tab. The box is made either way, so
+/// what follows it keeps its place.
+pub fn takeIf(c: *ui.Context, box: ui.Div, wants: bool) ui.Interaction {
     const taker = ui.div(c).absolute().w(0).h(0);
-    var own = c.interact(taker.index, .{ .focusable = true });
+    var own = c.interact(taker.index, .{ .focusable = wants });
     taker.end();
-    if (c.focus == c.node(box.index).id) {
+    if (wants and c.focus == c.node(box.index).id) {
         c.focus = own.id;
         own.focused = true;
     }

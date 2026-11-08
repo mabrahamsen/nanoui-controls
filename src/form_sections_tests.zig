@@ -267,3 +267,26 @@ test "a link row keeps the keyboard when a row appears above it" {
     t.key(.enter);
     try std.testing.expectEqual(@as(usize, 2), x.opened);
 }
+
+test "a link's value cut short shows whole in a tooltip" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(220);
+            defer root.end();
+            var f = form(c, .{});
+            _ = f.link("Repository", "a repository with a very long name indeed", .{});
+            f.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    const whole = "a repository with a very long name indeed";
+    try std.testing.expect(!t.hasText(whole));
+    const r = t.findText("Repository").?;
+    t.moveTo(180, r.y + r.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText(whole));
+}

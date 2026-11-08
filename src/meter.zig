@@ -24,9 +24,11 @@ pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
     width: ui.Length = .fill,
     height: ui.Length = .{ .px = 8 },
-    /// Between the segments; 0 makes a strip without seams.
+    /// Between the segments, in points before `scale`; 0 makes a strip
+    /// without seams.
     gap: f32 = 3,
-    /// The segments' corner radius; without gaps, the strip's ends'. Null
+    /// The segments' corner radius, in points before `scale`; without
+    /// gaps, the strip's ends'. Null
     /// rounds their ends, as a breakdown's.
     radius: ?f32 = 2,
     /// Labels under equal runs of the segments, one a run ("<20", "<40",

@@ -533,3 +533,42 @@ test "when the keys' row is folded away, they go back to the selected row" {
 test {
     _ = @import("sidebar_branch_tests.zig");
 }
+
+test "a long label cut short shows whole in a tooltip, and a sidebar with no rows doesn't take Tab" {
+    const T = struct {
+        rows: bool = true,
+        field: ui.TextBuffer = .{},
+        field_focused: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(120).h(200);
+            defer root.end();
+            {
+                const side = ui.div(c).column().wFull().h(100);
+                defer side.end();
+                var sb = sidebar(c, "s", null, .{});
+                if (x.rows) sb.item("long", "A label far too long for the sidebar", .{});
+                _ = sb.end();
+            }
+            x.field_focused = ui.textField(c, &x.field, .{}).focused;
+        }
+    };
+    var x: T = .{};
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Cut short where it is drawn, its whole text shows only in the
+    // tooltip.
+    const whole = "A label far too long for the sidebar";
+    try std.testing.expect(!t.hasText(whole));
+    t.moveTo(60, 15);
+    t.settle(2);
+    try std.testing.expect(t.hasText(whole));
+    x.rows = false;
+    t.moveTo(250, 250);
+    t.settle(1);
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+}

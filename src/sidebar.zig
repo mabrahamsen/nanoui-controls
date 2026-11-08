@@ -31,6 +31,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const motion = ui.motion;
 const focus = @import("focus.zig");
+const measure = @import("measure.zig");
 const keys_mod = @import("sidebar_keys.zig");
 
 pub const Options = struct {
@@ -49,7 +50,7 @@ pub const Options = struct {
     /// that folds it, and counts dots; a branch's rows aren't indented,
     /// and only the keys fold it.
     icons_only: bool = false,
-    /// Between the rows.
+    /// Between the rows, in points before `scale`.
     gap: f32 = 2,
     /// What a screen reader says of a group's heading or a branch while
     /// its rows show, and while they are folded away.
@@ -137,6 +138,16 @@ fn held(c: *ui.Context) *Held {
     return c.state(Held, "held");
 }
 
+/// Whether the sidebar had rows the last frame, found by a key of its own
+/// in its outer box. Use it at once, as `state`'s.
+fn hadRows(c: *ui.Context) *HadRows {
+    ui.key(c, "sidebar-rows");
+    defer c.next_key = null;
+    return c.state(HadRows, "sidebar-rows");
+}
+
+const HadRows = struct { rows: bool = true };
+
 fn entryHash(heading: bool, key: []const u8) u64 {
     return std.hash.Wyhash.hash(@intFromBool(heading), key);
 }
@@ -150,7 +161,8 @@ pub fn sidebar(c: *ui.Context, id: []const u8, selected: ?[]const u8, opts: Opti
     // Unkeyed, so `c.focusNext` just before names it.
     const outer = ui.div(c).column().wFull().grow().scrollY();
     c.node(outer.index).style.min_height = 0;
-    const own = focus.take(c, outer);
+    // One that had no rows the last frame doesn't take Tab.
+    const own = focus.takeIf(c, outer, hadRows(c).rows);
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
     var kept = state(c).*;
@@ -325,12 +337,17 @@ pub const Sidebar = struct {
         if (narrow) {
             kit.tooltip(c, it, label, .{ .placement = .right });
         } else {
-            ui.text(c, label, .{
+            const style: ui.TextStyle = .{
                 .size = text,
                 .weight = if (on) .semibold else .regular,
                 .color = if (on) t.foreground else if (holds) tint else t.foreground.alpha(0.85).mix(t.foreground, wash),
                 .truncate = .ellipsis,
-            });
+            };
+            ui.text(c, label, style);
+            // Whole in a tooltip, when the last frame cut it short.
+            var tip = it;
+            tip.hovered = it.hovered and measure.cutOff(c, label, style);
+            kit.tooltip(c, tip, label, .{ .placement = .right });
             ui.spacer(c);
             if (opts.count) |n| if (pill) {
                 const p = ui.div(c).h(@round(text * 1.25) * k).px(@round(text * 0.45) * k).roundedFull().bg(count_col).center();
@@ -485,6 +502,10 @@ pub const Sidebar = struct {
         if (sb.focused) keys_mod.keys(sb);
         state(sb.c).* = sb.kept;
         sb.inner.end();
+        const rows = sb.entries.items.len > 0;
+        const had = hadRows(sb.c);
+        if (had.rows != rows) sb.c.changed = true;
+        had.rows = rows;
         sb.outer.end();
         return sb.chosen;
     }

@@ -42,6 +42,7 @@ pub const Options = struct {
     min: f32 = 0,
     max: ?f32 = 1,
     fixed_max: bool = false,
+    /// The lines' width, in points before `scale`.
     line_width: f32 = 1.5,
     /// Lines across at these values, behind the lines.
     value_lines: []const chart.ValueLine = &.{},

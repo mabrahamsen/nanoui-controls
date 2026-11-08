@@ -30,12 +30,16 @@ pub const Options = struct {
     pane: Pane = .start,
     /// How far Left and Right, and a screen reader's step, move it.
     step: f32 = 10,
-    /// The handle's width, where the pointer can grab it.
+    /// The handle's width, where the pointer can grab it, in points before
+    /// `scale`.
     grab_width: f32 = 7,
     /// A line down the handle's middle, between the panes.
     center_line: bool = true,
     /// What a screen reader calls it ("Sidebar width").
     label: []const u8 = "",
+    /// Shown dimmed, it doesn't move or take the keyboard, and a screen
+    /// reader says it is disabled.
+    disabled: bool = false,
     /// Multiplies its lengths, for an app that zooms its layout along with
     /// `c.setZoom`, as the grid's does: `width.*` is in points before it.
     scale: f32 = 1,
@@ -47,15 +51,22 @@ pub const Options = struct {
 pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
     const t = kit.tokens(c);
     const k = opts.scale;
-    const d = ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
+    var d = ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
+    if (opts.disabled) d = d.opacity(focus.dimmed);
     defer d.end();
-    const it = c.interact(d.index, .{ .focusable = true });
+    var it = c.interact(d.index, .{ .focusable = !opts.disabled });
+    if (opts.disabled) {
+        it.hovered = false;
+        it.pressed = false;
+        it.focused = false;
+        it.a11y_step = 0;
+    }
     const drag = c.state(struct { on: bool = false, x: f32 = 0, width: f32 = 0 }, "splitter");
     const lit = it.hovered or it.pressed or drag.on;
     if (lit) c.cursor = .resize_left_right;
     if (opts.center_line or lit or it.focused) {
         const col = if (it.focused) focus.ring(c) else if (lit) t.muted else t.border;
-        ui.div(c).w(if (lit or it.focused) 2 else 1).hFull().bg(col).end();
+        ui.div(c).w((if (lit or it.focused) @as(f32, 2) else 1) * k).hFull().bg(col).end();
     }
     const way: f32 = if (opts.pane == .start) 1 else -1;
     const before = width.*;
@@ -78,7 +89,7 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
         if (key == .left or key == .right or key == .home or key == .end) c.input.key = null;
     };
     width.* = std.math.clamp(width.*, opts.min, @max(opts.min, opts.max));
-    c.adjustable(d.index, .{ .role = .splitter, .label = opts.label, .value = c.print("{d:.0}", .{width.*}) });
+    c.adjustable(d.index, .{ .role = .splitter, .label = opts.label, .value = c.print("{d:.0}", .{width.*}), .enabled = !opts.disabled });
     if (width.* != before) c.changed = true;
     return width.* != before;
 }
@@ -188,4 +199,33 @@ test "End on a splitter without a widest leaves the width as it is" {
     try std.testing.expectEqual(@as(f32, 200), x.width);
     t.key(.home);
     try std.testing.expectEqual(@as(f32, 100), x.width);
+}
+
+test "a disabled splitter doesn't move, by drag or key, and says it is disabled" {
+    const T = struct {
+        width: f32 = 200,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const row = ui.div(c).row().sizeFull();
+            defer row.end();
+            ui.div(c).w(x.width).hFull().end();
+            _ = splitter(c, &x.width, .{ .min = 100, .max = 300, .label = "Width", .disabled = true });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    t.drag(203, 100, 260, 100);
+    t.settle(1);
+    try std.testing.expectEqual(@as(f32, 200), x.width);
+    t.key(.tab);
+    t.key(.right);
+    t.settle(1);
+    try std.testing.expectEqual(@as(f32, 200), x.width);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expect(!list.items[0].enabled);
 }

@@ -23,3 +23,12 @@ pub fn lastSize(c: *ui.Context, index: u32) ?ui.Size {
     }
     return .{ .w = r.w, .h = r.h };
 }
+
+/// The text just drawn, `text` in `style`, was cut short where the last
+/// frame laid it out: for showing it whole in a tooltip. Call it right
+/// after `ui.text`.
+pub fn cutOff(c: *ui.Context, text: []const u8, style: ui.TextStyle) bool {
+    const index: u32 = @intCast(c.nodes.items.len - 1);
+    const r = c.rects.get(c.node(index).id) orelse return false;
+    return c.text.width(text, style) > r.w + 0.5;
+}

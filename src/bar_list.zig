@@ -61,13 +61,13 @@ pub const Options = struct {
     /// The value of an empty bar: a temperature from 20 to 110 fills the
     /// bar from its start.
     min: f32 = 0,
-    /// The labels' column, wide enough for most labels; longer ones are
-    /// cut short with an ellipsis.
+    /// The labels' column, in points before `scale`, wide enough for most
+    /// labels; longer ones are cut short with an ellipsis.
     label_width: f32 = 120,
-    /// The figures' column, at the end.
+    /// The figures' column, at the end, in points before `scale`.
     value_width: f32 = 64,
     bar_height: ui.Length = .{ .px = 6 },
-    /// Between the rows.
+    /// Between the rows, in points before `scale`.
     gap: f32 = 2,
     /// The text's size, as the kit's.
     size: kit.Size = .sm,
@@ -80,13 +80,14 @@ pub const Options = struct {
     track: ?ui.Color = null,
     /// The opacity of a glow around each bar, in its color; 0 draws none.
     glow: f32 = 0,
-    /// The bars' corners; null rounds their ends.
+    /// The bars' corners, in points before `scale`; null rounds their
+    /// ends.
     bar_radius: ?f32 = null,
     style: Style = .bar,
     /// With `.meter`, how many segments a row's meter has.
     segments: usize = 12,
-    /// The details' column, at the end; nothing is kept for it when no row
-    /// has a detail.
+    /// The details' column, at the end, in points before `scale`; nothing
+    /// is kept for it when no row has a detail.
     detail_width: f32 = 56,
     /// Rows light up under the pointer and can be clicked, or reached
     /// with Tab and clicked with Enter.
