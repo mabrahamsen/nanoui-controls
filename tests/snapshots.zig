@@ -807,3 +807,63 @@ test "runs as cards and as two-line rows, with statuses, light and dark" {
     try expectView("grid-cards", .init(&x, runGrids), .{ .height = 400 });
     try expectView("grid-cards-dark", .init(&x, runGrids), .{ .height = 400, .dark = true });
 }
+
+/// The charts' richer looks: bars in units with an axis and a short
+/// history, a line with an axis at its end, a bar list of levels and one
+/// of meters, stats with units, a detail and loading, a fitted legend
+/// with swatches, and meters rounded at their ends and in zones.
+fn richerCharts(_: *u8, c: *ui.Context) void {
+    const t = kit.tokens(c);
+    const heat = [_]ui.Color{ .hex(0x22d3ee), .hex(0xfbbf24), .hex(0xfb7185) };
+    const load = [_]f32{ 22, 35, 30, 58, 64, 41, 77, 92, 70 };
+    const root = ui.div(c).column().sizeFull().p(10).gap(10);
+    defer root.end();
+    {
+        const row = ui.div(c).row().wFull().gap(14);
+        defer row.end();
+        var b = controls.bars(c, .{ .count = 16, .readings = load.len, .max = 100, .fixed_max = true, .height = .{ .px = 56 }, .gap = 2, .axis = .start, .value_lines = &.{ .{ .value = 100, .label = "100" }, .{ .value = 50, .label = "50" }, .{ .value = 0, .label = "0" } }, .start_text = "-16 s", .end_text = "now", .width = .{ .px = 160 } });
+        while (b.next()) |slot| {
+            const v = load[slot.reading.?];
+            slot.bar(&.{.{ .value = v, .color = controls.rampColor(&heat, v / 100) }});
+        }
+        b.end();
+        var l = controls.line(c, &.{.{ .values = &load, .area = 0.15 }}, .{ .capacity = load.len, .max = 100, .fixed_max = true, .height = .{ .px = 56 }, .axis = .end, .value_lines = &.{ .{ .value = 80, .label = "80" }, .{ .value = 40, .label = "40" } }, .start_text = "-9 s", .end_text = "now" });
+        l.end();
+    }
+    _ = controls.barList(c, &.{
+        .{ .label = "CPU", .value = 74, .value_text = "74 °C", .detail = "max 94", .badge = "P", .icon = "cpu", .value_color = controls.rampColor(&heat, 0.6) },
+        .{ .label = "GPU", .value = 52, .value_text = "52 °C", .detail = "max 81", .badge = "G", .icon = "cube" },
+        .{ .label = "Disk", .value = 38, .value_text = "38 °C", .icon = "internaldrive" },
+    }, .{ .min = 20, .max = 110, .ramp = &heat, .glow = 0.5, .label_width = 90 });
+    _ = controls.barList(c, &.{
+        .{ .label = "Fan 1", .value = 0.62, .value_text = "2,480 rpm" },
+        .{ .label = "Fan 2", .value = 0.3, .value_text = "1,200 rpm" },
+    }, .{ .max = 1, .style = .meter, .segments = 14, .ramp = &heat, .label_width = 90 });
+    {
+        const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+        defer row.end();
+        controls.stat(c, "Peak", "87", .{ .unit = "%", .detail = "over the last hour", .size = .sm, .value_color = controls.rampColor(&heat, 0.87) });
+        controls.stat(c, "Rate", "2.4", .{ .unit = "GB/s", .detail = "read", .size = .sm });
+        controls.stat(c, "Queue", "0", .{ .loading = true, .detail = "asking…", .size = .sm });
+    }
+    {
+        const row = ui.div(c).row().wFull().itemsCenter().gap(12);
+        defer row.end();
+        ui.text(c, "Memory", .{ .size = 13, .weight = .semibold });
+        var lg = controls.legend(c, .{ .width = .fit });
+        lg.item(t.primary, "App");
+        lg.item(t.warning, "Wired");
+        lg.end();
+        ui.spacer(c);
+        controls.swatch(c, t.success, .{ .shape = .dot });
+        controls.swatch(c, t.danger, .{ .shape = .line });
+    }
+    controls.meter(c, 1, .{ .ramp = &heat, .gap = 0, .radius = 4, .height = 8, .segments = 40 });
+    controls.meter(c, 0.5, .{ .segments = 15, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &heat });
+}
+
+test "the charts' richer looks, light and dark" {
+    var x: u8 = 0;
+    try expectView("charts-richer", .init(&x, richerCharts), .{ .height = 470 });
+    try expectView("charts-richer-dark", .init(&x, richerCharts), .{ .height = 470, .dark = true });
+}

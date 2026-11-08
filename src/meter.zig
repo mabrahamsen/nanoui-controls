@@ -5,7 +5,10 @@
 //! gaps, it is a strip of colors in steps, for the gradients nanoui can't
 //! fill, such as under a slider.
 //!
-//! It eases to a new value, as the kit's progress bar does.
+//! It eases to a new value, as the kit's progress bar does. Without gaps,
+//! a `radius` rounds the strip's ends only. With `zones`, its segments
+//! fall into runs with a wider gap between them, each labelled under it:
+//! a scale in bands.
 //!
 //!     controls.meter(c, load, .{ .ramp = &heat, .glow = 0.6, .label = "CPU load" });
 //!     controls.meter(c, 1, .{ .ramp = &hues, .gap = 0, .radius = 0 });
@@ -23,8 +26,12 @@ pub const Options = struct {
     height: f32 = 8,
     /// Between the segments; 0 makes a strip without seams.
     gap: f32 = 3,
-    /// The segments' corner radius.
+    /// The segments' corner radius; without gaps, the strip's ends'.
     radius: f32 = 2,
+    /// Labels under equal runs of the segments, one a run ("<20", "<40",
+    /// "80+"), the runs `zone_gap` apart: a scale in bands.
+    zones: []const []const u8 = &.{},
+    zone_gap: f32 = 6,
     /// Every lit segment's color; null takes the theme's accent.
     color: ?ui.Color = null,
     /// Colors from the first segment to the last, blended between: a lit
@@ -55,22 +62,48 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     const lit = opts.color orelse kit.tokens(c).primary;
     const off = opts.track orelse chart.track(c);
     const n: f32 = @floatFromInt(opts.segments);
+    const strip = opts.gap == 0 and opts.radius > 0;
+    const zones = @min(opts.zones.len, opts.segments);
+    const outer = if (zones > 0) ui.div(c).column().gap(3 * k) else null;
+    if (outer) |o| c.node(o.index).style.width = chart.scaled(opts.width, k);
     // Without gaps, the segments overlap by a point: edges that fall
     // between pixels would otherwise show the background through.
-    const r = ui.div(c).row().h(opts.height * k).gap(if (opts.gap > 0) opts.gap * k else -1);
-    c.node(r.index).style.width = chart.scaled(opts.width, k);
+    var r = ui.div(c).row().h(opts.height * k).gap(if (zones > 0) opts.zone_gap * k else if (opts.gap > 0) opts.gap * k else -1);
+    c.node(r.index).style.width = if (zones > 0) .fill else chart.scaled(opts.width, k);
+    // A strip rounded at its ends only: the segments square, cut by it.
+    if (strip) r = r.rounded(opts.radius * k).clip();
     chart.describe(c, r.index, opts.label, if (opts.value_text.len > 0) opts.value_text else c.print("{d}%", .{@round(v * 100)}), false);
-    defer r.end();
     const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
+    var run: ?ui.Div = null;
+    var zone: usize = 0;
     for (0..opts.segments) |i| {
+        // A run of segments a zone, as even as the count allows.
+        if (zones > 0 and (run == null or i * zones / opts.segments != zone)) {
+            if (run) |x| x.end();
+            zone = i * zones / opts.segments;
+            run = ui.div(c).row().w(0).grow().hFull().gap(if (opts.gap > 0) opts.gap * k else -1);
+        }
         const at = (@as(f32, @floatFromInt(i)) + 0.5) / n;
-        var seg = ui.div(c).w(0).grow().hFull().rounded(opts.radius * k);
+        var seg = ui.div(c).w(0).grow().hFull().rounded(if (strip) 0 else opts.radius * k);
         if (at <= shown + 1e-6) {
             const col = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, at) else lit;
             seg = seg.bg(col);
             if (opts.glow > 0) seg = seg.shadow(.{ .color = col.alpha(opts.glow), .blur = 6 * k, .y = 0 });
         } else seg = seg.bg(off);
         seg.end();
+    }
+    if (run) |x| x.end();
+    r.end();
+    const o = outer orelse return;
+    defer o.end();
+    const labels = ui.div(c).row().wFull().gap(opts.zone_gap * k);
+    defer labels.end();
+    ui.access.hide(c, labels.index);
+    const t = kit.tokens(c);
+    for (opts.zones[0..zones]) |label| {
+        const cell = ui.div(c).w(0).grow().row().justifyCenter();
+        defer cell.end();
+        ui.text(c, label, .{ .size = 9.5, .mono = true, .color = t.muted });
     }
 }
 

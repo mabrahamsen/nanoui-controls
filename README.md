@@ -289,6 +289,7 @@ l.end();
 
 - With `interactive`, the current reading is marked by a line down through it and a dot on each series.
 - `line_width` is the lines' width.
+- `axis`, `start_text` and `end_text`, as `bars` takes them: the value lines' labels beside the chart, and times under it.
 
 ## bars
 
@@ -305,6 +306,9 @@ b.end();
 ```
 
 - Parts stack up from zero, the first nearest it. With room `below` zero (a share of the height), negative parts go down from it: a loss, a change down.
+- **Units:** with `max`, parts are values on a scale from `min` to `max` (a bar of 40 on a scale of 0 to 100 is 40% of the height), and value lines are placed on it. Unless `fixed_max`, the top rises to the tallest bar, so none is cut off. A `min` below zero leaves room for negative parts at the same scale; one above zero starts the bars there, as a temperature from 20 does.
+- **A short history:** with `readings`, fewer readings than slots sit at the right, the newest last. `next` gives only their slots, `slot.reading` is the reading in each, and with `interactive`, only they can be pointed at or stepped through, `current` being a reading.
+- **An axis:** `axis = .start` or `.end` puts the value lines' labels in a gutter beside the chart, level with their lines, leaving out one that would overlap the one above it; `start_text` and `end_text` go under the chart at its ends ("−60 s", "now").
 - `gap` is the room between slots, a hairline of one point by default.
 - What is drawn before the first `next` (absolute) sits behind the bars.
 
@@ -343,6 +347,8 @@ if (controls.barList(c, &folders, .{ .clickable = true })) |i| open(folders[i]);
 ```
 
 - `label_width` and `value_width` are the columns either side of the bars, and `bar_height` the bars' height; labels too long are cut short.
+- **Richer rows:** an item can lead with an `icon`, in a slot of its own so labels line up, or a `badge` ("P", "GPU") in a small tinted tag; end with a muted `detail` after its figure ("max 94"), in a `detail_width` column; and color its figure (`value_color`). A screen reader hears the figure and the detail.
+- **Levels:** `min` starts the scale above zero (a temperature from 20); `ramp` colors each bar by its level, `track`, `glow` and `bar_radius` style them, and `style = .meter` draws each row's bar as a meter of `segments`, lit to its level.
 
 ## meter
 
@@ -354,7 +360,8 @@ controls.meter(c, 1, .{ .ramp = &hues, .gap = 0, .radius = 0, .segments = 48 });
 ```
 
 - Lit segments take `color`, or `ramp` by their place, and `glow` in it; unlit ones are the `track`.
-- With a `gap` of 0, lit all the way, it is a strip of colors in steps, for the gradients nanoui can't fill, such as under a slider. Its segments overlap by a point, so no seams show.
+- With a `gap` of 0, lit all the way, it is a strip of colors in steps, for the gradients nanoui can't fill, such as under a slider. Its segments overlap by a point, so no seams show, and a `radius` rounds only the strip's ends.
+- `zones` labels equal runs of the segments, one a run ("<20", "<40", "80+"), with a wider `zone_gap` between runs: a scale in bands.
 
 ## gauge
 
@@ -379,6 +386,8 @@ controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .
 - `size` (`.md` by default) sizes the figure at twice the kit's text at that size; `card = false` leaves out the tile.
 - `value_color` colors the figure, for one that says how something stands: with `card = false`, a reading such as "Thermal: Nominal" in the success color.
 - A row of stats shares it, each `.fill` wide; with the row's `itemsStretch`, the tiles are one height.
+- `unit` follows the figure, smaller and muted ("87" then "%"); `detail` is a muted line under it ("over the last hour"); and `loading` shows a spinner in place of a figure not yet known, so it never reads as 0 (a screen reader hears `loading_text`).
+- `statButton` draws a stat that can be clicked, to lead to more: it lightens under the pointer, takes the keyboard as a button does (Tab, then Enter or Space), is a button to a screen reader, and returns its `ui.Interaction`.
 
 ## legend
 
@@ -395,6 +404,8 @@ l.end();
 - `itemDetail` adds a smaller, fainter detail after the label, such as a peak.
 - `trailing` puts text at the end of the last line, such as what the items leave.
 - `size` (`.xs` by default) sizes the labels and swatches, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
+- `width = .fit` makes it only as wide as its items, for a legend beside a chart's title; they still run on where the parent's width ends.
+- `controls.swatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, in a chart's title, a table's cell or a tooltip.
 
 ## Example
 

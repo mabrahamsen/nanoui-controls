@@ -82,7 +82,7 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
             .px => |v| v * opts.scale,
             else => if (chart.lastSize(c, b.row.index)) |sz| sz.h else 0,
         };
-        chart.valueLines(c, opts.value_lines, h, 0, opts.min, peak);
+        chart.valueLines(c, opts.value_lines, h, 0, opts.min, peak, true);
     }
     defer b.end();
     while (b.next()) |slot| {
