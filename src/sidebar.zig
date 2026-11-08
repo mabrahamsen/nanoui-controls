@@ -88,6 +88,10 @@ const Kept = struct {
     /// What the keys are on (`entryHash`); 0 while they follow the
     /// selection.
     cursor: u64 = 0,
+    /// The keys have nothing to start from (nothing selected, or it is
+    /// folded away): the first row shows the ring, and the first key goes
+    /// to it.
+    start: bool = false,
 };
 
 /// What a branch keeps between frames: the selected row it last showed
@@ -149,7 +153,10 @@ pub fn sidebar(c: *ui.Context, id: []const u8, selected: ?[]const u8, opts: Opti
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
     var kept = state(c).*;
-    if (!own.focused) kept.cursor = 0;
+    if (!own.focused) {
+        kept.cursor = 0;
+        kept.start = false;
+    }
     var sb: Sidebar = .{
         .focused = own.focused,
         .c = c,
@@ -271,7 +278,7 @@ pub const Sidebar = struct {
         const hash = entryHash(false, key);
         // A disabled branch is still reached by the keys, to fold it.
         const reached = !opts.disabled or open != null;
-        const at_cursor = sb.focused and reached and sb.cursorIs(hash, on);
+        const at_cursor = sb.focused and reached and (sb.cursorIs(hash, on) or sb.isStart());
         const tint = sb.opts.color orelse t.primary;
         const pad = @round(text * @as(f32, if (narrow) 0.3 else 0.8)) * k;
         var row_box = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(pad).pl(if (narrow) pad else sb.inset()).h(size.height() * k).rounded(radius(c, k));
@@ -284,8 +291,10 @@ pub const Sidebar = struct {
         } else if (it.hovered) c.cursor_hand = true;
         var at: ?usize = null;
         if (!sb.folding and reached) {
-            sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index }) catch {};
-            at = sb.entries.items.len - 1;
+            // A row that can't be added is left out for the keys.
+            if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = !opts.disabled, .parent = sb.parent, .index = row_box.index })) |_| {
+                at = sb.entries.items.len - 1;
+            } else |_| {}
         }
         // A wash eases in under the pointer, and on the row the keys are on
         // when they don't choose as they move.
@@ -406,7 +415,7 @@ pub const Sidebar = struct {
         const t = kit.tokens(c);
         const text = sb.opts.size.text();
         const hash = entryHash(true, key);
-        const at_cursor = sb.focused and sb.cursorIs(hash, false);
+        const at_cursor = sb.focused and (sb.cursorIs(hash, false) or sb.isStart());
         ui.key(c, key);
         const wrap = ui.div(c).column().wFull().gap(sb.opts.gap * k);
         var at: ?usize = null;
@@ -423,8 +432,9 @@ pub const Sidebar = struct {
                 sb.kept.cursor = hash;
             }
             if (!sb.folding) {
-                sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = false, .parent = sb.parent, .index = head.index }) catch {};
-                at = sb.entries.items.len - 1;
+                if (sb.entries.append(c.alloc(), .{ .hash = hash, .key = key, .open = open, .choosable = false, .parent = sb.parent, .index = head.index })) |_| {
+                    at = sb.entries.items.len - 1;
+                } else |_| {}
             }
             const col = if (it.hovered) t.foreground else t.muted;
             // Narrowed, the chevron alone, centered, its title in a tooltip.
@@ -478,6 +488,12 @@ pub const Sidebar = struct {
         return sb.chosen;
     }
 
+    /// Whether the keys have nothing to start from and the entry about to
+    /// be added is the first: it shows the ring.
+    fn isStart(sb: *const Sidebar) bool {
+        return sb.kept.start and !sb.folding and sb.entries.items.len == 0;
+    }
+
     /// Whether the keys are on `hash`: the entry they moved to, or, while
     /// they follow the selection, the selected row.
     fn cursorIs(sb: *const Sidebar, hash: u64, on: bool) bool {
@@ -490,55 +506,65 @@ pub const Sidebar = struct {
         sb.c.changed = true;
     }
 
+    /// Where the keys are among the entries drawn: the entry they moved
+    /// to, else the selected row, else none.
+    fn place(sb: *const Sidebar) ?usize {
+        const list = sb.entries.items;
+        if (sb.kept.cursor != 0) for (list, 0..) |e, i| if (e.hash == sb.kept.cursor) return i;
+        const s = sb.selected orelse return null;
+        for (list, 0..) |e, i| if (e.choosable and std.mem.eql(u8, e.key, s)) return i;
+        return null;
+    }
+
     /// The keys, while the sidebar has the keyboard: on the rows, branches
-    /// and headings drawn this frame.
+    /// and headings drawn this frame. The keys it acts on are its own:
+    /// nothing after it sees them.
     fn keys(sb: *Sidebar) void {
         const c = sb.c;
         const list = sb.entries.items;
         if (list.len == 0) return;
-        // Where the keys are: the entry they moved to, else the selected
-        // row, else the first.
-        var at: usize = 0;
-        for (list, 0..) |e, i| {
-            if (sb.kept.cursor != 0 and e.hash == sb.kept.cursor) {
-                at = i;
-                break;
-            }
-            if (sb.kept.cursor == 0 and e.choosable and sb.selected != null and std.mem.eql(u8, e.key, sb.selected.?)) at = i;
-        }
-        const e = list[at];
+        const last = list.len - 1;
+        const at = sb.place();
+        // A cursor whose entry is gone follows the selection again.
+        if (at == null or list[at.?].hash != sb.kept.cursor) sb.kept.cursor = 0;
         var to: ?usize = null;
         var enter = false;
         if (c.shortcut(.{ .key = ui.Shortcut.down })) {
-            to = @min(at + 1, list.len - 1);
+            to = if (at) |a| @min(a + 1, last) else 0;
         } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
-            to = at -| 1;
+            to = if (at) |a| a -| 1 else last;
         } else if (c.shortcut(.{ .key = ' ' })) {
             enter = true;
-        } else if (c.input.key) |key| switch (key) {
-            .down => to = @min(at + 1, list.len - 1),
-            .up => to = at -| 1,
-            .home => to = 0,
-            .end => to = list.len - 1,
-            .enter => enter = true,
-            // Left folds what is open, else goes to what the entry is
-            // in; Right opens what is folded, else goes to its first row,
-            // as on a fixed branch.
-            .left => if (e.open != null and e.open.?.*) {
-                e.open.?.* = false;
-                c.changed = true;
-            } else if (e.parent) |p| {
-                to = p;
-            },
-            .right => if (e.open != null and !e.open.?.*) {
-                e.open.?.* = true;
-                c.changed = true;
-            } else if (at + 1 < list.len and list[at + 1].parent == at) {
-                to = at + 1;
-            },
-            else => {},
-        };
-        if (enter) {
+        } else if (c.input.key) |key| {
+            switch (key) {
+                .down => to = if (at) |a| @min(a + 1, last) else 0,
+                .up => to = if (at) |a| a -| 1 else last,
+                .home => to = 0,
+                .end => to = last,
+                .enter => enter = true,
+                // Left folds what is open, else goes to what the entry is
+                // in; Right opens what is folded, else goes to its first
+                // row, as on a fixed branch.
+                .left => if (at) |a| {
+                    const e = list[a];
+                    if (e.open != null and e.open.?.*) {
+                        e.open.?.* = false;
+                        c.changed = true;
+                    } else if (e.parent) |p| to = p;
+                },
+                .right => if (at) |a| {
+                    const e = list[a];
+                    if (e.open != null and !e.open.?.*) {
+                        e.open.?.* = true;
+                        c.changed = true;
+                    } else if (a + 1 < list.len and list[a + 1].parent == a) to = a + 1;
+                },
+                else => return,
+            }
+            c.input.key = null;
+        }
+        if (enter) if (at) |a| {
+            const e = list[a];
             if (e.choosable) {
                 if (!sb.isSelected(e.key)) sb.choose(e.key);
             } else if (e.open) |o| {
@@ -546,7 +572,12 @@ pub const Sidebar = struct {
                 c.changed = true;
             }
             sb.kept.cursor = e.hash;
-        }
+        };
+        // Nothing to start from: the first row shows the ring until a key
+        // moves.
+        const start = at == null and to == null;
+        if (start != sb.kept.start) c.changed = true;
+        sb.kept.start = start;
         const i = to orelse return;
         const next = list[i];
         sb.kept.cursor = next.hash;

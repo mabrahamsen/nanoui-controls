@@ -61,13 +61,17 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
         } else width.* = drag.width + way * (c.input.mouse.x - drag.x) / k;
     } else drag.on = false;
     if (it.a11y_step != 0) width.* += @as(f32, @floatFromInt(it.a11y_step)) * opts.step;
-    if (it.focused) if (c.input.key) |key| switch (key) {
-        .left => width.* -= way * opts.step,
-        .right => width.* += way * opts.step,
-        // To a bound, when it has one.
-        .home => width.* = bound(if (opts.pane == .start) opts.min else opts.max, width.*),
-        .end => width.* = bound(if (opts.pane == .start) opts.max else opts.min, width.*),
-        else => {},
+    // The keys it moves by are its own: nothing after it sees them.
+    if (it.focused) if (c.input.key) |key| {
+        switch (key) {
+            .left => width.* -= way * opts.step,
+            .right => width.* += way * opts.step,
+            // To a bound, when it has one.
+            .home => width.* = bound(if (opts.pane == .start) opts.min else opts.max, width.*),
+            .end => width.* = bound(if (opts.pane == .start) opts.max else opts.min, width.*),
+            else => {},
+        }
+        if (key == .left or key == .right or key == .home or key == .end) c.input.key = null;
     };
     width.* = std.math.clamp(width.*, opts.min, @max(opts.min, opts.max));
     c.adjustable(d.index, .{ .role = .splitter, .label = opts.label, .value = c.print("{d:.0}", .{width.*}) });
@@ -83,11 +87,14 @@ fn bound(to: f32, at: f32) f32 {
 const Panes = struct {
     width: f32 = 200,
     changed: usize = 0,
+    /// Keys left for the app after the splitter.
+    leaked: usize = 0,
     fn view(p: *Panes, c: *ui.Context) void {
         const row = ui.div(c).row().sizeFull();
         defer row.end();
         ui.div(c).w(p.width).hFull().end();
         if (splitter(c, &p.width, .{ .min = 100, .max = 300, .label = "Sidebar width" })) p.changed += 1;
+        if (c.input.key != null) p.leaked += 1;
         ui.div(c).wFull().hFull().end();
     }
 };
@@ -121,6 +128,8 @@ test "a splitter takes the keyboard, and the keys move it" {
     try std.testing.expectEqual(@as(f32, 200), p.width);
     t.key(.tab);
     t.settle(1);
+    // Keys before it had the keyboard were the app's.
+    p.leaked = 0;
     t.key(.right);
     try std.testing.expectEqual(@as(f32, 210), p.width);
     t.key(.left);
@@ -130,6 +139,8 @@ test "a splitter takes the keyboard, and the keys move it" {
     try std.testing.expectEqual(@as(f32, 300), p.width);
     t.key(.home);
     try std.testing.expectEqual(@as(f32, 100), p.width);
+    // The keys it moves by are its own.
+    try std.testing.expectEqual(@as(usize, 0), p.leaked);
 }
 
 test "a screen reader hears a splitter with its width, and steps it" {

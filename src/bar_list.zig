@@ -132,7 +132,17 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 c.cursor_hand = true;
             }
             if (in.focused) row = row.border(t.primary.alpha(0.6));
-            if (in.clicked or (in.focused and c.input.key == .enter)) clicked = i;
+            // Enter or Space clicks the row that has the keyboard, and is
+            // the list's: nothing after it sees it.
+            const pressed = in.focused and (c.input.key == .enter or c.shortcut(.{ .key = ' ' }) or std.mem.eql(u8, c.input.chars, " "));
+            if (pressed) {
+                c.input.key = null;
+                c.input.chars = "";
+            }
+            if (in.clicked or pressed) {
+                clicked = i;
+                c.changed = true;
+            }
         }
         defer row.end();
         if (icons) {
@@ -191,6 +201,9 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
 
 const Folders = struct {
     clicked: ?usize = null,
+    /// Keys left for the app after the list, and frames marked changed.
+    leaked: usize = 0,
+    changed: usize = 0,
     const items = [_]Item{
         .{ .label = "Photos", .value = 40, .value_text = "40 GB" },
         .{ .label = "Music", .value = 10, .value_text = "10 GB" },
@@ -200,6 +213,8 @@ const Folders = struct {
         const root = ui.div(c).column().w(400);
         defer root.end();
         if (barList(c, &items, .{ .clickable = true })) |i| f.clicked = i;
+        if (c.input.key != null) f.leaked += 1;
+        if (c.changed) f.changed += 1;
     }
 };
 
@@ -264,6 +279,14 @@ test "a clickable bar list's rows take the keyboard, and Enter clicks one" {
     t.ctx.focusCycle(false);
     t.settle(1);
     try std.testing.expectEqual(@as(?usize, null), f.clicked);
+    const changed = f.changed;
     t.key(.enter);
+    try std.testing.expectEqual(@as(?usize, 1), f.clicked);
+    // Enter is the list's, and a click is a change.
+    try std.testing.expectEqual(@as(usize, 0), f.leaked);
+    try std.testing.expect(f.changed > changed);
+    // Space clicks too.
+    f.clicked = null;
+    try std.testing.expect(t.shortcut(.{ .key = ' ' }));
     try std.testing.expectEqual(@as(?usize, 1), f.clicked);
 }

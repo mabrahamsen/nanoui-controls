@@ -55,6 +55,11 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
         }
         if (button(c, "chevron.right", "", "Next page", false, page.* + 1 >= pages, null, opts)) page.* += 1;
     }
+    // A press on its buttons, which leaves nothing with the keyboard,
+    // gives the keyboard to the pager, as the grid's rows do.
+    if (c.input.pressed and c.focus == 0) if (it.rect) |r| if (r.contains(c.input.mouse)) {
+        c.focus = it.id;
+    };
     if (page.* != before) c.changed = true;
     return page.* != before;
 }
@@ -98,19 +103,23 @@ fn slotWidth(c: *ui.Context, pages: usize, size: kit.Size) f32 {
     return @max(size.height(), @ceil(digits * digit + 2 * size.text() * 0.6));
 }
 
-/// Left and Right move a page, Home and End to the ends.
+/// Left and Right move a page, Home and End to the ends: keys it takes,
+/// so nothing else acts on them.
 fn keys(c: *ui.Context, page: *usize, pages: usize) void {
     if (c.shortcut(.{ .key = ui.Shortcut.left })) {
         page.* -|= 1;
     } else if (c.shortcut(.{ .key = ui.Shortcut.right })) {
         page.* = @min(page.* + 1, pages - 1);
-    } else if (c.input.key) |key| switch (key) {
-        .left => page.* -|= 1,
-        .right => page.* = @min(page.* + 1, pages - 1),
-        .home => page.* = 0,
-        .end => page.* = pages - 1,
-        else => {},
-    };
+    } else if (c.input.key) |key| {
+        switch (key) {
+            .left => page.* -|= 1,
+            .right => page.* = @min(page.* + 1, pages - 1),
+            .home => page.* = 0,
+            .end => page.* = pages - 1,
+            else => return,
+        }
+        c.input.key = null;
+    }
 }
 
 /// One of the pager's buttons, a kit button: an arrow (`icon`) or a
@@ -146,12 +155,35 @@ const Pages = struct {
     page: usize = 0,
     pages: usize = 20,
     changed: usize = 0,
+    /// Keys left for the app after the pager, as an app's own Enter or
+    /// arrows would see them.
+    leaked: usize = 0,
     fn view(p: *Pages, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull().p(10);
         defer root.end();
         if (pager(c, &p.page, p.pages, .{})) p.changed += 1;
+        if (c.input.key != null) p.leaked += 1;
     }
 };
+
+test "a click on a pager's page gives it the keyboard, and the keys it takes are its own" {
+    var p: Pages = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Pages.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try t.clickText("3");
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 2), p.page);
+    t.key(.right);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 3), p.page);
+    t.key(.end);
+    t.key(.home);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), p.page);
+    try std.testing.expectEqual(@as(usize, 0), p.leaked);
+}
 
 test "a pager numbers the ends and the pages around the current one" {
     var p: Pages = .{ .page = 9 };

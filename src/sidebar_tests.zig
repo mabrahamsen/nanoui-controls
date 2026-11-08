@@ -18,6 +18,8 @@ const Mail = struct {
     /// Takes the keyboard in the first frame.
     start_focused: bool = false,
     started: bool = false,
+    /// Keys left for the app after the sidebar.
+    leaked: usize = 0,
 
     const folders = [_][]const u8{ "work", "family", "travel" };
 
@@ -40,6 +42,7 @@ const Mail = struct {
             m.selected = key;
             m.chosen += 1;
         }
+        if (c.input.key != null) m.leaked += 1;
     }
 };
 
@@ -828,4 +831,44 @@ test "in a fixed tree, Right goes into a branch and Left out of it, folding noth
     t.key(.end);
     t.settle(1);
     try std.testing.expectEqualStrings("faq", d.selected.?);
+}
+
+test "with nothing selected, the keys start at the first row, and the keys they take are their own" {
+    var m: Mail = .{ .selected = null, .start_focused = true };
+    var t: ui.Tester = undefined;
+    try start(&m, &t);
+    defer t.deinit();
+    // The first row shows the keys are on it.
+    var ringed = false;
+    for (t.ctx.nodes.items) |node| if (node.style.border != null) {
+        ringed = true;
+    };
+    try std.testing.expect(ringed);
+    t.key(.down);
+    t.settle(1);
+    try std.testing.expectEqualStrings("inbox", m.selected.?);
+    t.key(.end);
+    t.key(.home);
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), m.leaked);
+}
+
+test "when the keys' row is folded away, they go back to the selected row" {
+    var m: Mail = .{ .selected = "sent", .start_focused = true, .choose_on_enter = true };
+    var t: ui.Tester = undefined;
+    try start(&m, &t);
+    defer t.deinit();
+    // To "travel", then fold its group from outside: the keys go back to
+    // the selected row, "sent", and Down from there is the group's
+    // heading, which Enter opens.
+    t.key(.end);
+    t.settle(1);
+    m.folders_open = false;
+    t.settle(1);
+    t.key(.down);
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expect(m.folders_open);
+    try std.testing.expectEqualStrings("sent", m.selected.?);
 }
