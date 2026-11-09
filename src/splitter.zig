@@ -65,7 +65,8 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
         ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
     if (opts.disabled) d = d.opacity(focus.dimmed);
     defer d.end();
-    var it = c.interact(d.index, .{ .focusable = !opts.disabled });
+    // Not a button: Enter and Space are left for what comes after it.
+    var it = c.interact(d.index, .{ .focusable = !opts.disabled, .text = true });
     if (opts.disabled) {
         it.hovered = false;
         it.pressed = false;
@@ -179,8 +180,10 @@ test "a splitter takes the keyboard, and the keys move it" {
     try std.testing.expectEqual(@as(f32, 300), p.width);
     t.key(.home);
     try std.testing.expectEqual(@as(f32, 100), p.width);
-    // The keys it moves by are its own.
+    // The keys it moves by are its own, and the rest the app's.
     try std.testing.expectEqual(@as(usize, 0), p.leaked);
+    t.key(.enter);
+    try std.testing.expectEqual(@as(usize, 1), p.leaked);
 }
 
 test "a screen reader hears a splitter with its width, and steps it" {

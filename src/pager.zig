@@ -44,7 +44,8 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     const before = page.*;
     if (page.* >= pages) page.* = pages - 1;
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
-    const it = c.interact(box.index, .{ .focusable = true });
+    // Not a button: Enter and Space are left for what comes after it.
+    const it = c.interact(box.index, .{ .focusable = true, .text = true });
     if (it.focused) c.node(box.index).style.border = focus.ring(c);
     {
         defer box.end();
@@ -189,6 +190,10 @@ test "a click on a pager's page gives it the keyboard, and the keys it takes are
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 0), p.page);
     try std.testing.expectEqual(@as(usize, 0), p.leaked);
+    // Enter is no key of its own: it is left for the app.
+    t.key(.enter);
+    try std.testing.expectEqual(@as(usize, 0), p.page);
+    try std.testing.expectEqual(@as(usize, 1), p.leaked);
 }
 
 test "a pager numbers the ends and the pages around the current one" {

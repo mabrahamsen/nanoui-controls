@@ -232,7 +232,7 @@ pub const Form = struct {
             kit.tooltip(c, tip, value, .{});
             ui.icon(c, "chevron.right", .{ .size = f.opts.size.text() - 3, .color = col });
         }
-        return live and (it.clicked or sections.activated(c, it.focused));
+        return live and it.clicked;
     }
 
     /// A heading over the rows after it, its title in the theme's text and

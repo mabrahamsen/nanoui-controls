@@ -336,7 +336,8 @@ pub const Inspect = struct {
     /// As `begin`, the slots before `first` empty: neither the pointer nor
     /// the keys stop on them.
     pub fn beginFrom(c: *ui.Context, index: u32, count: usize, first: usize, points: bool) Inspect {
-        const it = c.interact(index, .{ .focusable = true });
+        // Not a button: Enter and Space are left for what comes after it.
+        const it = c.interact(index, .{ .focusable = true, .text = true });
         // The slot pointed at or moved to, and where the pointer was when
         // it last picked one (none while it is off the chart).
         // Whether a screen reader stepped to it: the slot stays current

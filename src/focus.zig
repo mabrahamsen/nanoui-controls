@@ -34,7 +34,9 @@ pub fn take(c: *ui.Context, box: ui.Div) ui.Interaction {
 /// what follows it keeps its place.
 pub fn takeIf(c: *ui.Context, box: ui.Div, wants: bool) ui.Interaction {
     const taker = ui.div(c).absolute().w(0).h(0);
-    var own = c.interact(taker.index, .{ .focusable = wants });
+    // The control takes Enter and Space itself, and draws its own ring, as
+    // a text field does: nanoui is not to click it with them.
+    var own = c.interact(taker.index, .{ .focusable = wants, .text = true });
     taker.end();
     if (wants and c.focus == c.node(box.index).id) {
         c.focus = own.id;

@@ -156,6 +156,9 @@ test "interactive bars take the keyboard, and the keys move from slot to slot" {
     t.settle(1);
     try std.testing.expectEqual(@as(?usize, 9), h.current);
     try std.testing.expect(t.hasText("Slot 10"));
+    // Enter and Space aren't the chart's: it is no button.
+    try std.testing.expect(!t.shortcut(.{ .key = ui.Shortcut.enter }));
+    try std.testing.expect(!t.shortcut(.{ .key = ' ' }));
 }
 
 test "after a click on interactive bars, the keys move on from the slot clicked" {

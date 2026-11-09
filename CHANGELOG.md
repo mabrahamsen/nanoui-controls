@@ -2,6 +2,14 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Changed
+
+- Built on nanoui 0.14.0, which an app using these controls must pin too.
+- Enter and Space keep doing what each control says they do now that nanoui clicks a focusable box with them. The grid, the sidebar, the swatches, the charts, the pager and the splitter take those keys themselves or leave them for the app, as before. The stat button, a bar list's rows and the form's link rows and folding headings are clicked by nanoui.
+- An app that sets nanoui's `focus_ring` gets a single ring on each control: the control's own color, at the ring's width on the controls nanoui clicks.
+
 ## 0.7.0
 
 ### Changed: what callers write

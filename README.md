@@ -30,7 +30,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | | Version |
 |---|---|
 | Zig | 0.17.1 or later |
-| nanoui | 0.13.0 |
+| nanoui | 0.14.0 |
 
 The app must pin the same nanoui release as this library, so both share one copy of nanoui. Otherwise nanoui's types don't match and the build fails.
 

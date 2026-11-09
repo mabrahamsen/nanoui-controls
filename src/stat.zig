@@ -79,20 +79,14 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
     const t = kit.tokens(c);
     var box = open(c, opts, true);
     defer box.end();
-    var it = c.interact(box.index, .{ .focusable = true });
+    const it = c.interact(box.index, .{ .focusable = true });
     if (it.hovered) {
         c.cursor_hand = true;
         box = box.bg(if (opts.card) t.surface_hover else t.surface_hover.alpha(0.6));
     }
-    if (it.focused) {
-        box = box.border(focus.ring(c));
-        if (c.input.key == .enter or (c.input.chars.len == 1 and c.input.chars[0] == ' ')) {
-            it.clicked = true;
-            c.input.key = null;
-            c.input.chars = "";
-            c.changed = true;
-        }
-    }
+    // Enter or Space clicks it while it has the keyboard, as nanoui
+    // clicks any focusable box.
+    if (it.focused) box = box.border(focus.ring(c));
     draw(c, box, label, value, opts, true);
     return it;
 }
