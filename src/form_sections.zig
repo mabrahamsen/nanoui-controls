@@ -80,7 +80,7 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
         const it = c.interact(h.index, .{ .focusable = true });
         hovered = it.hovered;
         if (it.hovered) c.cursor_hand = true;
-        if (it.focused) h = h.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
+        if (it.focused) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
         if (it.clicked) {
             o.* = !o.*;
             c.changed = true;

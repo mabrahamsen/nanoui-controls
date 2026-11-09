@@ -58,6 +58,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
     const before = selected.*;
     // An index past the colors is none chosen.
     const at: ?usize = if (selected.*) |i| (if (i < colors.len) i else null) else null;
+    if (own.focused and colors.len > 0) focus.keysOf(c, &.{ .left, .right, .up, .down, .home, .end });
     if (own.focused and colors.len > 0) if (c.input.key) |key| {
         switch (key) {
             // Up and Down as Left and Right, as a radio group's keys.
@@ -83,7 +84,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         // With the keyboard and nothing chosen, the first is where the
         // keys start.
         const ringed = chosen or (own.focused and none and i == 0);
-        const edge = if (ringed and own.focused) t.primary else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
+        const edge = if (ringed and own.focused) focus.ringIn(c, t.primary) else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
         defer dot.end();
@@ -184,6 +185,9 @@ test "the keys the swatches take are used up, even at an end" {
     t.key(.left);
     t.key(.home);
     try std.testing.expect(!p.key_left);
+    // Offered first as a shortcut, as the Mac offers it, End is its own.
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.end }));
+    try std.testing.expectEqual(@as(?usize, 3), p.chosen);
     // A key it doesn't move by is left for what comes after it.
     t.key(.enter);
     try std.testing.expect(p.key_left);

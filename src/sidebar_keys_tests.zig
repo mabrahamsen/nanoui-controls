@@ -26,6 +26,14 @@ test "with nothing selected, the keys start at the first row, and the keys they 
     t.key(.enter);
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 0), m.leaked);
+    // Offered first as shortcuts, as the Mac offers them, they are its own
+    // too.
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.end }));
+    t.settle(1);
+    try std.testing.expect(!std.mem.eql(u8, "inbox", m.selected.?));
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.home }));
+    t.settle(1);
+    try std.testing.expectEqualStrings("inbox", m.selected.?);
 }
 
 test "when the keys' row is folded away, they go back to the selected row" {
@@ -73,4 +81,19 @@ test "typing a row's first letters moves the keys to it, and a letter again to t
     t.key(.down);
     t.settle(1);
     try std.testing.expectEqualStrings("work", m.selected.?);
+}
+
+test "the keys' row takes the app's focus ring, when it sets one" {
+    var m: Mail = .{ .selected = null, .start_focused = true };
+    var t: ui.Tester = undefined;
+    try start(&m, &t);
+    defer t.deinit();
+    const red = ui.Color.hex(0xff0000);
+    t.ctx.focus_ring = .{ .color = red, .width = 3 };
+    t.frame();
+    var ringed: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.border) |b| if (std.meta.eql(b, red) and node.style.border_width == 3) {
+        ringed += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), ringed);
 }

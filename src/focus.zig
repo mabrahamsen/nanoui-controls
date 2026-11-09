@@ -2,19 +2,58 @@
 //! shared by the grid, the sidebar and the swatches; and the look every
 //! control gives the keyboard's ring and something disabled. Not a
 //! control of its own.
+const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 
-/// The ring around a control that has the keyboard, in the theme's
-/// accent.
+/// The ring around a control that has the keyboard: the app's
+/// (`c.focus_ring`), so every focusable box shows the keyboard alike, or
+/// else the theme's accent.
 pub fn ring(c: *ui.Context) ui.Color {
-    return ringIn(kit.tokens(c).primary);
+    return ringIn(c, kit.tokens(c).primary.alpha(0.6));
 }
 
-/// The ring in `color`, for a control tinted its own way.
-pub fn ringIn(color: ui.Color) ui.Color {
-    return color.alpha(0.6);
+/// The ring for a control tinted its own way: the app's, or else `color`.
+pub fn ringIn(c: *const ui.Context, color: ui.Color) ui.Color {
+    return if (c.focus_ring) |r| r.color else color;
+}
+
+/// The ring's width: the app's, or a point.
+pub fn ringWidth(c: *const ui.Context) f32 {
+    return if (c.focus_ring) |r| r.width else 1;
+}
+
+/// A key, as `c.input.key` has it.
+pub const Key = @typeInfo(@FieldType(@FieldType(ui.Context, "input"), "key")).optional.child;
+
+/// Takes the shortcut nanoui offers for a key in `keys` before the key
+/// itself (on the Mac, every key, while no text field has the keyboard),
+/// and makes it that key, for a control with the keyboard to
+/// handle as it does the key: its keys are then its own, and the app's
+/// shortcuts don't see them first. Not with ⌘, ⌃ or ⌥, nor with a Shift
+/// that `c.input.shift` doesn't say, so the control reads the key as it
+/// was pressed.
+pub fn keysOf(c: *ui.Context, keys: []const Key) void {
+    const s = c.input.shortcut orelse return;
+    if (s.cmd or s.ctrl or s.alt or s.shift != c.input.shift) return;
+    const S = ui.Shortcut;
+    const key: Key = switch (s.key) {
+        S.up => .up,
+        S.down => .down,
+        S.left => .left,
+        S.right => .right,
+        S.home => .home,
+        S.end => .end,
+        S.page_up => .page_up,
+        S.page_down => .page_down,
+        S.enter => .enter,
+        S.escape => .escape,
+        S.backspace => .backspace,
+        else => return,
+    };
+    if (std.mem.indexOfScalar(Key, keys, key) == null or !c.shortcut(s)) return;
+    c.input.key = key;
 }
 
 /// The opacity of something disabled: there, but not now.

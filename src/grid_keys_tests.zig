@@ -60,6 +60,20 @@ fn start(t: *ui.Tester, n: *Names) !void {
     t.settle(1);
 }
 
+test "the keys a grid moves by are its own when offered first as shortcuts, as the Mac offers them" {
+    var n: Names = .{};
+    var t: ui.Tester = undefined;
+    try start(&t, &n);
+    defer t.deinit();
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.end }));
+    try std.testing.expectEqual(@as(?usize, 1004), n.selected);
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.home }));
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.down }));
+    try std.testing.expectEqual(@as(?usize, 1), n.selected);
+    // Not with Cmd: that is the app's.
+    try std.testing.expect(!t.shortcut(.{ .key = ui.Shortcut.end, .cmd = true }));
+}
+
 test "typing jumps to the first row it begins, and more typing narrows it" {
     var n: Names = .{};
     defer n.search.deinit();
@@ -122,9 +136,9 @@ test "typing goes to a focused text field, and not with Cmd or Ctrl held" {
     // A click on a row takes the keyboard back; Cmd held is a shortcut.
     try t.clickText("apple");
     t.settle(0.1);
-    t.ctx.input.cmd = true;
+    t.setMods(.{ .cmd = true });
     t.typeText("c");
-    t.ctx.input.cmd = false;
+    t.setMods(.{});
     t.settle(0.1);
     try std.testing.expectEqual(@as(?usize, 0), n.selected);
     t.typeText("c");

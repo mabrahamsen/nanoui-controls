@@ -46,7 +46,10 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
     // Not a button: Enter and Space are left for what comes after it.
     const it = c.interact(box.index, .{ .focusable = true, .text = true });
-    if (it.focused) c.node(box.index).style.border = focus.ring(c);
+    if (it.focused) {
+        c.node(box.index).style.border = focus.ring(c);
+        c.node(box.index).style.border_width = focus.ringWidth(c);
+    }
     {
         defer box.end();
         if (it.focused) keys(c, page, pages);
@@ -113,11 +116,8 @@ fn slotWidth(c: *ui.Context, pages: usize, size: kit.Size) f32 {
 /// Left and Right move a page, Home and End to the ends: keys it takes,
 /// so nothing else acts on them.
 fn keys(c: *ui.Context, page: *usize, pages: usize) void {
-    if (c.shortcut(.{ .key = ui.Shortcut.left })) {
-        page.* -|= 1;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.right })) {
-        page.* = @min(page.* + 1, pages - 1);
-    } else if (c.input.key) |key| {
+    focus.keysOf(c, &.{ .left, .right, .home, .end });
+    if (c.input.key) |key| {
         switch (key) {
             .left => page.* -|= 1,
             .right => page.* = @min(page.* + 1, pages - 1),
@@ -190,10 +190,31 @@ test "a click on a pager's page gives it the keyboard, and the keys it takes are
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 0), p.page);
     try std.testing.expectEqual(@as(usize, 0), p.leaked);
+    // Offered first as a shortcut, as the Mac offers it, End is its own.
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.end }));
+    try std.testing.expectEqual(@as(usize, 19), p.page);
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.home }));
     // Enter is no key of its own: it is left for the app.
     t.key(.enter);
     try std.testing.expectEqual(@as(usize, 0), p.page);
     try std.testing.expectEqual(@as(usize, 1), p.leaked);
+}
+
+test "a pager with the keyboard takes the app's focus ring, when it sets one" {
+    var p: Pages = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&p, Pages.view), .{ .width = 500, .height = 100 });
+    defer t.deinit();
+    const red = ui.Color.hex(0xff0000);
+    t.ctx.focus_ring = .{ .color = red, .width = 3 };
+    t.settle(1);
+    try t.clickText("3");
+    t.settle(1);
+    var ringed: usize = 0;
+    for (t.ctx.nodes.items) |node| if (node.style.border) |b| if (std.meta.eql(b, red) and node.style.border_width == 3) {
+        ringed += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 1), ringed);
 }
 
 test "a pager numbers the ends and the pages around the current one" {

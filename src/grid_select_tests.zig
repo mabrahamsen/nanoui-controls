@@ -149,9 +149,9 @@ test "Shift with the keys extends the selection, and the keys alone move it" {
     try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.up, .shift = true }));
     try m.expectRows(&.{ 3, 4 });
     // Shift with End, a key rather than a shortcut: from 3 to the last.
-    t.ctx.input.shift = true;
+    t.setMods(.{ .shift = true });
     t.key(.end);
-    t.ctx.input.shift = false;
+    t.setMods(.{});
     try std.testing.expectEqual(@as(usize, 97), m.count());
     try std.testing.expect(m.marked[3] and m.marked[99] and !m.marked[2]);
     // The keys alone select the row they move to, alone.

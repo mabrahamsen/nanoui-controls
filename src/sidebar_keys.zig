@@ -4,6 +4,7 @@
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
+const focus = @import("focus.zig");
 const Sidebar = @import("sidebar.zig").Sidebar;
 const typing_mod = @import("grid_keys.zig");
 
@@ -61,12 +62,9 @@ pub fn keys(sb: *Sidebar) void {
     if (at == null or list[at.?].hash != sb.kept.cursor) sb.kept.cursor = 0;
     var to: ?usize = null;
     var enter = false;
+    focus.keysOf(c, &.{ .down, .up, .home, .end, .enter, .left, .right });
     if (typed(c, list, at)) |i| {
         to = i;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.down })) {
-        to = if (at) |a| @min(a + 1, last) else 0;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
-        to = if (at) |a| a -| 1 else last;
     } else if (c.shortcut(.{ .key = ' ' })) {
         enter = true;
     } else if (c.input.key) |key| {
@@ -126,10 +124,10 @@ pub fn reveal(sb: *Sidebar, index: u32) void {
     const box_id = c.node(sb.outer.index).id;
     const view = c.rects.get(box_id) orelse return;
     const r = c.rects.get(c.node(index).id) orelse return;
-    const offset = c.scroll.get(box_id) orelse 0;
+    const offset = ui.scrollOffset(c, box_id, .y);
     if (r.y < view.y) {
-        c.scroll.put(c.gpa, box_id, @max(0, offset - (view.y - r.y))) catch {};
+        ui.setScrollOffset(c, box_id, .y, offset - (view.y - r.y));
     } else if (r.y + r.h > view.y + view.h) {
-        c.scroll.put(c.gpa, box_id, offset + (r.y + r.h - view.y - view.h)) catch {};
+        ui.setScrollOffset(c, box_id, .y, offset + (r.y + r.h - view.y - view.h));
     }
 }

@@ -86,7 +86,7 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
     }
     // Enter or Space clicks it while it has the keyboard, as nanoui
     // clicks any focusable box.
-    if (it.focused) box = box.border(focus.ring(c));
+    if (it.focused) box = box.border(focus.ring(c)).borderW(focus.ringWidth(c));
     draw(c, box, label, value, opts, true);
     return it;
 }

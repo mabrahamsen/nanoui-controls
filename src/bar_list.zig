@@ -143,7 +143,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
                 row = row.bg(t.surface_hover);
                 c.cursor_hand = true;
             }
-            if (in.focused) row = row.border(focus.ring(c));
+            if (in.focused) row = row.border(focus.ring(c)).borderW(focus.ringWidth(c));
             if (in.clicked) {
                 clicked = i;
                 c.changed = true;

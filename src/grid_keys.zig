@@ -29,24 +29,19 @@ pub const Keys = struct {
 pub fn useKeys(c: *ui.Context, focused: bool, selected: ?*?usize, count: usize, page: usize) Keys {
     const s = selected orelse return .{};
     if (!focused or count == 0) return .{};
+    focus.keysOf(c, &.{ .down, .up, .page_down, .page_up, .home, .end, .enter });
     const last = count - 1;
     const i = s.*;
     const down = if (i) |n| @min(n + 1, last) else 0;
     const up = if (i) |n| n -| 1 else 0;
     var to: ?usize = null;
     var keys: Keys = .{};
-    if (c.shortcut(.{ .key = ui.Shortcut.down })) {
-        to = down;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.down, .shift = true })) {
+    if (c.shortcut(.{ .key = ui.Shortcut.down, .shift = true })) {
         to = down;
         keys.extend = true;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.up })) {
-        to = up;
     } else if (c.shortcut(.{ .key = ui.Shortcut.up, .shift = true })) {
         to = up;
         keys.extend = true;
-    } else if (c.shortcut(.{ .key = ui.Shortcut.enter })) {
-        keys.opened = i;
     } else if (c.input.key) |key| {
         switch (key) {
             .down => to = down,
@@ -104,6 +99,7 @@ pub fn otherKeys(g: *Grid) void {
         g.back = true;
         return;
     }
+    focus.keysOf(c, &.{ .backspace, .escape });
     const key = c.input.key orelse return;
     switch (key) {
         .backspace => g.back = true,

@@ -347,7 +347,10 @@ pub const Inspect = struct {
         if (kept.slot) |s| if (s >= count) {
             kept.slot = count - 1;
         };
-        if (it.focused) c.node(index).style.border = focus.ring(c);
+        if (it.focused) {
+            c.node(index).style.border = focus.ring(c);
+            c.node(index).style.border_width = focus.ringWidth(c);
+        }
         if (!it.hovered) kept.x = null;
         if (it.hovered) {
             c.wants_moves = true;
@@ -386,8 +389,7 @@ pub const Inspect = struct {
 
 /// Left and Right move a slot, Home and End to the ends: from `first`.
 fn keys(c: *ui.Context, slot: usize, count: usize, first: usize) usize {
-    if (c.shortcut(.{ .key = ui.Shortcut.left })) return @max(first, slot -| 1);
-    if (c.shortcut(.{ .key = ui.Shortcut.right })) return @min(slot + 1, count - 1);
+    focus.keysOf(c, &.{ .left, .right, .home, .end });
     const key = c.input.key orelse return slot;
     return switch (key) {
         .left => @max(first, slot -| 1),

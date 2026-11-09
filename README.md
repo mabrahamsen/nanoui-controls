@@ -39,7 +39,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.0"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.1"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -230,7 +230,7 @@ A row of round colors (`Swatch`, a color and its name) to pick one from. The cal
 if (controls.swatches(c, &colors, &chosen, .{})) apply(colors[chosen.?].color);
 ```
 
-- A click chooses one, and so do Left, Right (or Up and Down, as a radio group's keys), Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent.
+- A click chooses one, and so do Left, Right (or Up and Down, as a radio group's keys), Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent, or the app's `focus_ring` when it sets one.
 - Each is named in a tooltip and to a screen reader, as a radio button, the chosen one selected, with the row's `label` ("Accent color") said after it.
 - `disabled` dims them: no clicks or keys, and said as disabled. Swatches with no colors don't take Tab.
 - `size` is a `kit.Size`, in step with the kit's controls; `border` and `selected_border` color the edges.
