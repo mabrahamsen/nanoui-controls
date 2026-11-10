@@ -65,7 +65,8 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
         ui.div(c).w(opts.grab_width * k).hFull().row().justifyCenter();
     if (opts.disabled) d = d.opacity(focus.dimmed);
     defer d.end();
-    var it = c.interact(d.index, .{ .focusable = !opts.disabled });
+    // Not a button: Enter and Space are left for what comes after it.
+    var it = c.interact(d.index, .{ .focusable = !opts.disabled, .text = true });
     if (opts.disabled) {
         it.hovered = false;
         it.pressed = false;
@@ -96,6 +97,7 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
     };
     if (it.a11y_step != 0) width.* += @as(f32, @floatFromInt(it.a11y_step)) * opts.step;
     // The keys it moves by are its own: nothing after it sees them.
+    if (it.focused) focus.keysOf(c, if (opts.stacked) &.{ .up, .down, .home, .end } else &.{ .left, .right, .home, .end });
     if (it.focused) if (c.input.key) |key| {
         const step = if (c.input.shift) opts.big_step else opts.step;
         // Left and Right side by side; Up and Down stacked.
@@ -179,8 +181,14 @@ test "a splitter takes the keyboard, and the keys move it" {
     try std.testing.expectEqual(@as(f32, 300), p.width);
     t.key(.home);
     try std.testing.expectEqual(@as(f32, 100), p.width);
-    // The keys it moves by are its own.
+    // The keys it moves by are its own, and the rest the app's, also
+    // when offered first as shortcuts, as the Mac offers them.
     try std.testing.expectEqual(@as(usize, 0), p.leaked);
+    try std.testing.expect(t.shortcut(.{ .key = ui.Shortcut.end }));
+    try std.testing.expectEqual(@as(f32, 300), p.width);
+    try std.testing.expect(!t.shortcut(.{ .key = ui.Shortcut.up }));
+    t.key(.enter);
+    try std.testing.expectEqual(@as(usize, 1), p.leaked);
 }
 
 test "a screen reader hears a splitter with its width, and steps it" {

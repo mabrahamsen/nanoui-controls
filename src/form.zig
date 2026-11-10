@@ -216,7 +216,7 @@ pub const Form = struct {
         const it = c.interact(r.index, .{ .focusable = !opts.disabled });
         const live = !opts.disabled;
         if (live and it.hovered) c.cursor_hand = true;
-        if (it.focused) r = r.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
+        if (it.focused) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
         f.drawLabel(label, .{ .disabled = opts.disabled });
         {
@@ -232,7 +232,7 @@ pub const Form = struct {
             kit.tooltip(c, tip, value, .{});
             ui.icon(c, "chevron.right", .{ .size = f.opts.size.text() - 3, .color = col });
         }
-        return live and (it.clicked or sections.activated(c, it.focused));
+        return live and it.clicked;
     }
 
     /// A heading over the rows after it, its title in the theme's text and

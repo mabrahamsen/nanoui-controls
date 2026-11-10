@@ -80,8 +80,8 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
         const it = c.interact(h.index, .{ .focusable = true });
         hovered = it.hovered;
         if (it.hovered) c.cursor_hand = true;
-        if (it.focused) h = h.border(focus.ring(c)).rounded(@max(0, t.radius - 2) * k);
-        if (it.clicked or activated(c, it.focused)) {
+        if (it.focused) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
+        if (it.clicked) {
             o.* = !o.*;
             c.changed = true;
         }
@@ -103,16 +103,6 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
         defer d.end();
         ui.text(c, opts.description, .{ .size = text - 1.5, .color = t.muted, .wrap = true });
     }
-}
-
-/// Enter or Space on a box that has the keyboard, used up.
-pub fn activated(c: *ui.Context, focused: bool) bool {
-    if (!focused) return false;
-    if (c.input.key == .enter) {
-        c.input.key = null;
-        return true;
-    }
-    return c.shortcut(.{ .key = ' ' });
 }
 
 /// Room inside a card, either side of its rows.

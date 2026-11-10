@@ -5,6 +5,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
+const focus = @import("focus.zig");
 const grid_mod = @import("grid.zig");
 const Grid = grid_mod.Grid;
 const Options = grid_mod.Options;
@@ -166,6 +167,7 @@ pub fn groupKeys(g: *Grid) void {
                 c.input.chars = "";
                 return toggle(g, h.group);
             }
+            focus.keysOf(c, &.{ .enter, .left, .right });
             const key = c.input.key orelse return;
             switch (key) {
                 .enter => toggle(g, h.group),
@@ -184,7 +186,9 @@ pub fn groupKeys(g: *Grid) void {
             c.input.key = null;
             c.changed = true;
         },
-        .row => |r| if (c.input.key == .left) {
+        .row => |r| {
+            focus.keysOf(c, &.{.left});
+            if (c.input.key != .left) return;
             // Its group's heading; a group of one shown as its row goes
             // to the heading over it.
             var to = gs.locate(.{ .heading = .{ .group = r.group, .depth = 0 } });

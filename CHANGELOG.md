@@ -2,6 +2,15 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.7.1
+
+### Changed
+
+- Built on nanoui 0.14.0, which an app using these controls must pin too.
+- Enter and Space keep doing what each control says they do now that nanoui clicks a focusable box with them. The grid, the sidebar, the swatches, the charts, the pager and the splitter take those keys themselves or leave them for the app, as before. The stat button, a bar list's rows and the form's link rows and folding headings are clicked by nanoui.
+- The keys a control takes are its own when nanoui offers them first as shortcuts, as it now does on the Mac for every key while no text field has the keyboard: Home, End, Page Up and Page Down, the arrows, Enter, Escape and Backspace, each where the control takes it. The app's shortcuts for them don't fire while a control with the keyboard takes them; with ⌘, ⌃ or ⌥ they are the app's, as before.
+- An app that sets nanoui's `focus_ring` gets it on every control: the sidebar's, the swatches', the charts', the pager's, the splitter's, the form's, the stat button's and a bar list's rings take its color, and its width where the ring is a border, instead of the theme's accent.
+
 ## 0.7.0
 
 ### Changed: what callers write

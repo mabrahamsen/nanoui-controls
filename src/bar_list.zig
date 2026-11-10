@@ -136,21 +136,15 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
         var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(6 * k).py(@round(text * 0.35) * k).rounded(@max(0, t.radius - 2));
         if (opts.clickable) {
             // Each row takes the keyboard, as a button does: Tab moves
-            // from row to row, and Enter clicks the one that has it.
+            // from row to row, and Enter or Space clicks the one that has
+            // it, used up.
             const in = c.interact(row.index, .{ .focusable = true });
             if (in.hovered) {
                 row = row.bg(t.surface_hover);
                 c.cursor_hand = true;
             }
-            if (in.focused) row = row.border(focus.ring(c));
-            // Enter or Space clicks the row that has the keyboard, and is
-            // the list's: nothing after it sees it.
-            const pressed = in.focused and (c.input.key == .enter or c.shortcut(.{ .key = ' ' }) or std.mem.eql(u8, c.input.chars, " "));
-            if (pressed) {
-                c.input.key = null;
-                c.input.chars = "";
-            }
-            if (in.clicked or pressed) {
+            if (in.focused) row = row.border(focus.ring(c)).borderW(focus.ringWidth(c));
+            if (in.clicked) {
                 clicked = i;
                 c.changed = true;
             }

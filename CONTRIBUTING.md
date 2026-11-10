@@ -16,6 +16,7 @@ Controls follow the conventions of `nanoui.kit`, so any of them could move into 
 - **A call in a frame:** the control draws itself each frame and returns what happened, such as a click or a changed sort. It sets `c.changed` when the user changes something.
 - **The caller keeps the state:** the control takes a pointer to it, such as a sort or a selection, and doesn't own data.
 - **Styled from the theme** through `kit.tokens(c)`, never fixed colors, so it fits light, dark and each app's palette.
+- **The keyboard as nanoui has it:** a box that is a button lets `c.interact` click it with Enter and Space (`focusable`). A control that takes its own keys passes `.text = true`, or takes the keyboard with `focus.take`; it calls `focus.keysOf` with the keys it takes, so they are its own when nanoui offers them first as shortcuts, and leaves the rest for the app. Its ring is `focus.ring` at `focus.ringWidth`, which follow the app's `c.focus_ring`.
 - **nanoui's public API only:** `nanoui.ui` and `nanoui.kit`, nothing from the app.
 - **Tested next to its code** with `ui.Tester`, in `src/<control>_tests.zig` when the tests would make the file long. Files stay under 600 lines.
 - **Drawn in a snapshot test** (`tests/snapshots.zig`), in light and dark, so a change to how it looks shows up in review.

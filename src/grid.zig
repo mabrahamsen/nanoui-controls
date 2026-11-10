@@ -331,7 +331,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
             want = i;
         };
         const count: f32 = @floatFromInt(opts.count);
-        var offset = c.scroll.get(id) orelse 0;
+        var offset = ui.scrollOffset(c, id, .y);
         var scroll_to: ?f32 = null;
         if (want) |i| if (i < opts.count) {
             const top = @as(f32, @floatFromInt(i)) * pitch;

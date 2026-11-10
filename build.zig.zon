@@ -1,13 +1,13 @@
 .{
     .name = .nanoui_controls,
-    .version = "0.7.0",
+    .version = "0.7.1",
     .fingerprint = 0x573c19433a205e58,
     .minimum_zig_version = "0.17.1",
     .dependencies = .{
         // The latest nanoui release: an app using these controls pins the same one.
         .nanoui = .{
-            .url = "git+https://github.com/justrach/nanoui?ref=v0.13.0#d17a467d55db4ff3cf765f6f0e208e6234abf4a1",
-            .hash = "nanoui-0.13.0-we0KMd1-MQBzJq1VU59oWYKF3KHhSYPj8_qjVe2icq_e",
+            .url = "git+https://github.com/justrach/nanoui?ref=v0.14.0#7b3227295d37982306eee7b87b3e1fbbb76b3970",
+            .hash = "nanoui-0.14.0-we0KMVwFOwDGZlfnq2LthniS08HthaiFaP6vL3Asa5sw",
         },
     },
     .paths = .{ "build.zig", "build.zig.zon", "src", "README.md", "CHANGELOG.md", "LICENSE" },
