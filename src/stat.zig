@@ -3,8 +3,9 @@
 //! trend of its history under it. A dashboard's row of them says how
 //! things stand.
 //!
-//! The figure can have a unit after it and a line of detail under it, and
-//! shows a spinner while it is loading; `statButton` is a stat that can be
+//! The figure can have a unit after it and a line of detail under it, the
+//! label a dot in the color of a chart's series it reads, and it shows a
+//! spinner while it is loading; `statButton` is a stat that can be
 //! clicked, to lead to more.
 //!
 //!     controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .history = per_minute });
@@ -55,6 +56,9 @@ pub const Options = struct {
     unit: []const u8 = "",
     /// A line of muted text under the figure: "over the last hour".
     detail: []const u8 = "",
+    /// A dot before the label in this color, the color of the series the
+    /// stat reads in a chart beside it; null draws none.
+    key: ?ui.Color = null,
     /// A spinner in place of the figure, which isn't known yet: a figure
     /// still loading never reads as 0.
     loading: bool = false,
@@ -112,7 +116,12 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
         .label = label,
         .value = if (opts.change.len > 0 and !opts.loading) c.print("{s}, {s}", .{ figure, opts.change }) else figure,
     });
-    ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
+    if (opts.key) |color| {
+        const head = ui.div(c).row().itemsCenter().gap(6 * opts.scale);
+        defer head.end();
+        ui.div(c).w(6 * opts.scale).h(6 * opts.scale).roundedFull().bg(color).end();
+        ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
+    } else ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
     {
         const size = opts.size.text() * 2;
         const row = ui.div(c).row().itemsCenter().gap(8 * opts.scale);

@@ -33,6 +33,7 @@ const motion = ui.motion;
 const focus = @import("focus.zig");
 const measure = @import("measure.zig");
 const keys_mod = @import("sidebar_keys.zig");
+const count_mod = @import("sidebar_count.zig");
 
 pub const Options = struct {
     /// The rows' height and text, as the kit's controls at this size.
@@ -56,6 +57,8 @@ pub const Options = struct {
     /// its rows show, and while they are folded away.
     expanded_text: []const u8 = "expanded",
     collapsed_text: []const u8 = "collapsed",
+    /// What a screen reader says of a row's count while it is loading.
+    loading_text: []const u8 = "loading",
     /// Multiplies the sidebar's lengths, for an app that zooms its layout
     /// along with `c.setZoom`, which zooms text, as the grid's does.
     scale: f32 = 1,
@@ -74,6 +77,9 @@ pub const Item = struct {
     /// The count as muted text, or as a filled pill that stands out, for
     /// what waits to be seen (unread mail).
     count_style: CountStyle = .plain,
+    /// A spinner in the count's place, as its count isn't known yet: a
+    /// count still loading never reads as 0, so `count` is ignored.
+    loading: bool = false,
     /// Shown dimmed, it can't be chosen, and the keys pass it by: a place
     /// that is there but not now (an account offline).
     disabled: bool = false,
@@ -330,11 +336,7 @@ pub const Sidebar = struct {
             const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
             defer slot.end();
             if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = if (on or holds) tint else t.muted.mix(t.foreground, wash * 0.5) });
-            // Narrowed, a count is a dot at the icon's corner.
-            if (narrow) if (opts.count) |n| if (n > 0) {
-                const dot = @round(text * 0.45) * k;
-                ui.div(c).absolute().offset(@round(text * 1.3) * k - dot * 0.6, -dot * 0.3).w(dot).h(dot).roundedFull().bg(count_col).end();
-            };
+            if (narrow) count_mod.badge(c, opts, text, k, count_col);
         }
         if (narrow) {
             kit.tooltip(c, it, label, .{ .placement = .right });
@@ -351,11 +353,7 @@ pub const Sidebar = struct {
             tip.hovered = it.hovered and measure.cutOff(c, label, style);
             kit.tooltip(c, tip, label, .{ .placement = .right });
             ui.spacer(c);
-            if (opts.count) |n| if (pill) {
-                const p = ui.div(c).h(@round(text * 1.25) * k).px(@round(text * 0.45) * k).roundedFull().bg(count_col).center();
-                defer p.end();
-                ui.textf(c, .{ .size = text - 2, .weight = .semibold, .color = t.primary_foreground }, "{d}", .{n});
-            } else ui.textf(c, .{ .size = text - 2, .mono = true, .color = count_col }, "{d}", .{n});
+            count_mod.count(c, opts, text, k, count_col);
             // A branch's chevron, which folds and opens it: a box of its
             // own, so its click isn't the row's.
             if (open) |o| {
@@ -374,10 +372,11 @@ pub const Sidebar = struct {
                 }
             }
         }
+        const said = count_mod.said(c, opts, sb.opts.loading_text);
         const value = if (open) |o| blk: {
             const state_text = if (o.*) sb.opts.expanded_text else sb.opts.collapsed_text;
-            break :blk if (opts.count) |n| c.print("{d}, {s}", .{ n, state_text }) else state_text;
-        } else if (opts.count) |n| c.print("{d}", .{n}) else "";
+            break :blk if (said.len > 0) c.print("{s}, {s}", .{ said, state_text }) else state_text;
+        } else said;
         ui.access.describe(c, row_box.index, .{
             .role = .tab,
             .label = label,
