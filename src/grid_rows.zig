@@ -23,8 +23,8 @@ pub const Heading = struct {
     /// caller's `cellAt`, for a group's totals; false spans the columns.
     cells: bool = false,
     /// What a screen reader hears of the heading, for one whose content
-    /// (`headingOpen`) says more ("Pull requests, 2 wait for you, 1
-    /// new"); empty takes the title and the detail.
+    /// (`headingOpen`) says more ("Inbox, 3 unread, 1 flagged"); empty
+    /// takes the title and the detail.
     label: []const u8 = "",
 };
 

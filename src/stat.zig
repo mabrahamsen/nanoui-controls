@@ -129,7 +129,7 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
         if (opts.loading) {
             const slot = ui.div(c).h(@round(size * 1.2)).row().itemsCenter();
             defer slot.end();
-            kit.spinner(c, .{ .size = @round(size * 0.7) });
+            kit.spinner(c, .{ .size = @round(size * 0.7) * opts.scale });
         } else if (opts.unit.len > 0) {
             // The unit on the figure's line, at its foot.
             const fig = ui.div(c).row().itemsEnd().gap(3 * opts.scale);

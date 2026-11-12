@@ -19,8 +19,8 @@ const Loading = struct {
         var sb = sidebar(c, "loading", "inbox", .{ .icons_only = x.icons_only });
         sb.item("inbox", "Inbox", .{ .icon = "tray", .count = 4, .loading = x.loading });
         sb.item("unread", "Unread", .{ .icon = "envelope", .count = 7, .count_style = .pill, .loading = x.loading });
-        if (sb.branch("repos", "Repos", .{ .icon = "folder", .count = 2, .loading = x.loading }, &x.open)) |g| {
-            sb.item("app", "App", .{});
+        if (sb.branch("folders", "Folders", .{ .icon = "folder", .count = 2, .loading = x.loading }, &x.open)) |g| {
+            sb.item("archive", "Archive", .{});
             g.end();
         }
         _ = sb.end();
@@ -58,7 +58,7 @@ test "a loading row shows a spinner where its count goes, not the count, and say
     const label = t.findText("Inbox").?;
     const four = t.findText("4").?;
     try std.testing.expectEqualStrings("4", try Loading.value(&t, arena.allocator(), "Inbox"));
-    try std.testing.expectEqualStrings("2, expanded", try Loading.value(&t, arena.allocator(), "Repos"));
+    try std.testing.expectEqualStrings("2, expanded", try Loading.value(&t, arena.allocator(), "Folders"));
     x.loading = true;
     t.settle(1);
     for ([_][]const u8{ "4", "7", "2" }) |n| try std.testing.expect(!t.hasText(n));
@@ -79,7 +79,7 @@ test "a loading row shows a spinner where its count goes, not the count, and say
     }
     try std.testing.expectEqualStrings("loading", try Loading.value(&t, arena.allocator(), "Inbox"));
     try std.testing.expectEqualStrings("loading", try Loading.value(&t, arena.allocator(), "Unread"));
-    try std.testing.expectEqualStrings("loading, expanded", try Loading.value(&t, arena.allocator(), "Repos"));
+    try std.testing.expectEqualStrings("loading, expanded", try Loading.value(&t, arena.allocator(), "Folders"));
 }
 
 test "icons only, a loading row shows a small spinner at its icon's corner in place of the count's dot" {
