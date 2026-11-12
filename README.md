@@ -39,7 +39,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.1"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.2"
 ```
 
 Then import its module next to nanoui's in `build.zig`:

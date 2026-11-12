@@ -2,7 +2,7 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.7.2
 
 ### Added
 
