@@ -44,6 +44,8 @@ test "an empty grid says so under its titles" {
 const Shares = struct {
     widths: [3]f32 = .{ 0, 0, 0 },
     resize: bool = false,
+    hide_narrow: bool = false,
+    scroll: bool = false,
 
     const columns = [_]Column{
         .{ .title = "Wide", .flex = 2 },
@@ -54,14 +56,9 @@ const Shares = struct {
     fn view(s: *Shares, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
-        var g = grid(c, &columns, .{ .count = 1, .widths = if (s.resize) &s.widths else null });
+        var g = grid(c, &columns, .{ .count = 1, .widths = if (s.resize) &s.widths else null, .hidden = &.{ false, s.hide_narrow, false }, .scroll_x = s.scroll });
         while (g.next()) |_| {
-            g.cell();
-            ui.text(c, "w", .{});
-            g.cell();
-            ui.text(c, "n", .{});
-            g.cell();
-            ui.text(c, "f", .{});
+            for ([_][]const u8{ "w", "n", "f" }, 0..) |text, i| if (g.cellAt(i)) ui.text(c, text, .{});
         }
         g.end();
     }
@@ -69,6 +66,18 @@ const Shares = struct {
     /// Where column `title`'s cells start.
     fn x(t: *ui.Tester, title: []const u8) f32 {
         return t.findText(title).?.x;
+    }
+
+    /// How wide column `title`'s title box is: the widest box that starts
+    /// where its text does, in the header.
+    fn w(t: *ui.Tester, title: []const u8) f32 {
+        const text = t.findText(title).?;
+        var widest: f32 = 0;
+        for (t.ctx.nodes.items) |node| {
+            const r = t.ctx.rects.get(node.id) orelse continue;
+            if (@abs(r.x - text.x) < 0.5 and r.y <= text.y and r.y + r.h >= text.y + text.h and r.h < 40) widest = @max(widest, r.w);
+        }
+        return widest;
     }
 };
 
@@ -99,7 +108,7 @@ test "a column that shares the room keeps its min_width in a narrow window" {
     try std.testing.expect(narrow >= 60 - 0.5);
 }
 
-test "dragging the edge between titles resizes the column with a width" {
+test "dragging an edge resizes the column on its left, a flexible one from its width on screen, the edge following the pointer" {
     var s: Shares = .{ .resize = true };
     var t: ui.Tester = undefined;
     try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
@@ -108,24 +117,77 @@ test "dragging the edge between titles resizes the column with a width" {
     // Columns with a width start at it; the others stay 0.
     try std.testing.expectEqual([3]f32{ 0, 0, 80 }, s.widths);
     const y = t.findText("Fixed").?.y + 4;
-    // The edge between Narrow and Fixed, in the gap before Fixed: Fixed
-    // is on its right, so it widens as the edge moves left.
-    const edge = Shares.x(&t, "Fixed") - 5;
-    t.drag(edge, y, edge - 40, y);
+    // Narrow, 90 on screen, keeps the width it is dragged to, and Wide
+    // the 180 it had, so the edge follows the pointer.
+    const fixed = Shares.x(&t, "Fixed");
+    t.drag(fixed - 5, y, fixed - 25, y);
     t.settle(1);
-    try std.testing.expectApproxEqAbs(@as(f32, 120), s.widths[2], 0.5);
-    try std.testing.expectApproxEqAbs(edge - 40, Shares.x(&t, "Fixed") - 5, 1);
+    try std.testing.expectApproxEqAbs(@as(f32, 70), s.widths[1], 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 180), s.widths[0], 0.5);
+    try std.testing.expectApproxEqAbs(fixed - 20, Shares.x(&t, "Fixed"), 1);
     try std.testing.expectApproxEqAbs(Shares.x(&t, "Fixed"), t.findText("f").?.x, 0.5);
     // Never narrower than its min_width.
-    const edge2 = Shares.x(&t, "Fixed") - 5;
-    t.drag(edge2, y, edge2 + 300, y);
+    const edge = Shares.x(&t, "Fixed") - 5;
+    t.drag(edge, y, edge - 300, y);
     t.settle(1);
-    try std.testing.expectApproxEqAbs(@as(f32, 50), s.widths[2], 0.5);
-    // Between two columns without a width, there's nothing to resize.
-    const between = Shares.x(&t, "Narrow") - 5;
-    t.drag(between, y, between + 40, y);
+    try std.testing.expectApproxEqAbs(@as(f32, 60), s.widths[1], 0.5);
+}
+
+test "without scroll_x, a drag stops at the room the other columns leave, and the last column takes what is left" {
+    var s: Shares = .{ .resize = true, .widths = .{ 0, 70, 80 } };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
     t.settle(1);
-    try std.testing.expectEqual([3]f32{ 0, 0, 50 }, s.widths);
+    const y = t.findText("Fixed").?.y + 4;
+    // 370 between the padding, less Narrow, Fixed and two gaps: 200.
+    const edge = Shares.x(&t, "Narrow") - 5;
+    t.drag(edge, y, edge + 100, y);
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 200), s.widths[0], 0.5);
+    // None shares the room now: Fixed, the last, takes what Wide leaves,
+    // so the rows still span the grid.
+    const edge2 = Shares.x(&t, "Narrow") - 5;
+    t.drag(edge2, y, edge2 - 50, y);
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 150), s.widths[0], 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 80), s.widths[2], 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 380), Shares.x(&t, "Fixed") + Shares.w(&t, "Fixed"), 1);
+}
+
+test "with scroll_x, a drag widens a column past the grid, which scrolls" {
+    var s: Shares = .{ .resize = true, .scroll = true };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    const y = t.findText("Fixed").?.y + 4;
+    const edge = Shares.x(&t, "Narrow") - 5;
+    t.drag(edge, y, edge + 150, y);
+    t.settle(1);
+    try std.testing.expect(s.widths[0] > 320);
+}
+
+test "a hidden column keeps its width for when it shows again, and its room goes to the flexible columns" {
+    var s: Shares = .{ .resize = true, .widths = .{ 0, 70, 80 } };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    s.hide_narrow = true;
+    t.settle(1);
+    try std.testing.expect(!t.hasText("Narrow"));
+    // 370 less Fixed and a gap.
+    try std.testing.expectApproxEqAbs(@as(f32, 280), Shares.x(&t, "Fixed") - Shares.x(&t, "Wide") - 10, 1);
+    s.hide_narrow = false;
+    t.settle(1);
+    try std.testing.expectEqual([3]f32{ 0, 70, 80 }, s.widths);
+    try std.testing.expectApproxEqAbs(@as(f32, 70), Shares.x(&t, "Fixed") - Shares.x(&t, "Narrow") - 10, 1);
+    // With Wide sized and Narrow hidden, the last column takes the room.
+    s.widths[0] = 100;
+    s.hide_narrow = true;
+    t.settle(1);
+    try std.testing.expectApproxEqAbs(@as(f32, 380), Shares.x(&t, "Fixed") + Shares.w(&t, "Fixed"), 1);
 }
 
 test "an edge after a column with a width resizes that column" {
@@ -167,6 +229,8 @@ fn countText(t: *ui.Tester, s: []const u8) usize {
 /// A narrow column of sizes, whose widths the caller keeps.
 const Sizes = struct {
     widths: [2]f32 = .{ 0, 0 },
+    fit_all: bool = false,
+    reset: bool = false,
     const columns = [_]Column{
         .{ .title = "Name" },
         .{ .title = "Size", .width = 40, .alignment = .end },
@@ -174,6 +238,10 @@ const Sizes = struct {
     const long = "1234567890 KB";
     fn view(s: *Sizes, c: *ui.Context) void {
         var g = grid(c, &columns, .{ .count = 3, .widths = &s.widths });
+        if (s.fit_all) g.fitAll();
+        if (s.reset) g.resetWidths();
+        s.fit_all = false;
+        s.reset = false;
         while (g.next()) |row| {
             g.cell();
             ui.text(c, c.print("file {d}", .{row.index}), .{});
@@ -184,20 +252,57 @@ const Sizes = struct {
     }
 };
 
-test "a double-click on an edge fits the column to its widest cell" {
+test "a double-click on an edge fits the column on its left to its widest title or cell" {
     var s: Sizes = .{};
     var t: ui.Tester = undefined;
     try t.init(std.testing.allocator, .init(&s, Sizes.view), .{ .width = 400, .height = 300 });
     defer t.deinit();
     t.settle(1);
     try std.testing.expectEqual(@as(f32, 40), s.widths[1]);
+    // Name's widest is under its min_width, 40.
+    const want = @max(40, t.ctx.text.width("file 0", .{}), t.findText("Name").?.w);
     // The edge before Size, whose cells end at the padding and the
     // scrollbar's gutter: 400 - 10 - 10 - 40.
     const y = t.findText("Name").?.y + 4;
     t.doubleClick(340 - 5, y);
     t.settle(1);
-    const want = t.ctx.text.width(Sizes.long, .{ .truncate = .ellipsis });
-    try std.testing.expect(s.widths[1] >= want and s.widths[1] <= want + 3);
+    try std.testing.expect(s.widths[0] >= want and s.widths[0] <= want + 3);
+    try std.testing.expectEqual(@as(f32, 40), s.widths[1]);
+}
+
+test "a click on an edge that doesn't move changes no width" {
+    var s: Shares = .{ .resize = true };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    const edge = Shares.x(&t, "Fixed") - 5;
+    t.drag(edge, t.findText("Fixed").?.y + 4, edge, t.findText("Fixed").?.y + 4);
+    t.settle(1);
+    try std.testing.expectEqual([3]f32{ 0, 0, 80 }, s.widths);
+}
+
+test "a double-click past the last title, or fitAll, fits every column, and resetWidths goes back" {
+    var s: Sizes = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Sizes.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    const long = t.ctx.text.width(Sizes.long, .{ .truncate = .ellipsis });
+    const name = @max(40, t.ctx.text.width("file 0", .{}), t.findText("Name").?.w);
+    // In the padding past Size's title, the grid's last 20 points.
+    t.doubleClick(395, t.findText("Name").?.y + 4);
+    t.settle(1);
+    try std.testing.expect(s.widths[0] >= name and s.widths[0] <= name + 3);
+    try std.testing.expect(s.widths[1] >= long and s.widths[1] <= long + 3);
+    s.reset = true;
+    t.settle(1);
+    // Size starts again at its own width; Name shares the room again.
+    try std.testing.expectEqual([2]f32{ 0, 40 }, s.widths);
+    s.fit_all = true;
+    t.settle(1);
+    try std.testing.expect(s.widths[0] >= name and s.widths[0] <= name + 3);
+    try std.testing.expect(s.widths[1] >= long and s.widths[1] <= long + 3);
 }
 
 test "a cut-off cell shows its whole text on hover, and a whole one doesn't" {

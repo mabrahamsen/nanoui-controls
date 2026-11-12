@@ -1,6 +1,7 @@
 //! The grid's header: the column titles in their order, which sort when
-//! clicked and move when dragged, and the edges between them, which
-//! resize a column when dragged and fit it when double-clicked.
+//! clicked and move when dragged, the edges between them, which resize a
+//! column when dragged and fit it when double-clicked, and the room past
+//! the last title, where a double click fits them all.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -11,15 +12,17 @@ const Options = grid_mod.Options;
 const lay_mod = @import("grid_layout.zig");
 const Layout = lay_mod.Layout;
 const shown = lay_mod.shown;
+const widths_mod = @import("grid_widths.zig");
 
 /// What happened in the header this frame.
 pub const Head = struct {
     /// A click changed the sort.
     sorted: bool = false,
-    /// The column a double-click on an edge fits to its contents, and its
-    /// title's width.
-    fit: ?usize = null,
-    fit_w: f32 = 0,
+    /// The columns a double-click fits to their contents, one width a
+    /// column, starting at their titles' (`grid_widths.fits`).
+    fit: ?[]f32 = null,
+    /// Each column's title box, or `no_title` for a hidden one.
+    titles: ?[]const u32 = null,
 };
 
 /// A title being dragged to move its column: which, where the pointer
@@ -34,6 +37,9 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
     var head: Head = .{};
     var drag = lay_mod.state(c, Reorder).*;
     const titles = c.alloc().alloc(u32, columns.len) catch @panic("grid: out of memory");
+    @memset(titles, widths_mod.no_title);
+    var fit: ?usize = null;
+    var fit_all = false;
     {
         const outer = ui.div(c).row().wFull().itemsCenter().pb(6 * k);
         defer outer.end();
@@ -44,23 +50,29 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
             titles[f] = title(c, columns, opts, l, f, &drag, &head);
             before = f;
             // The edge after it, which stays with it.
-            if (nextShown(c, columns, opts, l, f)) |b| edge(c, columns, opts, f, b, opts.column_lines or l.sx > 0, &head);
+            if (nextShown(c, columns, opts, l, f)) |_| edge(c, columns, opts, l, f, opts.column_lines or l.sx > 0, &fit);
         }
         // The rest, cut off past the frozen column and scrolled.
         const cut = ui.div(c).row().grow().clip();
         defer cut.end();
-        var inner = ui.div(c).row().itemsCenter().offset(-l.sx, 0).pr(opts.padding * k + lay_mod.gutter(opts));
-        if (l.frozen == null) inner = inner.pl(opts.padding * k);
-        defer inner.end();
-        for (l.order) |i| {
-            if (i == l.frozen or !shown(c, columns, opts, i, l.grid_w)) continue;
-            if (before) |b| if (b != l.frozen) edge(c, columns, opts, b, i, opts.column_lines, &head);
-            before = i;
-            titles[i] = title(c, columns, opts, l, i, &drag, &head);
+        {
+            var inner = ui.div(c).row().itemsCenter().offset(-l.sx, 0);
+            if (l.frozen == null) inner = inner.pl(opts.padding * k);
+            defer inner.end();
+            for (l.order) |i| {
+                if (i == l.frozen or !shown(c, columns, opts, i, l.grid_w)) continue;
+                if (before) |b| if (b != l.frozen) edge(c, columns, opts, l, b, opts.column_lines, &fit);
+                before = i;
+                titles[i] = title(c, columns, opts, l, i, &drag, &head);
+            }
+            const end_pad = opts.padding * k + lay_mod.gutter(opts);
+            if (opts.widths != null) fit_all = pastTitles(c, end_pad) else ui.div(c).w(end_pad).end();
         }
+        if (opts.widths != null) fit_all = pastTitles(c, null) or fit_all;
         if (drag.col != null and drag.moved) dropLine(c, columns, opts, l, drag.col.?);
     }
-    if (head.fit) |f| head.fit_w = lay_mod.natural(c, titles[f]);
+    head.titles = titles;
+    if (fit_all or fit != null) head.fit = widths_mod.fits(c, columns, opts, l, titles, if (fit_all) null else fit);
     // A drag let go: the column moves where it was dropped.
     if (drag.col) |dragged| if (!c.input.down) {
         if (drag.moved) if (opts.order) |order| {
@@ -71,6 +83,15 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
     };
     lay_mod.state(c, Reorder).* = drag;
     return head;
+}
+
+/// The room past the last title, `width` wide or else the rest of the
+/// header, where a double click fits every column: true when it does.
+fn pastTitles(c: *ui.Context, width: ?f32) bool {
+    var d = ui.div(c).hFull();
+    d = if (width) |w| d.w(w) else d.grow();
+    defer d.end();
+    return d.interaction().double_clicked;
 }
 
 /// The shown column after `i` in the order.
@@ -139,47 +160,58 @@ fn title(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, i: u
     return box.index;
 }
 
-/// The gap between the titles of columns `a` and `b`, with a line down
-/// its middle if `line`. Given `opts.widths`, dragging it resizes `a` if
-/// it has a width, else `b`, a double-click fits that column to its
-/// contents, and a line shows it under the pointer, stronger if it has
-/// one already.
-fn edge(c: *ui.Context, columns: []const Column, opts: Options, a: usize, b: usize, line: bool, head: *Head) void {
+/// The gap after column `a`'s title, with a line down its middle if
+/// `line`. Given `opts.widths`, dragging it resizes `a`, from the width it
+/// has on screen, the flexible columns before it keeping theirs; a
+/// double-click fits it to its contents (`fit`); and a line shows it
+/// under the pointer, stronger if it has one already.
+/// Without `scroll_x`, a drag stops where the other columns would go
+/// under their `min_width`.
+fn edge(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, a: usize, line: bool, fit: *?usize) void {
     const k = opts.scale;
     const t = kit.tokens(c);
     ui.key(c, c.print("grid-edge-{d}", .{a}));
     const drag = c.state(EdgeDrag, "drag");
     const d = ui.div(c).w(opts.column_gap * k).hFull().center();
     defer d.end();
-    // The column a drag resizes, and which way: `b` narrows as the edge
-    // moves right.
-    const target: ?struct { usize, f32 } = if (opts.widths == null) null else if (columns[a].width != null) .{ a, 1 } else if (columns[b].width != null) .{ b, -1 } else null;
-    const it: ?ui.Interaction = if (target != null) d.interaction() else null;
+    const it: ?ui.Interaction = if (opts.widths != null) d.interaction() else null;
     const lit = if (it) |x| x.hovered or x.pressed else false;
     if (line or lit) ui.div(c).w(1).hFull().bg(if (line and lit) t.muted else t.border).end();
     const widths = opts.widths orelse return;
-    const i, const way = target orelse return;
     if (lit) c.cursor = .resize_left_right;
     const it2 = it.?;
-    if (it2.double_clicked) head.fit = i;
+    if (it2.double_clicked) fit.* = a;
     if (!it2.pressed) {
         drag.on = false;
         return;
     }
     if (!drag.on) {
-        drag.* = .{ .on = true, .x = c.input.mouse.x, .width = widths[i] };
+        drag.* = .{ .on = true, .x = c.input.mouse.x, .width = l.w[a] / k };
         return;
     }
-    const w = @max(columns[i].min_width, drag.width + way * (c.input.mouse.x - drag.x) / k);
-    if (w != widths[i]) {
-        widths[i] = w;
+    // A click, or a double click, that doesn't move changes no width.
+    if (!drag.moved) {
+        if (c.input.mouse.x == drag.x) return;
+        drag.moved = true;
+        // The flexible columns before it keep the widths they have, so
+        // the edge follows the pointer.
+        for (l.order) |j| {
+            if (j == a) break;
+            if (shown(c, columns, opts, j, l.grid_w) and widths_mod.sized(columns, opts, j) == null) widths[j] = l.w[j] / k;
+        }
+    }
+    var w = drag.width + (c.input.mouse.x - drag.x) / k;
+    if (widths_mod.maxWidth(c, columns, opts, l, a)) |most| w = @min(w, most / k);
+    w = @max(columns[a].min_width, w);
+    if (w != widths[a]) {
+        widths[a] = w;
         c.changed = true;
     }
 }
 
 /// An edge being dragged: where the pointer and the column's width
-/// started.
-const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0 };
+/// started, and whether the pointer has moved since.
+const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0, moved: bool = false };
 
 /// The column a title dragged to the pointer goes before, or null for
 /// after the last.
