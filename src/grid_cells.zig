@@ -6,6 +6,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const Grid = @import("grid.zig").Grid;
 const lay_mod = @import("grid_layout.zig");
+const widths_mod = @import("grid_widths.zig");
 const rows = @import("grid_rows.zig");
 
 /// Opens the row's next cell, ending the one before: what is drawn
@@ -54,7 +55,7 @@ pub fn cellAt(g: *Grid, i: usize) bool {
 pub fn endCell(g: *Grid) void {
     const b = g.cell_box orelse return;
     const i = g.cell_column;
-    if (g.fit == i) g.fit_w = @max(g.fit_w, lay_mod.natural(g.c, b.index));
+    widths_mod.measure(g, i, b.index);
     if (g.opts.tooltips) tooltip(g, b, i);
     b.end();
     g.cell_box = null;

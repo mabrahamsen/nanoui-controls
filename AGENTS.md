@@ -18,7 +18,7 @@ zig build example                                    # run the example app
 ## Layout
 
 - `src/controls.zig`: the module root, which re-exports each control.
-- `src/<control>.zig`: one file per control (`grid.zig`, `pager.zig`, `sidebar.zig`, `splitter.zig`, `form.zig`, `swatches.zig`, `flow.zig`, `trend.zig`, `gauge.zig`), with its tests at the bottom or in `src/<control>_tests.zig`; the grid's parts are in `src/grid_*.zig` and the form's sections in `src/form_sections.zig`, `focus.zig` takes the keyboard for the grid, the sidebar and the swatches, and the charts share `chart.zig` (`BarPart`, ramps, arcs, value lines, a box's last size, inspecting with the pointer and the keys).
+- `src/<control>.zig`: one file per control (`grid.zig`, `pager.zig`, `sidebar.zig`, `splitter.zig`, `form.zig`, `swatches.zig`, `flow.zig`, `trend.zig`, `gauge.zig`), with its tests at the bottom or in `src/<control>_tests.zig`; the grid's parts are in `src/grid_*.zig` (its columns sized by hand in `grid_widths.zig`), the sidebar's keys and counts in `src/sidebar_keys.zig` and `src/sidebar_count.zig`, and the form's sections in `src/form_sections.zig`, `focus.zig` takes the keyboard for the grid, the sidebar and the swatches, and the charts share `chart.zig` (`BarPart`, ramps, arcs, value lines, a box's last size, inspecting with the pointer and the keys).
 - `tests/snapshots.zig`, `tests/snapshots/*.png`, `tests/fonts`: the snapshot tests, their drawings and the fonts they draw with.
 - `examples/gallery/`: the example app, a view for each kind of control picked from a sidebar (`grid.zig`, `form.zig`, `charts.zig`).
 - `build.zig.zon`: the version and the pinned nanoui release.

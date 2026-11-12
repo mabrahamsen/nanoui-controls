@@ -51,6 +51,13 @@ pub const Options = struct {
     /// Lines across at values on the scale (shares of the height above
     /// zero without `units`: 0.5 is halfway up), behind the bars.
     value_lines: []const chart.ValueLine = &.{},
+    /// The shortest bar, as a share of the height: a bar shorter than it
+    /// is drawn that tall, so a reading of zero still shows as a line. A
+    /// bar below zero is drawn as it is.
+    baseline: f32 = 0,
+    /// The leftmost slot's opacity, rising to 1 at the rightmost, so the
+    /// older bars are fainter; null keeps every bar opaque.
+    fade: ?f32 = null,
     /// How many readings there are, for a history shorter than the slots:
     /// they sit in the slots at the right, the newest last, and the slots
     /// on the left stay empty. `next` gives only the slots with one, and
@@ -113,6 +120,9 @@ pub const Slot = struct {
     scale: Scale,
     /// The tallest bar so far this frame, in units.
     peak: *f32,
+    /// The shortest bar, as a share of the height, and the bar's opacity.
+    baseline: f32,
+    opacity: f32,
 
     /// Draws a bar of `parts` from zero (or from `min` above it): on the
     /// chart's scale, positive ones up and, with room below zero, negative
@@ -143,18 +153,27 @@ pub const Slot = struct {
             if (down_room > 0) down += chart.partShare(-p.value) / range;
         }
         s.peak.* = @max(s.peak.*, total);
-        const up_k = if (up > up_room and (sc.squeeze or up_room <= 0)) (if (up > 0) up_room / up else 1) else 1;
+        var up_k = if (up > up_room and (sc.squeeze or up_room <= 0)) (if (up > 0) up_room / up else 1) else 1;
         const down_k = if (down > down_room) down_room / down else 1;
+        // A bar shorter than the baseline is drawn that tall; one of no
+        // height at all, in its first part's color.
+        const low = @min(s.baseline, up_room);
+        if (parts.len > 0 and down == 0 and up * up_k < low) {
+            if (up > 0) up_k = low / up else {
+                ups[0] = low;
+                up = low;
+            }
+        }
         chart.weighted(ui.div(c).wFull(), @max(0, up_room - up * up_k)).end();
         var i = parts.len;
         while (i > 0) {
             i -= 1;
-            if (ups[i] > 0) chart.weighted(ui.div(c).wFull().bg(parts[i].color), ups[i] * up_k).end();
+            if (ups[i] > 0) chart.weighted(ui.div(c).wFull().bg(parts[i].color.alpha(s.opacity)), ups[i] * up_k).end();
         }
         if (down_room == 0) return;
         for (parts) |p| {
             const v = chart.partShare(-p.value) / range;
-            if (v > 0) chart.weighted(ui.div(c).wFull().bg(p.color), v * down_k).end();
+            if (v > 0) chart.weighted(ui.div(c).wFull().bg(p.color.alpha(s.opacity)), v * down_k).end();
         }
         chart.weighted(ui.div(c).wFull(), @max(0, down_room - down * down_k)).end();
     }
@@ -241,6 +260,8 @@ pub const Bars = struct {
             .current = b.current_slot == i,
             .scale = b.scale,
             .peak = &b.peak,
+            .baseline = if (b.opts.baseline > 0) @min(b.opts.baseline, 1) else 0,
+            .opacity = opacity(i, b.opts.count, b.opts.fade),
         };
     }
 
@@ -268,6 +289,15 @@ pub const Bars = struct {
         b.holder.end();
     }
 };
+
+/// Slot `i` of `n`'s opacity: `fade` at the leftmost, rising to 1 at the
+/// rightmost; 1 without a fade, or with one slot.
+pub fn opacity(i: usize, n: usize, fade: ?f32) f32 {
+    const f = fade orelse return 1;
+    if (n <= 1) return 1;
+    const lo = if (f > 0) @min(f, 1) else 0;
+    return lo + (1 - lo) * @as(f32, @floatFromInt(@min(i, n - 1))) / @as(f32, @floatFromInt(n - 1));
+}
 
 test {
     _ = @import("bars_tests.zig");

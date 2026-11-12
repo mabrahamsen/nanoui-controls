@@ -131,7 +131,16 @@ pub const Pulls = struct {
         while (g.next()) |row| {
             const at = if (p.grouped) gs.at(row.index) else flat(row.index);
             switch (at) {
-                .heading => |h| g.heading(.{ .title = repos[h.group].name, .detail = c.print("{d} pull request{s}", .{ repos[h.group].pulls.len, if (repos[h.group].pulls.len == 1) "" else "s" }) }),
+                .heading => |h| {
+                    const repo = repos[h.group];
+                    var failing: usize = 0;
+                    for (repo.pulls) |pull| failing += @intFromBool(pull.failing);
+                    const detail = c.print("{d} pull request{s}", .{ repo.pulls.len, if (repo.pulls.len == 1) "" else "s" });
+                    // Open after its detail for a tag counting the failing.
+                    const box = g.headingOpen(.{ .title = repo.name, .detail = detail, .label = if (failing > 0) c.print("{s}, {s}, {d} failing", .{ repo.name, detail, failing }) else "" });
+                    if (failing > 0) kit.tag(c, c.print("{d} FAILING", .{failing}), .{ .status = .danger, .size = .xs, .pill = true });
+                    box.end();
+                },
                 .row => |r| {
                     const pull = repos[r.group].pulls[r.index];
                     if (pull.failing) row.status(.danger);

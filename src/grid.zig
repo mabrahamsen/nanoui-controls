@@ -33,8 +33,9 @@
 //! load, `loading` sketches them, or with rows in, draws a thin progress
 //! line. `back` and `escaped` report Backspace (or Cmd+Up) and Escape.
 //!
-//! Given `widths`, dragging the edge between two titles resizes a column
-//! and a double click fits it to its contents. Given `order`, dragging a
+//! Given `widths`, dragging the edge after a title resizes its column, a
+//! double click fits it to its contents, and one past the last title fits
+//! them all (`fitAll`, and `resetWidths` back). Given `order`, dragging a
 //! title moves its column. With `scroll_x`, columns that don't fit scroll
 //! sideways, the first staying in place with `freeze_first`. A cell whose
 //! text is cut off shows all of it on hover.
@@ -65,6 +66,7 @@ const groups_mod = @import("grid_groups.zig");
 const loading_mod = @import("grid_loading.zig");
 const rows = @import("grid_rows.zig");
 const cells = @import("grid_cells.zig");
+const widths_mod = @import("grid_widths.zig");
 const select = @import("grid_select.zig");
 
 pub const Column = struct {
@@ -153,10 +155,11 @@ pub const Options = struct {
     /// (Ctrl+A) selects them all. Null: only `selected` is.
     selection: ?[]bool = null,
     /// Column widths the caller keeps, one a column, which dragging the
-    /// edge between two titles changes: the column on its left if it has
-    /// a `width`, else the one on its right. A 0 starts at the column's
-    /// `width`; a column without one isn't resized, but gives or takes
-    /// the room. Null: columns don't resize.
+    /// edge after a title or fitting it changes, giving a column without
+    /// a `width` the width it has on screen. A 0 is the column's own: its
+    /// `width`, which it starts at, or else sharing the room by `flex`.
+    /// When no column is left sharing the room, the last takes what is
+    /// left. A hidden column keeps its width. Null: columns don't resize.
     widths: ?[]f32 = null,
     /// The order the columns show in, kept by the caller: column numbers,
     /// one a place, which dragging a title changes. Cells keep their
@@ -301,7 +304,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     const head: @import("grid_header.zig").Head = if (opts.header) header(c, columns, opts, lay) else .{};
     if (opts.header and opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     if (opts.loading) |l| if (opts.count > 0) loading_mod.line(c, opts, l);
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .fit_w = head.fit_w };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .titles = head.titles };
     rows.fadeFrom(&g, opening);
     const row_gap = lay_mod.rowGap(opts);
     if (g.anchor) |a| if (a >= opts.count) {
@@ -417,10 +420,11 @@ pub const Grid = struct {
     opened: ?usize = null,
     /// The row `jump` scrolls to, in the next frame.
     jump_to: ?usize = null,
-    /// The column a double-click on an edge fits, and the widest of its
-    /// title and its cells in view.
-    fit: ?usize = null,
-    fit_w: f32 = 0,
+    /// The widths of the columns being fitted this frame, each the widest
+    /// of its title and its cells in view (`grid_widths.fits`), and the
+    /// titles' boxes.
+    fit: ?[]f32 = null,
+    titles: ?[]const u32 = null,
     /// The row and the cell being built, ended by the next or by `end`;
     /// the box past the frozen column that cuts the row's other cells
     /// off; and whether the row is under the pointer.
@@ -527,6 +531,18 @@ pub const Grid = struct {
     /// Draws the row being built as its group's heading (`grid_rows.zig`).
     pub const heading = rows.heading;
 
+    /// Draws the row being built as its group's heading, left open for
+    /// the caller's content, which ends it (`grid_rows.zig`).
+    pub const headingOpen = rows.headingOpen;
+
+    /// Fits every column in view to its contents; call it before the rows
+    /// (`grid_widths.zig`).
+    pub const fitAll = widths_mod.fitAll;
+
+    /// Sends every column back to its own width or `flex`
+    /// (`grid_widths.zig`).
+    pub const resetWidths = widths_mod.resetWidths;
+
     /// Draws a title over a muted detail in the cell open
     /// (`grid_rows.zig`).
     pub const twoLines = rows.twoLines;
@@ -540,10 +556,7 @@ pub const Grid = struct {
         cells.endRow(g);
         if (g.list) |*l| l.end();
         if (g.plain) |p| p.end();
-        if (g.fit) |f| if (g.opts.widths) |widths| {
-            widths[f] = @max(g.columns[f].min_width, @ceil(g.fit_w / g.opts.scale) + 1);
-            g.c.changed = true;
-        };
+        widths_mod.apply(g);
         if (g.opts.scroll_x and g.lay.maxScroll() > 0) lay_mod.sideBar(g.c, g.opts, &g.lay);
         lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx, .loading = g.opts.loading != null };
         lay_mod.state(g.c, Press).* = g.press;

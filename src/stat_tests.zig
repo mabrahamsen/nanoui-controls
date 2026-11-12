@@ -1,4 +1,5 @@
-//! The stat's tests of units, details, loading, and a stat to click.
+//! The stat's tests of units, details, loading, a key, and a stat to
+//! click.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -94,4 +95,38 @@ test "a stat's history takes a scale, and its lengths follow scale" {
     x.k = 2;
     t.settle(1);
     try std.testing.expect(t.findText("Load").?.y > pad + 10);
+}
+
+test "a stat's key is a dot before its label, in a card and without one, and silent" {
+    const T = struct {
+        card: bool = true,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(240);
+            defer root.end();
+            stat_mod.stat(c, "Read", "2.4 MB/s", .{ .key = red, .card = x.card });
+        }
+        fn dot(t: *ui.Tester) ?ui.Rect {
+            for (t.ctx.nodes.items) |node| if (node.style.background) |bg| if (std.meta.eql(bg, red)) return t.ctx.rects.get(node.id).?;
+            return null;
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    for ([_]bool{ true, false }) |card| {
+        x.card = card;
+        t.settle(1);
+        const d = T.dot(&t).?;
+        const label = t.findText("Read").?;
+        try std.testing.expect(d.x + d.w <= label.x);
+        // Level with the label.
+        try std.testing.expectApproxEqAbs(label.y + label.h / 2, d.y + d.h / 2, 1);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        var list: std.ArrayList(ui.access.Element) = .empty;
+        try ui.access.tree(&t.ctx, arena.allocator(), &list);
+        try std.testing.expectEqual(@as(usize, 1), list.items.len);
+        try std.testing.expectEqualStrings("Read", list.items[0].label);
+    }
 }

@@ -867,3 +867,106 @@ test "the charts' richer looks, light and dark" {
     try expectView("charts-richer", .init(&x, richerCharts), .{ .height = 470 });
     try expectView("charts-richer-dark", .init(&x, richerCharts), .{ .height = 470, .dark = true });
 }
+
+/// Tasks by project, their headings open for tags, the task column sized
+/// by hand and the owner's sharing what is left.
+const Tagged = struct {
+    open: [2]bool = .{ true, false },
+    widths: [3]f32 = .{ 150, 0, 0 },
+
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Task" },
+        .{ .title = "Owner" },
+        .{ .title = "Due", .width = 48, .alignment = .end },
+    };
+    const groups = [_]controls.GridGroup{ .{ .size = 2 }, .{ .size = 1 } };
+    const names = [_][]const u8{ "Design", "Release" };
+    const tasks = [_][]const u8{ "Draw the icons", "Pick the colors", "Write the notes" };
+
+    fn view(x: *Tagged, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(8);
+        defer root.end();
+        const gs = controls.GridGroups.init(c, &groups, &x.open, .{});
+        var g = controls.grid(c, &columns, .{ .count = gs.count(), .groups = gs, .widths = &x.widths });
+        while (g.next()) |row| switch (gs.at(row.index)) {
+            .heading => |h| {
+                const box = g.headingOpen(.{ .title = names[h.group], .detail = c.print("{d}", .{groups[h.group].size}) });
+                if (h.group == 0) kit.tag(c, "2 OVERDUE", .{ .status = .warning, .size = .xs, .pill = true });
+                kit.tag(c, "1 NEW", .{ .status = .info, .size = .xs, .pill = true });
+                box.end();
+            },
+            .row => |r| {
+                const i = r.group * 2 + r.index;
+                g.cell();
+                ui.text(c, tasks[i], .{ .size = 13, .truncate = .ellipsis });
+                g.cell();
+                ui.text(c, if (i == 1) "Sam" else "Alex", .{ .size = 13 });
+                g.cell();
+                ui.text(c, c.print("{d}d", .{i + 1}), .{ .size = 13 });
+            },
+        };
+        g.end();
+    }
+};
+
+test "a grid's headings open for tags, a column sized by hand, light and dark" {
+    var x: Tagged = .{};
+    try expectView("grid-headings-open", .init(&x, Tagged.view), .{ .height = 150 });
+    x = .{};
+    try expectView("grid-headings-open-dark", .init(&x, Tagged.view), .{ .height = 150, .dark = true });
+}
+
+/// Sidebars whose counts are loading, narrowed to their icons and wide:
+/// a plain count, a pill, a branch, and a count that has come.
+fn loadingSidebars(_: *u8, c: *ui.Context) void {
+    const root = ui.div(c).row().sizeFull().p(8).gap(8);
+    defer root.end();
+    for ([_]bool{ true, false }) |icons_only| {
+        ui.keyInt(c, @intFromBool(icons_only));
+        const col = ui.div(c).column().w(if (icons_only) 44 else 200).hFull();
+        defer col.end();
+        var sb = controls.sidebar(c, "mail", "inbox", .{ .icons_only = icons_only });
+        sb.item("inbox", "Inbox", .{ .icon = "globe", .count = 3 });
+        sb.heading("Accounts");
+        sb.item("sent", "Sent", .{ .icon = "arrow.up", .loading = true });
+        sb.item("unread", "Unread", .{ .icon = "doc.text", .count_style = .pill, .loading = true });
+        var open = true;
+        if (sb.branch("folders", "Folders", .{ .icon = "folder", .loading = true }, &open)) |g| {
+            sb.item("archive", "Archive", .{ .icon = "doc" });
+            g.end();
+        }
+        _ = sb.end();
+    }
+}
+
+test "sidebars whose counts are loading, light and dark" {
+    var x: u8 = 0;
+    try expectView("sidebar-loading", .init(&x, loadingSidebars), .{ .height = 200 });
+    try expectView("sidebar-loading-dark", .init(&x, loadingSidebars), .{ .height = 200, .dark = true });
+}
+
+/// Bars with a baseline and a fade, quiet readings still showing, and
+/// stats keyed to their series.
+fn keyedCharts(_: *u8, c: *ui.Context) void {
+    const t = kit.tokens(c);
+    const read = [_]f32{ 0, 0.4, 2.1, 0, 0, 3.2, 1.1, 0, 0.2, 2.6, 4.1, 0.8 };
+    const write = [_]f32{ 0, 0, 0.6, 0.3, 0, 1.2, 0, 0, 0, 0.9, 1.4, 0.2 };
+    const root = ui.div(c).column().sizeFull().p(10).gap(10);
+    defer root.end();
+    var b = controls.bars(c, .{ .count = 16, .readings = read.len, .units = true, .height = .{ .px = 56 }, .gap = 2, .baseline = 0.04, .fade = 0.35 });
+    while (b.next()) |slot| {
+        const i = slot.reading.?;
+        slot.bar(&.{ .{ .value = read[i], .color = t.primary }, .{ .value = write[i], .color = t.success } });
+    }
+    b.end();
+    const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+    defer row.end();
+    controls.stat(c, "Read", "2.4", .{ .unit = "MB/s", .key = t.primary, .size = .sm });
+    controls.stat(c, "Write", "0.9", .{ .unit = "MB/s", .key = t.success, .size = .sm, .card = false });
+}
+
+test "bars with a baseline and a fade, and stats with a key, light and dark" {
+    var x: u8 = 0;
+    try expectView("charts-keyed", .init(&x, keyedCharts), .{ .height = 170 });
+    try expectView("charts-keyed-dark", .init(&x, keyedCharts), .{ .height = 170, .dark = true });
+}

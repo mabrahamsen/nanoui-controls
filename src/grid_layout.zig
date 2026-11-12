@@ -8,6 +8,7 @@ const kit = nanoui.kit;
 const grid_mod = @import("grid.zig");
 const Column = grid_mod.Column;
 const Options = grid_mod.Options;
+const sized = @import("grid_widths.zig").sized;
 
 /// The room a scrolling grid leaves at its right edge for the scrollbar's
 /// track, in points as the bar's are, unscaled. Its rows stop short of
@@ -141,7 +142,8 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
     const grid_w = if (box_rect) |r| r.w else std.math.inf(f32);
     const unit = flexUnit(c, columns, opts, width, grid_w);
     var at = opts.padding * k;
-    var any = false;
+    var last: ?usize = null;
+    var sharing = false;
     var frozen: ?usize = null;
     for (order) |i| {
         if (!shown(c, columns, opts, i, grid_w)) {
@@ -149,13 +151,24 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
             x[i] = at;
             continue;
         }
-        if (!any and opts.scroll_x and opts.freeze_first) frozen = i;
-        any = true;
+        if (last == null and opts.scroll_x and opts.freeze_first) frozen = i;
+        last = i;
+        sharing = sharing or sized(columns, opts, i) == null;
         w[i] = columnWidth(columns, opts, i, unit);
         x[i] = at;
         at += w[i] + opts.column_gap * k;
     }
-    if (any) at -= opts.column_gap * k;
+    if (last != null) at -= opts.column_gap * k;
+    // Columns meant to share the room, none of them sharing it now (sized
+    // by hand, or hidden): the last takes what is left, so the rows still
+    // span the grid.
+    if (last) |j| if (!sharing and spans(columns)) {
+        const slack = width - gutter(opts) - opts.padding * k - at;
+        if (slack > 0) {
+            w[j] += slack;
+            at += slack;
+        }
+    };
     var l: Layout = .{ .order = order, .w = w, .x = x, .content = at + opts.padding * k, .view = width - gutter(opts), .left = if (box_rect) |r| r.x else 0, .grid_w = grid_w, .sx = 0 };
     if (frozen) |f| {
         l.frozen = f;
@@ -169,6 +182,13 @@ pub fn layout(c: *ui.Context, columns: []const Column, opts: Options, box: ui.Di
         l.sx = std.math.clamp(s, 0, l.maxScroll());
     }
     return l;
+}
+
+/// Some column shares the room by its `flex`, so the columns are meant to
+/// span the grid.
+fn spans(columns: []const Column) bool {
+    for (columns) |col| if (col.width == null) return true;
+    return false;
 }
 
 /// The width a column without one gets for each unit of its `flex`: the
@@ -185,10 +205,10 @@ fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32, 
     }
     var room = width - 2 * opts.padding * k - gutter(opts);
     var shown_count: f32 = 0;
-    for (columns, 0..) |col, i| {
+    for (0..columns.len) |i| {
         if (!shown(c, columns, opts, i, grid_w)) continue;
         shown_count += 1;
-        if (col.width != null) room -= columnWidth(columns, opts, i, 0);
+        if (sized(columns, opts, i) != null) room -= columnWidth(columns, opts, i, 0);
     }
     room -= @max(0, shown_count - 1) * opts.column_gap * k;
     var unit: f32 = 0;
@@ -198,7 +218,7 @@ fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32, 
         var left = room;
         var flex: f32 = 0;
         for (columns, 0..) |col, i| {
-            if (!shown(c, columns, opts, i, grid_w) or col.width != null) continue;
+            if (!shown(c, columns, opts, i, grid_w) or sized(columns, opts, i) != null) continue;
             if (col.flex * unit < col.min_width * k and unit > 0) left -= col.min_width * k else flex += col.flex;
         }
         const next = if (flex > 0) @max(0, left / flex) else 0;
@@ -208,12 +228,12 @@ fn flexUnit(c: *ui.Context, columns: []const Column, opts: Options, width: f32, 
     return unit;
 }
 
-/// Column `i`'s width in this frame, scaled: its own, the caller's, or
+/// Column `i`'s width in this frame, scaled: the caller's, its own, or
 /// its share of the room left at `unit` a flex.
 fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 {
     const col = columns[i];
     const k = opts.scale;
-    if (col.width) |w| return (if (opts.widths) |ws| ws[i] else w) * k;
+    if (sized(columns, opts, i)) |w| return w * k;
     return @max(col.min_width * k, col.flex * unit);
 }
 

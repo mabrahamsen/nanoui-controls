@@ -8,7 +8,8 @@
 //! whose charts move with its readings, its alerts (readings over 80%) in
 //! a pill, and "Every chart" each chart once, as figures it doesn't change
 //! (charts.zig), a branch with the charts of histories and of parts under
-//! it. "More to come" is a row that can't be chosen yet.
+//! it. "More to come" is a row that can't be chosen yet. The counts load
+//! for a moment at launch.
 //!
 //! Drag the splitter beside the sidebar to resize it, or click it and use
 //! Left and Right: narrower than 120 points, the sidebar shows only its
@@ -44,9 +45,13 @@ const Gallery = struct {
     settings: form.Settings,
     tuning: sidebar.Tuning = .{},
     pulls: groups.Pulls = .{},
+    /// When the first frame was drawn: the counts load for a moment after.
+    launched: ?f64 = null,
 
     const narrow = 120;
     const icons_width = 52;
+    /// How long the counts load at launch, in seconds.
+    const launch_wait = 1.5;
 
     fn view(g: *Gallery, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -57,16 +62,22 @@ const Gallery = struct {
         {
             const side = ui.div(c).column().w(if (icons_only) icons_width else g.side_width).hFull().p(if (icons_only) 6 else 10).bg(t.surface);
             defer side.end();
+            // The counts load for a moment at launch, as an app's would
+            // while it asks for them.
+            const launched = g.launched orelse c.time;
+            g.launched = launched;
+            const loading = g.tuning.loading or c.time - launched < launch_wait;
+            if (c.time - launched < launch_wait) c.frameIn(0.1);
             var sb = controls.sidebar(c, "gallery", g.shown, opts);
             sb.heading("Controls");
-            if (sb.branch("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len }, if (g.tuning.fixed) null else &g.grid_open)) |grids| {
+            if (sb.branch("grid", "Grid", .{ .icon = "square.grid.3x3", .count = g.browser.shown_len, .loading = loading }, if (g.tuning.fixed) null else &g.grid_open)) |grids| {
                 sb.item("grouped", "Grouped", .{ .icon = "list.bullet" });
                 grids.end();
             }
             sb.item("form", "Form", .{ .icon = "slider.horizontal.3" });
             sb.item("sidebar", "Sidebar", .{ .icon = "sidebar.left" });
             if (sb.group("charts", "Charts", &g.charts_open)) |group| {
-                sb.item("monitor", "Monitor", .{ .icon = "waveform.path.ecg", .count = g.monitor.alerts(), .count_style = if (g.tuning.pill) .pill else .plain });
+                sb.item("monitor", "Monitor", .{ .icon = "waveform.path.ecg", .count = g.monitor.alerts(), .count_style = if (g.tuning.pill) .pill else .plain, .loading = loading });
                 if (sb.branch("every", "Every chart", .{ .icon = "chart.bar.xaxis" }, if (g.tuning.fixed) null else &g.every_open)) |every| {
                     sb.item("histories", "Histories", .{ .icon = "list.bullet" });
                     sb.item("parts", "Parts", .{ .icon = "gauge.with.dots.needle.33percent" });

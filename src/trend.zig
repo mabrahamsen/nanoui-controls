@@ -79,7 +79,6 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
         if (std.math.isFinite(v)) most = @max(most, v);
     }
     const peak = chart.scaleTop(opts.min, opts.max, opts.fixed_max, most);
-    const baseline = if (opts.baseline > 0) @min(opts.baseline, 1) else 0;
     // Drawn as bars in units from `min`, so the bars rise from the bottom
     // whatever `min` is, and value lines and an axis sit on the same scale.
     const range = peak - opts.min;
@@ -95,6 +94,8 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
         .height = opts.height,
         .gap = opts.gap,
         .value_lines = lines,
+        .baseline = opts.baseline,
+        .fade = opts.fade,
         .axis = opts.axis,
         .start_text = opts.start_text,
         .end_text = opts.end_text,
@@ -110,21 +111,15 @@ pub fn trend(c: *ui.Context, values: []const f32, opts: Options) void {
         const r = chart.slotReading(values, opts.head, opts.capacity, slot.index) orelse continue;
         const v = chart.level(r, opts.min, peak) orelse continue;
         const base = if (opts.ramp.len > 0) chart.rampColor(opts.ramp, v) else col;
-        slot.bar(&.{.{ .value = @max(baseline, v) * range, .color = base.alpha(opacity(slot.index, opts.capacity, opts.fade)) }});
+        slot.bar(&.{.{ .value = v * range, .color = base }});
     }
 }
 
 /// Where `x` falls between `min` and `peak`, as the charts share it.
 pub const level = chart.level;
 
-/// Slot `i` of `n`'s opacity: `fade` at the oldest, rising to 1 at the
-/// newest; 1 without a fade, or with one slot.
-pub fn opacity(i: usize, n: usize, fade: ?f32) f32 {
-    const f = fade orelse return 1;
-    if (n <= 1) return 1;
-    const lo = if (f > 0) @min(f, 1) else 0;
-    return lo + (1 - lo) * @as(f32, @floatFromInt(@min(i, n - 1))) / @as(f32, @floatFromInt(n - 1));
-}
+/// Slot `i` of `n`'s opacity, as `bars` fades its slots.
+pub const opacity = bars_mod.opacity;
 
 test {
     _ = @import("trend_tests.zig");

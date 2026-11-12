@@ -1,5 +1,6 @@
-//! The bars' tests: parts up and down, squeezing, slots, the pointer and
-//! the keys, tooltips, value lines and screen readers.
+//! The bars' tests: parts up and down, squeezing, a baseline and a fade,
+//! slots, the pointer and the keys, tooltips, value lines and screen
+//! readers.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -72,6 +73,74 @@ test "with room below zero, negative parts go down from it, squeezed to their ro
     try std.testing.expectEqualSlices([2]f32, &.{ .{ 30, 30 }, .{ 60, 20 }, .{ 80, 10 }, .{ 0, 0 } }, &d);
     const over = try drawn(&.{ .{ .value = -0.8, .color = violet }, .{ .value = 0.9, .color = cyan } }, 0.4);
     try std.testing.expectEqualSlices([2]f32, &.{ .{ 0, 60 }, .{ 60, 40 }, .{ 0, 0 }, .{ 0, 0 } }, &over);
+}
+
+/// Each slot's colored parts in a chart 100 points tall, of two slots 40
+/// points wide: each one's height and opacity, from the top.
+fn drawnSlots(parts: []const Part, opts: bars_mod.Options) ![2][2][2]f32 {
+    const T = struct {
+        var ps: []const Part = &.{};
+        var o: bars_mod.Options = .{ .count = 2 };
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(80);
+            defer root.end();
+            var bc = bars(c, o);
+            while (bc.next()) |slot| slot.bar(ps);
+            bc.end();
+        }
+    };
+    T.ps = parts;
+    T.o = opts;
+    T.o.count = 2;
+    T.o.height = .{ .px = 100 };
+    T.o.gap = 0;
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 100, .height = 120 });
+    defer t.deinit();
+    t.settle(1);
+    var out: [2][2][2]f32 = @splat(@splat(.{ 0, 0 }));
+    var n: [2]usize = .{ 0, 0 };
+    for (t.ctx.nodes.items[1..]) |node| {
+        const bg = node.style.background orelse continue;
+        const r = t.ctx.rects.get(node.id).?;
+        const i: usize = if (r.x < 20) 0 else 1;
+        out[i][n[i]] = .{ @round(r.h * 100) / 100, @round(bg.a * 100) / 100 };
+        n[i] += 1;
+    }
+    return out;
+}
+
+test "a baseline draws a bar shorter than it that tall, and one of nothing in its first part's color" {
+    const low = try drawnSlots(&.{.{ .value = 0.01, .color = cyan }}, .{ .count = 2, .baseline = 0.05 });
+    try std.testing.expectEqual([2]f32{ 5, 1 }, low[0][0]);
+    const zero = try drawnSlots(&.{ .{ .value = 0, .color = cyan }, .{ .value = 0, .color = violet } }, .{ .count = 2, .baseline = 0.05 });
+    try std.testing.expectEqual([2]f32{ 5, 1 }, zero[0][0]);
+    try std.testing.expectEqual([2]f32{ 0, 0 }, zero[0][1]);
+    // Two parts under it keep their shares of it.
+    const two = try drawnSlots(&.{ .{ .value = 0.01, .color = cyan }, .{ .value = 0.01, .color = violet } }, .{ .count = 2, .baseline = 0.04 });
+    try std.testing.expectEqual([2]f32{ 2, 1 }, two[0][0]);
+    try std.testing.expectEqual([2]f32{ 2, 1 }, two[0][1]);
+    // A taller bar is drawn as it is.
+    const tall = try drawnSlots(&.{.{ .value = 0.5, .color = cyan }}, .{ .count = 2, .baseline = 0.05 });
+    try std.testing.expectEqual([2]f32{ 50, 1 }, tall[0][0]);
+    // In units, as a share of the height.
+    const units = try drawnSlots(&.{.{ .value = 0, .color = cyan }}, .{ .count = 2, .units = true, .max = 10, .fixed_max = true, .baseline = 0.1 });
+    try std.testing.expectEqual([2]f32{ 10, 1 }, units[0][0]);
+}
+
+test "a baseline leaves a bar below zero as it is" {
+    const d = try drawnSlots(&.{.{ .value = -0.01, .color = cyan }}, .{ .count = 2, .below = 0.5, .baseline = 0.1 });
+    try std.testing.expectEqual([2]f32{ 1, 1 }, d[0][0]);
+    try std.testing.expectEqual([2]f32{ 0, 0 }, d[0][1]);
+}
+
+test "a fade draws the left slot faint and the right one opaque, keeping a part's own alpha" {
+    const d = try drawnSlots(&.{.{ .value = 0.5, .color = cyan.alpha(0.5) }}, .{ .count = 2, .fade = 0.4 });
+    try std.testing.expectEqual([2]f32{ 50, 0.2 }, d[0][0]);
+    try std.testing.expectEqual([2]f32{ 50, 0.5 }, d[1][0]);
+    const none = try drawnSlots(&.{.{ .value = 0.5, .color = cyan }}, .{ .count = 2 });
+    try std.testing.expectEqual([2]f32{ 50, 1 }, none[0][0]);
 }
 
 const Inspected = struct {

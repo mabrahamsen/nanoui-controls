@@ -1,6 +1,7 @@
-//! The grid's rows beyond their cells: a group's heading and its keys,
-//! folding and the fade as a group opens, following the selection as
-//! groups fold, two lines in a cell, and a status on a row's edge.
+//! The grid's rows beyond their cells: a group's heading, open for the
+//! caller's content or not, and its keys, folding and the fade as a group
+//! opens, following the selection as groups fold, two lines in a cell,
+//! and a status on a row's edge.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -21,6 +22,10 @@ pub const Heading = struct {
     /// The title in the first column's cell, leaving the others for the
     /// caller's `cellAt`, for a group's totals; false spans the columns.
     cells: bool = false,
+    /// What a screen reader hears of the heading, for one whose content
+    /// (`headingOpen`) says more ("Inbox, 3 unread, 1 flagged"); empty
+    /// takes the title and the detail.
+    label: []const u8 = "",
 };
 
 /// A cell's two lines (`Grid.twoLines`).
@@ -69,6 +74,22 @@ const fade_time = 0.2;
 /// first column's cell, the caller's `cellAt` filling the others. A
 /// click on it folds or opens its group.
 pub fn heading(g: *Grid, opts: Heading) void {
+    if (draw(g, opts, false)) |box| box.end();
+}
+
+/// Draws the row being built as its group's heading, as `heading` does,
+/// and leaves it open after the title and the detail for the caller's
+/// content, such as tinted labels; the caller ends it. A click on the
+/// content folds or opens the group, unless the content takes the click
+/// itself, as a button does.
+pub fn headingOpen(g: *Grid, opts: Heading) ui.Div {
+    return draw(g, opts, true).?;
+}
+
+/// Draws a heading, returning its box left open with `open`, or else the
+/// box the caller ends: null in the first column's cell, which the grid
+/// ends.
+fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
     const gs = g.opts.groups orelse @panic("grid: `heading` needs `groups`");
     const item = gs.at(g.row_index);
     if (item != .heading) @panic("grid: `heading` on a row that isn't one");
@@ -78,11 +99,19 @@ pub fn heading(g: *Grid, opts: Heading) void {
     const c = g.c;
     const t = kit.tokens(c);
     const k = g.opts.scale;
+    const gap = g.opts.column_gap * k / 2;
+    const label = if (opts.label.len > 0) opts.label else if (opts.detail.len > 0) c.print("{s}, {s}", .{ opts.title, opts.detail }) else opts.title;
+    ui.access.describe(c, g.row.?.index, .{
+        .role = .row,
+        .label = label,
+        .value = if (open) g.opts.expanded_text else g.opts.collapsed_text,
+        .selected = g.isSelected(g.row_index),
+    });
     // In the first column's cell, unless that column is hidden.
     const in_cell = opts.cells and g.cellAt(0);
     const box = if (in_cell) g.cell_box.? else blk: {
         const x = (g.opts.padding + @as(f32, @floatFromInt(item.heading.depth)) * indent_step) * k;
-        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(g.opts.column_gap * k / 2);
+        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(gap);
     };
     {
         const slot = ui.div(c).w((indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
@@ -91,14 +120,10 @@ pub fn heading(g: *Grid, opts: Heading) void {
     }
     ui.text(c, opts.title, .{ .size = 13, .weight = .semibold, .truncate = .ellipsis });
     if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = 12, .color = t.muted, .truncate = .ellipsis });
-    if (!in_cell) box.end();
-    const label = if (opts.detail.len > 0) c.print("{s}, {s}", .{ opts.title, opts.detail }) else opts.title;
-    ui.access.describe(c, g.row.?.index, .{
-        .role = .row,
-        .label = label,
-        .value = if (open) g.opts.expanded_text else g.opts.collapsed_text,
-        .selected = g.isSelected(g.row_index),
-    });
+    if (!in_cell) return box;
+    // The cell is the grid's to end: the caller's content goes in a box of
+    // its own in it.
+    return if (open_for_caller) ui.div(c).row().itemsCenter().gap(gap) else null;
 }
 
 /// Draws a title over a muted detail in the cell open, each cut short
