@@ -1,6 +1,7 @@
-//! The grid's tests of groups that fold, columns that hide by the grid's
-//! width, fitting a column that grows, two-line cells, cards, no titles,
-//! Backspace and Escape, and its titles to a screen reader.
+//! The grid's tests of groups that fold, headings open for content,
+//! columns that hide by the grid's width, fitting a column that grows,
+//! two-line cells, cards, no titles, Backspace and Escape, and its titles
+//! to a screen reader.
 const std = @import("std");
 const builtin = @import("builtin");
 const nanoui = @import("nanoui");
@@ -18,6 +19,9 @@ const Repos = struct {
     selected: ?usize = null,
     singles: bool = true,
     cells: bool = false,
+    /// Headings left open for a tag and a button after their detail.
+    content: bool = false,
+    pressed: usize = 0,
     start_focused: bool = false,
     started: bool = false,
     opened: usize = 0,
@@ -40,7 +44,16 @@ const Repos = struct {
             if (row.opened) x.opened += 1;
             switch (gs.at(row.index)) {
                 .heading => |h| {
-                    g.heading(.{ .title = names[h.group], .detail = c.print("{d} pulls", .{groups[h.group].size}), .cells = x.cells });
+                    const head: g_mod.Heading = .{ .title = names[h.group], .detail = c.print("{d} pulls", .{groups[h.group].size}), .cells = x.cells };
+                    if (x.content) {
+                        var open = head;
+                        open.label = c.print("{s}, 1 new", .{names[h.group]});
+                        const box = g.headingOpen(open);
+                        kit.tag(c, "1 NEW", .{ .status = .info, .size = .xs, .pill = true });
+                        ui.key(c, names[h.group]);
+                        if (kit.button(c, "Go", .{ .size = .xs }).clicked) x.pressed += 1;
+                        box.end();
+                    } else g.heading(head);
                     if (x.cells and g.cellAt(1)) ui.text(c, "total", .{});
                 },
                 .row => |r| {
@@ -178,6 +191,35 @@ test "a screen reader hears a heading with its detail and whether it is open" {
         try std.testing.expectEqualStrings("expanded", e.value);
     };
     try std.testing.expect(found);
+}
+
+test "a heading left open shows the caller's content after its detail, says its label, and folds on a click on it" {
+    for ([_]bool{ false, true }) |in_cells| {
+        var x: Repos = .{ .content = true, .cells = in_cells };
+        var t: ui.Tester = undefined;
+        try start(&x, &t, Repos.view);
+        defer t.deinit();
+        const detail = t.findText("2 pulls").?;
+        const tag = t.findText("1 NEW").?;
+        try std.testing.expect(tag.x > detail.x + detail.w);
+        try std.testing.expectApproxEqAbs(detail.y + detail.h / 2, tag.y + tag.h / 2, 1.5);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        var list: std.ArrayList(ui.access.Element) = .empty;
+        try ui.access.tree(&t.ctx, arena.allocator(), &list);
+        var found = false;
+        for (list.items) |e| found = found or std.mem.eql(u8, e.label, "alpha, 1 new");
+        try std.testing.expect(found);
+        // A click on the tag folds the group; one on the button is the
+        // button's.
+        try t.clickText("1 NEW");
+        t.settle(1);
+        try std.testing.expect(!x.open[0]);
+        try t.clickText("Go");
+        t.settle(1);
+        try std.testing.expect(!x.open[0]);
+        try std.testing.expectEqual(@as(usize, 1), x.pressed);
+    }
 }
 
 test "without singles, a group of one shows its row alone; a heading can fill cells" {

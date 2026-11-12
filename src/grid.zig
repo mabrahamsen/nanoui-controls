@@ -527,6 +527,10 @@ pub const Grid = struct {
     /// Draws the row being built as its group's heading (`grid_rows.zig`).
     pub const heading = rows.heading;
 
+    /// Draws the row being built as its group's heading, left open for
+    /// the caller's content, which ends it (`grid_rows.zig`).
+    pub const headingOpen = rows.headingOpen;
+
     /// Draws a title over a muted detail in the cell open
     /// (`grid_rows.zig`).
     pub const twoLines = rows.twoLines;
