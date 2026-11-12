@@ -2,6 +2,24 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Grid: with `widths`, every column resizes, flexible ones too: dragging or fitting a column without a `width` gives it the width it has on screen, kept in `widths`, and a 0 still means the column's own width or sharing the room by `flex`. `g.fitAll()`, or a double click on the header past the last title, fits every column in view to its widest title or cell; `g.resetWidths()` sends them all back. A hidden column keeps its width for when it shows again.
+- Grid: `g.headingOpen(opts)` draws a group's heading and leaves it open after its detail for the caller's content, such as tags; `Heading.label` replaces what a screen reader hears of it.
+- Sidebar: `loading` on a row shows a spinner where its count goes, so a count still loading never reads as 0, at the icon's corner when narrowed to icons; a screen reader hears `loading_text`.
+- `bars`: `baseline`, the shortest bar as a share of the height, so a reading of zero still shows, and `fade`, the leftmost slot's opacity, rising to 1 at the rightmost. `trend` draws with them, and looks as before.
+- `stat`: `key`, a dot before the label in the color of the series it reads in a chart beside it.
+
+### Changed
+
+- Grid: the edge between two titles resizes the column on its left, whether it has a `width` or not, instead of the one on its right when the left has none; the flexible columns before it keep their widths as it is dragged, so the edge follows the pointer, and a click that doesn't move changes nothing. Without `scroll_x`, a drag stops where the other columns would go under their `min_width`. When no shown column is left sharing the room, the last one takes what is left, so the rows still span the grid.
+
+### Fixed
+
+- `stat`'s loading spinner follows `scale`, as the grid's does.
+
 ## 0.7.1
 
 ### Changed

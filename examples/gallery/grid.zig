@@ -99,6 +99,9 @@ pub const Browser = struct {
     note_buf: [160]u8 = undefined,
     /// The grid was given the keyboard, in the first frame.
     started: bool = false,
+    /// "Fit columns" or "Reset widths" was clicked, for the grid to do.
+    fit: bool = false,
+    reset: bool = false,
 
     pub fn view(b: *Browser, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -126,6 +129,9 @@ pub const Browser = struct {
             if (ui.toggle(c, "Load as it scrolls", &b.loading)) b.arrives = @splat(0);
             _ = ui.toggle(c, "Sideways", &b.sideways);
             _ = ui.toggle(c, "Lines", &b.lines);
+            ui.spacer(c);
+            if (kit.button(c, "Fit columns", .{ .size = .sm }).clicked) b.fit = true;
+            if (kit.button(c, "Reset widths", .{ .size = .sm }).clicked) b.reset = true;
         }
 
         const hidden = [columns.len]bool{ false, !b.show_kind, false, false, !b.sideways, !b.sideways };
@@ -163,6 +169,11 @@ pub const Browser = struct {
             .drag_rows = true,
         });
         b.scroll_to = null;
+        // Before the rows, so their cells are measured.
+        if (b.fit) g.fitAll();
+        if (b.reset) g.resetWidths();
+        b.fit = false;
+        b.reset = false;
         if (g.sorted) b.resort();
         // Typing jumps to the first file, in the grid's order, whose name
         // it begins.

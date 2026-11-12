@@ -369,6 +369,19 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
             if (b.current) |i| b.tooltip(c.print("{d:.0}%", .{load[i]}));
             b.end();
         }
+        section(c, "bars, a baseline and a fade", "quiet readings still show, the older ones fainter");
+        {
+            const read = [_]f32{ 0, 0.4, 2.1, 0, 0, 3.2, 1.1, 0, 0.2, 2.6, 4.1, 0.8 };
+            const write = [_]f32{ 0, 0, 0.6, 0.3, 0, 1.2, 0, 0, 0, 0.9, 1.4, 0.2 };
+            var b = controls.bars(c, .{ .count = read.len, .units = true, .height = .{ .px = 48 }, .gap = 2, .baseline = 0.04, .fade = 0.35, .label = "Disk" });
+            while (b.next()) |slot| slot.bar(&.{ .{ .value = read[slot.index], .color = t.primary }, .{ .value = write[slot.index], .color = t.success } });
+            b.end();
+            // Each stat keyed to its series in the bars.
+            const row = ui.div(c).row().wFull().gap(10).itemsStretch();
+            defer row.end();
+            controls.stat(c, "Read", "0.8", .{ .unit = "MB/s", .key = t.primary, .size = .sm });
+            controls.stat(c, "Write", "0.2", .{ .unit = "MB/s", .key = t.success, .size = .sm });
+        }
         section(c, "bars", "slots of parts, up from zero and down below it");
         {
             var b = controls.bars(c, .{ .count = change.len, .height = .{ .px = 48 }, .gap = 3, .below = 0.4, .interactive = true, .label = "Change" });

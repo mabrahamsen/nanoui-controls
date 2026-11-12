@@ -3,7 +3,8 @@
 //! it: its size, its tint, a background behind its rows, the gap between
 //! them and its scale; whether the keys choose as they go or only on
 //! Enter; icons only; whether "Every chart" is a branch that folds or a
-//! fixed one; and whether the Monitor's alerts are a pill.
+//! fixed one; whether the Monitor's alerts are a pill; and counts that
+//! are loading.
 const nanoui = @import("nanoui");
 const controls = @import("nanoui_controls");
 const ui = nanoui.ui;
@@ -22,6 +23,8 @@ pub const Tuning = struct {
     /// "Every chart" is a fixed branch, always open, not one that folds.
     fixed: bool = false,
     pill: bool = true,
+    /// The counts show spinners, as while an app asks for them.
+    loading: bool = false,
 
     const sizes = [_]kit.Size{ .xs, .sm, .md, .lg };
     const size_names = [_][]const u8{ "Extra small", "Small", "Medium", "Large" };
@@ -94,6 +97,11 @@ pub const Tuning = struct {
         {
             const r = f.row("Alerts as a pill", .{ .hint = "The Monitor's count." });
             _ = ui.toggle(c, "", &s.pill);
+            r.end();
+        }
+        {
+            const r = f.row("Counts loading", .{ .hint = "A spinner where each count goes, as at launch." });
+            _ = ui.toggle(c, "", &s.loading);
             r.end();
         }
         f.heading("Behavior", .{});
