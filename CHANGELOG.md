@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.7.3
+
+### Changed
+
+- Built on nanoui 0.14.1, which an app using these controls must pin too. The controls work as before. A drag on a column's edge or title, or on a splitter, no longer stops when another mouse button is pressed partway through, and the pager's buttons hold still under a press with Reduce Motion on.
+
 ## 0.7.2
 
 ### Added
