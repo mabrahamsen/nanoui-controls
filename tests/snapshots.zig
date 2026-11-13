@@ -744,6 +744,51 @@ test "a grid in groups, open, folded and nested, light and dark" {
     try expectView("grid-groups-dark", .init(&x, Grouped.view), .{ .height = 270, .dark = true });
 }
 
+/// The same groups under headings the caller draws: a chevron in a well,
+/// the title over a line saying how many fail, two lines a row, a smaller
+/// step.
+const OwnHeadings = struct {
+    open: [4]bool = .{ true, true, false, true },
+    selected: ?usize = 2,
+
+    fn view(x: *OwnHeadings, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(8);
+        defer root.end();
+        const gs = controls.GridGroups.init(c, &Grouped.groups, &x.open, .{});
+        var g = controls.grid(c, &Grouped.columns, .{ .count = gs.count(), .groups = gs, .selected = &x.selected, .lines = 2, .indent_step = 12 });
+        while (g.next()) |row| switch (gs.at(row.index)) {
+            .heading => |h| {
+                const head = g.headingRow(.{ .title = Grouped.names[h.group] });
+                defer head.box.end();
+                {
+                    const well = ui.div(c).w(16).h(16).roundedFull().bg(t.surface_hover).center();
+                    defer well.end();
+                    ui.icon(c, if (head.open) "chevron.down" else "chevron.right", .{ .size = 8, .color = t.foreground });
+                }
+                const lines = ui.div(c).column().gap(1);
+                defer lines.end();
+                ui.text(c, Grouped.names[h.group], .{ .size = 12, .weight = .semibold });
+                ui.text(c, if (h.group == 0) "1 failing" else "all passing", .{ .size = 11, .color = if (h.group == 0) t.danger else t.muted });
+            },
+            .row => |r| {
+                g.cell();
+                ui.text(c, Grouped.titles[r.group * 2 + r.index], .{ .size = 13 });
+                g.cell();
+                ui.text(c, c.print("{d}d", .{r.index + 1}), .{ .size = 13 });
+            },
+        };
+        g.end();
+    }
+};
+
+test "a grid in groups under headings the caller draws, light and dark" {
+    var x: OwnHeadings = .{};
+    try expectView("grid-own-headings", .init(&x, OwnHeadings.view), .{ .height = 384 });
+    x = .{};
+    try expectView("grid-own-headings-dark", .init(&x, OwnHeadings.view), .{ .height = 384, .dark = true });
+}
+
 /// Two grids loading: one with rows in and a line under its titles, one
 /// with none yet, its rows sketched.
 fn loadingGrids(_: *u8, c: *ui.Context) void {

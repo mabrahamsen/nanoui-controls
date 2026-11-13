@@ -128,6 +128,8 @@ const Gallery = struct {
 pub fn main(init: std.process.Init) !void {
     const app = try nanoui.App.create(init, .{ .name = "Gallery" });
     defer app.destroy();
+    // The controls' ring only while the keyboard is in use, as on a Mac.
+    controls.setFocusRingShows(.keyboard);
     var state: Gallery = .{ .browser = try grid.init(init.arena.allocator()), .monitor = charts.init(), .settings = form.init() };
     defer state.browser.search.deinit();
     defer state.settings.name.deinit();

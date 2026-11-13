@@ -7,7 +7,6 @@ const kit = nanoui.kit;
 const Grid = @import("grid.zig").Grid;
 const lay_mod = @import("grid_layout.zig");
 const widths_mod = @import("grid_widths.zig");
-const rows = @import("grid_rows.zig");
 
 /// Opens the row's next cell, ending the one before: what is drawn
 /// until the next `cell` goes in it. When columns hide, use `cellAt`,
@@ -39,7 +38,7 @@ pub fn cellAt(g: *Grid, i: usize) bool {
     }
     var d = ui.div(c).absolute().offset(l.at(i) - origin, 0).w(l.w[i]).h(h).row().itemsCenter().gap(g.opts.column_gap * k / 2);
     // The first column steps in for each level of groups the row is in.
-    if (i == 0 and g.row_depth > 0) d = d.pl(@as(f32, @floatFromInt(g.row_depth)) * rows.indent_step * k);
+    if (i == 0 and g.row_depth > 0) d = d.pl(@as(f32, @floatFromInt(g.row_depth)) * g.opts.indent_step * k);
     d = switch (g.columns[i].alignment) {
         .start => d,
         .center => d.justifyCenter(),

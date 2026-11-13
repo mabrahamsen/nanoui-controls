@@ -2,6 +2,13 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- `setFocusRingShows(.keyboard)`, called once by an app, shows the controls' ring only while the keyboard is in use, as on a Mac: a key shows it and the pointer hides it, the ring nanoui draws round a control's box included. A click on a control that is a button (the stat button, a bar list's row, the form's link rows and folding headings) then leaves the keyboard where it was. Controls with keys of their own still take the keyboard on a click. The default, `.focused`, is as before.
+- Grid: `g.headingRow(opts)` makes a group's heading row with nothing drawn in it, for the caller's own chevron, title and lines, and says whether the group is `open` and its `depth`; the grid keeps folding it, its keys, the selection and what a screen reader hears. `indent_step` sets how far each level steps in, and `fade_in = false` shows a group's rows at once as it opens.
+
 ## 0.7.4
 
 ### Changed

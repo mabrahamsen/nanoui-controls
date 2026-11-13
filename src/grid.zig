@@ -193,6 +193,12 @@ pub const Options = struct {
     /// The rows are grouped under headings: what each row in view is.
     /// `count` is `groups.count()`. Draw a heading's row with `heading`.
     groups: ?groups_mod.Groups = null,
+    /// How far in each level of a group goes, headings and rows, in
+    /// points before `scale`.
+    indent_step: f32 = 18,
+    /// A group's rows fade in as it opens; false shows them at once, as
+    /// reduced motion does.
+    fade_in: bool = true,
     /// What a screen reader says of a heading whose group is open, and
     /// folded.
     expanded_text: []const u8 = "expanded",
@@ -233,6 +239,7 @@ pub const Loading = struct {
 pub const RowLook = enum { plain, cards };
 
 pub const Heading = rows.Heading;
+pub const HeadingRow = rows.HeadingRow;
 pub const TwoLines = rows.TwoLines;
 
 /// The look of the column titles; null takes the theme's.
@@ -535,6 +542,10 @@ pub const Grid = struct {
     /// the caller's content, which ends it (`grid_rows.zig`).
     pub const headingOpen = rows.headingOpen;
 
+    /// The row being built as its group's heading with nothing drawn in
+    /// it, for the caller's own, which ends it (`grid_rows.zig`).
+    pub const headingRow = rows.headingRow;
+
     /// Fits every column in view to its contents; call it before the rows
     /// (`grid_widths.zig`).
     pub const fitAll = widths_mod.fitAll;
@@ -582,4 +593,5 @@ test {
     _ = @import("grid_keys_tests.zig");
     _ = @import("grid_groups.zig");
     _ = @import("grid_more_tests.zig");
+    _ = @import("grid_heading_tests.zig");
 }

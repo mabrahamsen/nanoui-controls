@@ -138,12 +138,12 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             // Each row takes the keyboard, as a button does: Tab moves
             // from row to row, and Enter or Space clicks the one that has
             // it, used up.
-            const in = c.interact(row.index, .{ .focusable = true });
+            const in = focus.button(c, row.index, true);
             if (in.hovered) {
                 row = row.bg(t.surface_hover);
                 c.cursor_hand = true;
             }
-            if (in.focused) row = row.border(focus.ring(c)).borderW(focus.ringWidth(c));
+            if (focus.showRing(c, in.focused)) row = row.border(focus.ring(c)).borderW(focus.ringWidth(c));
             if (in.clicked) {
                 clicked = i;
                 c.changed = true;

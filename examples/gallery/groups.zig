@@ -2,8 +2,10 @@
 //! that fold (click a heading, or Left and Right on it, Enter or Space),
 //! "docs" a group in "nanoui". "Grouped" lists them flat when off, "Cards"
 //! draws them as cards, "Two lines" shows each one's branch under its
-//! title, and "One-row groups" shows a heading over a repository's only
-//! pull request; a failing one's row is tinted. Narrow the window, or
+//! title, "One-row groups" shows a heading over a repository's only
+//! pull request, and "Own headings" draws the headings the app's way (a
+//! chevron in a well, how many fail on a second line, a smaller step, no
+//! fade); a failing one's row is tinted. Narrow the window, or
 //! widen the sidebar, and the Repository column gives way when the grid
 //! is narrow. "Reload" asks for them again, their rows sketched until
 //! they arrive; "Load more" adds a repository while a thin line runs
@@ -69,6 +71,7 @@ pub const Pulls = struct {
     cards: bool = false,
     two_lines: bool = true,
     singles: bool = false,
+    own_headings: bool = false,
     selected: ?usize = null,
     /// The repositories loaded so far: "Load more" adds the last.
     shown: usize = repos.len - 1,
@@ -95,6 +98,7 @@ pub const Pulls = struct {
             _ = ui.toggle(c, "Cards", &p.cards);
             _ = ui.toggle(c, "Two lines", &p.two_lines);
             _ = ui.toggle(c, "One-row groups", &p.singles);
+            _ = ui.toggle(c, "Own headings", &p.own_headings);
         }
         p.arrive(c);
 
@@ -125,6 +129,8 @@ pub const Pulls = struct {
             .lines = if (p.two_lines) 2 else 1,
             .header = !p.cards,
             .empty = "No pull requests.",
+            .indent_step = if (p.own_headings) 12 else 18,
+            .fade_in = !p.own_headings,
         });
         if (g.back and count > 0) p.selected = 0;
         if (g.escaped) p.selected = null;
@@ -136,6 +142,10 @@ pub const Pulls = struct {
                     var failing: usize = 0;
                     for (repo.pulls) |pull| failing += @intFromBool(pull.failing);
                     const detail = c.print("{d} pull request{s}", .{ repo.pulls.len, if (repo.pulls.len == 1) "" else "s" });
+                    if (p.own_headings) {
+                        ownHeading(&g, repo.name, detail, failing, p.two_lines);
+                        continue;
+                    }
                     // Open after its detail for a tag counting the failing.
                     const box = g.headingOpen(.{ .title = repo.name, .detail = detail, .label = if (failing > 0) c.print("{s}, {s}, {d} failing", .{ repo.name, detail, failing }) else "" });
                     if (failing > 0) kit.tag(c, c.print("{d} FAILING", .{failing}), .{ .status = .danger, .size = .xs, .pill = true });
@@ -187,4 +197,22 @@ fn flat(i: usize) controls.GridGroupItem {
         n -= r.pulls.len;
     }
     unreachable;
+}
+
+/// A heading drawn the app's way in the row the grid gives it: a chevron
+/// in a round well, the title, and with two lines how many fail under it.
+fn ownHeading(g: *controls.Grid, name: []const u8, detail: []const u8, failing: usize, two_lines: bool) void {
+    const c = g.c;
+    const t = kit.tokens(c);
+    const head = g.headingRow(.{ .title = name, .detail = detail, .label = if (failing > 0) c.print("{s}, {s}, {d} failing", .{ name, detail, failing }) else "" });
+    defer head.box.end();
+    {
+        const well = ui.div(c).w(16).h(16).roundedFull().bg(t.surface_hover).center();
+        defer well.end();
+        ui.icon(c, if (head.open) "chevron.down" else "chevron.right", .{ .size = 8, .color = t.foreground });
+    }
+    const lines = ui.div(c).column().gap(1);
+    defer lines.end();
+    ui.text(c, name, .{ .size = 12, .weight = .semibold });
+    if (two_lines) ui.text(c, if (failing > 0) c.print("{d} failing of {s}", .{ failing, detail }) else detail, .{ .size = 11, .color = if (failing > 0) t.danger else t.muted });
 }

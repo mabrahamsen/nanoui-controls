@@ -77,10 +77,10 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
     f.any = false;
     var hovered = false;
     if (open) |o| {
-        const it = c.interact(h.index, .{ .focusable = true });
+        const it = focus.button(c, h.index, true);
         hovered = it.hovered;
         if (it.hovered) c.cursor_hand = true;
-        if (it.focused) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
+        if (focus.showRing(c, it.focused)) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
         if (it.clicked) {
             o.* = !o.*;
             c.changed = true;
