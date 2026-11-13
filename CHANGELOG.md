@@ -2,7 +2,7 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.8.1
 
 ### Fixed
 
@@ -21,6 +21,7 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ### Changed
 
+- Built on nanoui 0.14.4, which an app using these controls must pin too. Icons are drawn smoother in nanoui's own renderer, and on Windows a right-click reaches the grid's and the sidebar's menus.
 - Grid: `widths` keeps 0 for a column not resized or fitted, where the grid wrote in its `width`: a 0 is the column's own, so a column whose `width` changes in a later version of the app takes the new one.
 
 ## 0.8.0
