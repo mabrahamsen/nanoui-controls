@@ -86,7 +86,8 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
     for (tabs, 0..) |tab, i| {
         const on = index.* == i;
         const off = opts.disabled or tab.disabled;
-        ui.key(c, tab.label);
+        // Keyed by place: labels may repeat, or be empty.
+        ui.keyInt(c, i);
         const col = ui.div(c).column();
         defer col.end();
         var head = ui.div(c).row().itemsCenter().gap(7 * k).px(12 * k).py(7 * k).rounded(7 * k).control();

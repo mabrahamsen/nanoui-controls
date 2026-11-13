@@ -266,3 +266,41 @@ test "a click on a toast's button leaves the keyboard in the field, and Tab reac
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 0), x.list.n);
 }
+
+test "shown again, a toast takes its new seconds and is said again" {
+    var list: Toasts = .{};
+    const id = list.show("Couldn't reach the server.", .{ .seconds = 4 });
+    list.list[0].announced = true;
+    list.close(id);
+    try std.testing.expectEqual(id, list.show("Couldn't reach the server.", .{ .seconds = 0 }));
+    const x = list.items()[0];
+    try std.testing.expectEqual(@as(f32, 0), x.seconds);
+    try std.testing.expect(!x.leaving and !x.announced);
+}
+
+test "a toast's time stops while one of its buttons has the keyboard" {
+    const T = struct {
+        list: Toasts = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            ui.div(c).sizeFull().end();
+            _ = toasts(c, &x.list, .{});
+        }
+    };
+    var x: T = .{};
+    _ = x.list.show("Moved to the Trash.", .{ .action = "Undo", .seconds = 4 });
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 600, .height = 400 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.tab);
+    t.frame();
+    t.time += 10;
+    t.frame();
+    try std.testing.expect(!x.list.items()[0].leaving);
+    // The keyboard elsewhere, its time runs out.
+    t.ctx.focus = 0;
+    t.frame();
+    t.time += 5;
+    t.frame();
+    try std.testing.expect(x.list.n == 0 or x.list.items()[0].leaving);
+}

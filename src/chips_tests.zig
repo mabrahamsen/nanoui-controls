@@ -203,3 +203,73 @@ test "a chip turns on and off by a click and by the keys, and is a checkbox to a
     list = try elements(&t, &arena);
     try std.testing.expect(!list[0].enabled);
 }
+
+test "a separator outside ASCII ends a chip whole, and other characters stay whole" {
+    const T = struct {
+        added: [4][16]u8 = undefined,
+        lens: [4]usize = undefined,
+        n: usize = 0,
+        buf: ui.TextBuffer = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            const r = chipInput(c, &.{}, &x.buf, .{ .separators = "·," });
+            for (r.added) |v| if (x.n < 4) {
+                @memcpy(x.added[x.n][0..v.len], v);
+                x.lens[x.n] = v.len;
+                x.n += 1;
+            };
+        }
+    };
+    var x: T = .{};
+    defer x.buf.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    x.buf.focus();
+    t.frame();
+    // "°" (0xC2 0xB0) and "÷" (0xC3 0xB7) each share a byte with "·"
+    // (0xC2 0xB7), and stay whole.
+    t.typeText("21°C·÷2,");
+    t.frame();
+    try std.testing.expectEqual(@as(usize, 2), x.n);
+    try std.testing.expectEqualStrings("21°C", x.added[0][0..x.lens[0]]);
+    try std.testing.expectEqualStrings("÷2", x.added[1][0..x.lens[1]]);
+}
+
+test "removing a chip with a click gives the field the keyboard, in either ring mode" {
+    const focus = @import("focus.zig");
+    focus.setRingShows(.keyboard);
+    defer focus.setRingShows(.focused);
+    var x: Times = .{};
+    defer x.deinit();
+    for ([_][]const u8{ "9:00", "21:30" }) |v| {
+        try x.chips.append(std.testing.allocator, try std.testing.allocator.dupe(u8, v));
+        try x.invalid.append(std.testing.allocator, false);
+    }
+    var t: ui.Tester = undefined;
+    try start(&x, &t, Times.view);
+    defer t.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    for (try elements(&t, &arena)) |e| if (std.mem.eql(u8, e.label, "Remove 9:00")) t.click(e.rect.x + e.rect.w / 2, e.rect.y + e.rect.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 1), x.chips.items.len);
+    try std.testing.expect(x.focused);
+}
+
+test "a chip input's width in points follows scale" {
+    const T = struct {
+        buf: ui.TextBuffer = .{},
+        box: u32 = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            x.box = @intCast(c.nodes.items.len);
+            _ = chipInput(c, &.{"9:00"}, &x.buf, .{ .width = .{ .px = 150 }, .scale = 2 });
+        }
+    };
+    var x: T = .{};
+    defer x.buf.deinit();
+    var t: ui.Tester = undefined;
+    try start(&x, &t, T.view);
+    defer t.deinit();
+    try std.testing.expectEqual(@as(f32, 300), t.ctx.rects.get(t.ctx.nodes.items[x.box].id).?.w);
+}

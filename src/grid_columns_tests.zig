@@ -114,8 +114,8 @@ test "dragging an edge resizes the column on its left, a flexible one from its w
     try t.init(std.testing.allocator, .init(&s, Shares.view), .{ .width = 400, .height = 300 });
     defer t.deinit();
     t.settle(1);
-    // Columns with a width start at it; the others stay 0.
-    try std.testing.expectEqual([3]f32{ 0, 0, 80 }, s.widths);
+    // Every column starts at 0, its own width.
+    try std.testing.expectEqual([3]f32{ 0, 0, 0 }, s.widths);
     const y = t.findText("Fixed").?.y + 4;
     // Narrow, 90 on screen, keeps the width it is dragged to, and Wide
     // the 180 it had, so the edge follows the pointer.
@@ -213,7 +213,8 @@ test "an edge after a column with a width resizes that column" {
     t.drag(edge, y, edge + 30, y);
     t.settle(1);
     try std.testing.expectApproxEqAbs(@as(f32, 100), s.widths[0], 0.5);
-    try std.testing.expectApproxEqAbs(@as(f32, 80), s.widths[1], 0.5);
+    // The column after it, not resized, keeps its own.
+    try std.testing.expectEqual(@as(f32, 0), s.widths[1]);
 }
 
 /// How many texts read `s` whole.
@@ -258,7 +259,7 @@ test "a double-click on an edge fits the column on its left to its widest title 
     try t.init(std.testing.allocator, .init(&s, Sizes.view), .{ .width = 400, .height = 300 });
     defer t.deinit();
     t.settle(1);
-    try std.testing.expectEqual(@as(f32, 40), s.widths[1]);
+    try std.testing.expectEqual(@as(f32, 0), s.widths[1]);
     // Name's widest is under its min_width, 40.
     const want = @max(40, t.ctx.text.width("file 0", .{}), t.findText("Name").?.w);
     // The edge before Size, whose cells end at the padding and the
@@ -267,7 +268,7 @@ test "a double-click on an edge fits the column on its left to its widest title 
     t.doubleClick(340 - 5, y);
     t.settle(1);
     try std.testing.expect(s.widths[0] >= want and s.widths[0] <= want + 3);
-    try std.testing.expectEqual(@as(f32, 40), s.widths[1]);
+    try std.testing.expectEqual(@as(f32, 0), s.widths[1]);
 }
 
 test "a click on an edge that doesn't move changes no width" {
@@ -279,7 +280,7 @@ test "a click on an edge that doesn't move changes no width" {
     const edge = Shares.x(&t, "Fixed") - 5;
     t.drag(edge, t.findText("Fixed").?.y + 4, edge, t.findText("Fixed").?.y + 4);
     t.settle(1);
-    try std.testing.expectEqual([3]f32{ 0, 0, 80 }, s.widths);
+    try std.testing.expectEqual([3]f32{ 0, 0, 0 }, s.widths);
 }
 
 test "a double-click past the last title, or fitAll, fits every column, and resetWidths goes back" {
@@ -297,8 +298,8 @@ test "a double-click past the last title, or fitAll, fits every column, and rese
     try std.testing.expect(s.widths[1] >= long and s.widths[1] <= long + 3);
     s.reset = true;
     t.settle(1);
-    // Size starts again at its own width; Name shares the room again.
-    try std.testing.expectEqual([2]f32{ 0, 40 }, s.widths);
+    // Each goes back to its own: Size's width, and Name sharing the room.
+    try std.testing.expectEqual([2]f32{ 0, 0 }, s.widths);
     s.fit_all = true;
     t.settle(1);
     try std.testing.expect(s.widths[0] >= name and s.widths[0] <= name + 3);
@@ -488,4 +489,37 @@ test "a centered column's cells and title sit in its center" {
     const title = t.findText("Mid").?;
     try std.testing.expectApproxEqAbs(@as(f32, 320), cell.x + cell.w / 2, 1);
     try std.testing.expectApproxEqAbs(@as(f32, 320), title.x + title.w / 2, 1);
+}
+
+test "fitting a sorted column makes room for its title and its arrow" {
+    const T = struct {
+        widths: [2]f32 = .{ 0, 0 },
+        sort: g_mod.Sort = .{ .column = 0 },
+        fit: bool = true,
+        const columns = [_]Column{
+            .{ .title = "Filename", .sortable = true },
+            .{ .title = "Size", .width = 60 },
+        };
+        fn view(x: *@This(), c: *ui.Context) void {
+            var g = grid(c, &columns, .{ .count = 1, .widths = &x.widths, .sort = &x.sort });
+            if (x.fit) g.fitAll();
+            x.fit = false;
+            while (g.next()) |_| {
+                g.cell();
+                ui.text(c, "a", .{});
+                g.cell();
+                ui.text(c, "1", .{});
+            }
+            g.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    const title = t.ctx.text.width("Filename", .{ .size = 11, .weight = .semibold });
+    // The title, the gap and the 8-point arrow.
+    try std.testing.expect(x.widths[0] >= title + 8);
+    try std.testing.expect(t.hasText("Filename"));
 }

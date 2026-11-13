@@ -74,22 +74,31 @@ pub fn dots(c: *ui.Context, text: []const u8) []const u8 {
     return out;
 }
 
-/// `box`'s interaction without the pointing hand, for a box that listens
-/// only for its tooltip.
+/// `box`'s interaction without the pointing hand, and without a click on
+/// it taking the keyboard from where it was: for a box that listens only
+/// for its tooltip, or is disabled.
 pub fn still(c: *ui.Context, box: ui.Div) ui.Interaction {
     const hand = c.hand_cursor;
+    const was = c.focus;
     c.hand_cursor = false;
     defer c.hand_cursor = hand;
-    return box.interaction();
+    const it = box.interaction();
+    c.focus = was;
+    return it;
 }
 
-/// Says `text` to a screen reader once, when it differs from what was
-/// said here last, rather than every frame: for a message that appears or
-/// changes in place. Call it just before the message's box is made.
+/// Says `text` to a screen reader once, when it appears or changes, rather
+/// than every frame: for a message that comes and goes in place. Gone for
+/// a frame and back, it is said again. Call it just before the message's
+/// box is made.
 pub fn announceOnce(c: *ui.Context, text: []const u8) void {
-    const said = c.state(struct { hash: u64 = 0 }, "announced");
+    const said = c.state(struct { hash: u64 = 0, frame: u64 = 0 }, "announced");
     const h = std.hash.Wyhash.hash(0, text);
-    if (said.hash == h) return;
+    // nanoui remembers a box's state a while after it goes: drawn in the
+    // last frame, or this one again, it is still there.
+    const there = said.frame + 1 >= c.frame;
+    said.frame = c.frame;
+    if (said.hash == h and there) return;
     said.hash = h;
     ui.access.announce(c, text);
 }

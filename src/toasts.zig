@@ -94,9 +94,9 @@ pub const Toasts = struct {
 
     /// Shows `message`, returning its id, for `close` and `dismiss`. The
     /// same toast shown already (the same status, title, text, action, tag
-    /// and payload: a request failing each time it is retried) starts its
-    /// time again instead of showing twice, and comes back if it was
-    /// leaving.
+    /// and payload: a request failing each time it is retried) starts
+    /// `seconds` again instead of showing twice, comes back if it was
+    /// leaving, and is said again.
     pub fn show(t: *Toasts, message: []const u8, opts: Show) u32 {
         const text = cut(message, max_text);
         const title = cut(opts.title, max_title);
@@ -104,9 +104,11 @@ pub const Toasts = struct {
         for (t.list[0..t.n]) |*x| if (x.status == opts.status and x.tag == opts.tag and x.payload == opts.payload and
             std.mem.eql(u8, x.text(), text) and std.mem.eql(u8, x.title(), title) and std.mem.eql(u8, x.action(), act))
         {
+            x.seconds = opts.seconds;
             x.ends = null;
-            x.left = x.seconds;
+            x.left = opts.seconds;
             x.leaving = false;
+            x.announced = false;
             return x.id;
         };
         if (t.n == max) {
@@ -254,20 +256,25 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
         if (toast.leaving) continue;
         // A click on its buttons leaves the keyboard where it was: the
         // toast goes as it is pressed.
+        var keyed = false;
         if (toast.action_len > 0) {
             ui.key(c, c.print("toast-action-{d}", .{toast.id}));
-            if (buttons.button(c, toast.action(), .{ .variant = .ghost, .size = .xs, .keep_keyboard = true }).clicked) {
+            const act = buttons.button(c, toast.action(), .{ .variant = .ghost, .size = .xs, .keep_keyboard = true });
+            keyed = act.focused;
+            if (act.clicked) {
                 hit = .{ .id = toast.id, .tag = toast.tag, .payload = toast.payload };
                 toast.leaving = true;
             }
         }
         ui.key(c, c.print("toast-close-{d}", .{toast.id}));
-        if (buttons.closeButton(c, opts.close_text, true).clicked) toast.leaving = true;
-        // Its time passes on the clock while the pointer isn't on it, not
-        // by the frames drawn: a window that draws nothing else wakes only
-        // when it is up.
+        const close = buttons.closeButton(c, opts.close_text, true);
+        keyed = keyed or close.focused;
+        if (close.clicked) toast.leaving = true;
+        // Its time passes on the clock while neither the pointer nor the
+        // keyboard is on it, not by the frames drawn: a window that draws
+        // nothing else wakes only when it is up.
         if (toast.seconds > 0 and !toast.leaving) {
-            if (it.hovered) {
+            if (it.hovered or keyed) {
                 if (toast.ends) |e| toast.left = @floatCast(@max(0, e - c.time));
                 toast.ends = null;
             } else {

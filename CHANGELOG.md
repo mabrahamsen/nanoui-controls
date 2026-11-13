@@ -2,6 +2,27 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Fixed
+
+- Grid: the line showing where a dragged title would go sits in the gap before the column it would go before, scrolled sideways or not, and past a frozen column where the scrolled ones start; a column scrolled out of sight under the frozen one isn't a place to drop.
+- Grid: fitting a column counts its icons, so a sorted column fitted to its title keeps room for its arrow; a box placed absolutely in a cell takes no room in the fit.
+- Grid: Enter doesn't open a row that Cmd-click (Ctrl-click) took out of the selection.
+- Charts: an interactive chart uses up the keys it moves by, even at an end, so they don't reach what comes after it; one with nothing to point at isn't a stop for Tab.
+- `bars` on a scale all below zero (dBm, say) hang from its top, as long as their distance from it, where they were measured from zero, off the scale.
+- `segmented` and `tabStrip`: options with the same label, or none, are told apart. An index past the last option moves to the last that can be chosen, and says it changed; a group whose options are all disabled doesn't take Tab.
+- Toasts: one shown again takes its new `seconds` and is said again; its time stops while one of its buttons has the keyboard, as while the pointer rests on it.
+- A callout or notice closed and shown again at once is said again; a notice without a title is said by its description alone.
+- `chipInput`: a separator outside ASCII ends a chip without cutting other characters, and removing a chip by a click gives the field the keyboard, as by the keys.
+- A click on what only shows a tooltip or is disabled (a disabled sidebar row or swatch, the form's ⓘ, a property cut short) leaves the keyboard where it was, and shows no pointing hand.
+- `format.tildeBuf` gives "?" for a buffer too small, as the other `…Buf` functions do, and takes a home folder with a separator at its end.
+- `stat`'s and `chipInput`'s `width` in points follow `scale`, and a stat's loading spinner fits its line at any `scale`.
+
+### Changed
+
+- Grid: `widths` keeps 0 for a column not resized or fitted, where the grid wrote in its `width`: a 0 is the column's own, so a column whose `width` changes in a later version of the app takes the new one.
+
 ## 0.8.0
 
 ### Added

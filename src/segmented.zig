@@ -54,7 +54,8 @@ pub fn segmented(c: *ui.Context, choices: []const Choice, index: *usize, opts: O
     for (choices, 0..) |choice, i| {
         const on = index.* == i;
         const off = opts.disabled or choice.disabled;
-        ui.key(c, choice.label);
+        // Keyed by place: labels may repeat, or be empty.
+        ui.keyInt(c, i);
         var seg = ui.div(c).row().itemsCenter().gap(6 * k).px(opts.px * k).py(opts.py * k).rounded(7 * k).control();
         seg = if (on) seg.bg(t.primary) else if (off) seg else seg.hover(t.surface_hover);
         if (choice.disabled and !opts.disabled) seg = seg.opacity(focus.dimmed);

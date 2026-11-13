@@ -130,3 +130,30 @@ test "a stat's key is a dot before its label, in a card and without one, and sil
         try std.testing.expectEqualStrings("Read", list.items[0].label);
     }
 }
+
+test "a stat's width in points follows scale, and its loading spinner fits its line" {
+    const T = struct {
+        box: u32 = 0,
+        card: bool = true,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(400);
+            defer root.end();
+            x.box = @intCast(c.nodes.items.len);
+            stat_mod.stat(c, "Peak", "87", .{ .width = .{ .px = 100 }, .scale = 2, .loading = true, .card = if (x.card) .{} else null });
+        }
+    };
+    for ([_]bool{ true, false }) |card| {
+        var x: T = .{ .card = card };
+        var t: ui.Tester = undefined;
+        try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 300 });
+        defer t.deinit();
+        t.settle(1);
+        try std.testing.expectEqual(@as(f32, 200), t.ctx.rects.get(t.ctx.nodes.items[x.box].id).?.w);
+        // The spinner's slot holds it: no box in the stat ends below it.
+        const box = t.ctx.rects.get(t.ctx.nodes.items[x.box].id).?;
+        for (t.ctx.nodes.items[x.box..]) |n| {
+            const r = t.ctx.rects.get(n.id) orelse continue;
+            try std.testing.expect(r.y + r.h <= box.y + box.h + 0.5);
+        }
+    }
+}

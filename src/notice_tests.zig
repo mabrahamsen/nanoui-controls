@@ -121,3 +121,11 @@ test "a screen reader hears the title as a heading, then the description, and wi
     try std.testing.expect(list.items[0].header);
     try std.testing.expectEqualStrings("They show here.", list.items[1].label);
 }
+
+test "a notice without a title is said by its description alone" {
+    var x: Pane = .{ .opts = .{ .description = "Nothing to show yet.", .announce = true } };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    try std.testing.expectEqualStrings("Nothing to show yet.", t.ctx.access.announcement[0..t.ctx.access.announcement_len]);
+}

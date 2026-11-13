@@ -147,3 +147,26 @@ test "a neutral callout isn't said unless asked, and a danger one not when told 
     t.settle(1);
     try std.testing.expectEqualStrings("", announced(&t));
 }
+
+test "a callout closed and shown again at once is said again" {
+    const T = struct {
+        shown: bool = true,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(300).p(8);
+            defer root.end();
+            if (x.shown) _ = callout(c, "The disk is full.", .{ .status = .danger });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 320, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqualStrings("The disk is full.", announced(&t));
+    t.ctx.access.announcement_len = 0;
+    x.shown = false;
+    t.frame();
+    x.shown = true;
+    t.frame();
+    try std.testing.expectEqualStrings("The disk is full.", announced(&t));
+}

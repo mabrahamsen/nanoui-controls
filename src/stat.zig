@@ -53,7 +53,7 @@ pub const Options = struct {
     /// The figure in the monospaced font, so figures line up.
     mono: bool = false,
     /// The parent's width by default; in a row, a share of the room the
-    /// rest leaves.
+    /// rest leaves. A width in points is multiplied by `scale`.
     width: ui.Length = .fill,
     /// Its tile: the theme's surface, border and radius and 12 points of
     /// padding, unless it says; null draws none, and the stat sits on what
@@ -109,11 +109,11 @@ fn open(c: *ui.Context, opts: Options, clickable: bool) ui.Div {
     const k = opts.scale;
     if (opts.card) |card| {
         const box = surface.open(c, card, .{ .fill = t.surface, .border = t.border, .px = 12, .py = 12, .gap = 4, .scale = k });
-        if (card.width == null) c.node(box.index).style.width = opts.width;
+        if (card.width == null) c.node(box.index).style.width = surface.scaled(opts.width, k);
         return box;
     }
     var box = ui.div(c).column().gap(@as(f32, if (compact(opts)) 3 else 4) * k);
-    c.node(box.index).style.width = opts.width;
+    c.node(box.index).style.width = surface.scaled(opts.width, k);
     if (clickable) box = box.p(6 * k).rounded(t.radius * k);
     return box;
 }
@@ -148,7 +148,9 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
         const row = ui.div(c).row().itemsCenter().gap(8 * opts.scale);
         defer row.end();
         if (opts.loading) {
-            const slot = ui.div(c).h(@round(size * 1.2)).row().itemsCenter();
+            // As tall as the figure's line, or the spinner, which follows
+            // `scale`, where it is the taller.
+            const slot = ui.div(c).h(@max(@round(size * 1.2), @round(size * 0.7) * opts.scale)).row().itemsCenter();
             defer slot.end();
             kit.spinner(c, .{ .size = @round(size * 0.7) * opts.scale });
         } else if (opts.unit.len > 0) {

@@ -23,8 +23,7 @@ pub fn gutter(opts: Options) f32 {
     return if (opts.max_rows == null) scrollbar_gutter else 0;
 }
 
-/// Panics on options that don't match the columns or the rows, and starts
-/// the caller's `widths` at the columns' own.
+/// Panics on options that don't match the columns or the rows.
 pub fn check(columns: []const Column, opts: Options) void {
     if (!(opts.scale > 0)) @panic("grid: `scale` needs to be more than 0");
     if (!(rowHeight(opts) > 0)) @panic("grid: `row_height` needs to be more than 0");
@@ -34,12 +33,7 @@ pub fn check(columns: []const Column, opts: Options) void {
         if (opts.selection != null) @panic("grid: `selection` doesn't go with `groups`; use `selected`");
     }
     if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
-    if (opts.widths) |w| {
-        if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
-        for (w, columns) |*x, col| if (x.* == 0) if (col.width) |start| {
-            x.* = start;
-        };
-    }
+    if (opts.widths) |w| if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
     if (opts.selection) |m| {
         if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
         if (opts.selected == null) @panic("grid: `selection` needs `selected`");
@@ -238,8 +232,9 @@ fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 
 }
 
 /// How wide box `index`'s contents would be, uncut: its texts' widths as
-/// set, its boxes' fixed widths or theirs in turn, and the gaps and
-/// padding between them; in a column, the widest of them.
+/// set, its icons' sizes, its boxes' fixed widths or theirs in turn, and
+/// the gaps and padding between them; in a column, the widest of them.
+/// A box placed absolutely takes no room among them.
 pub fn natural(c: *ui.Context, index: u32) f32 {
     const n = c.node(index);
     const across = n.style.direction == .row;
@@ -249,9 +244,15 @@ pub fn natural(c: *ui.Context, index: u32) f32 {
     // nanoui's "no box" in its tree, which it doesn't export.
     while (child != std.math.maxInt(u32)) : (child = c.node(child).next) {
         const ch = c.node(child);
+        if (ch.style.absolute) continue;
         count += 1;
         const cw = switch (ch.content) {
             .text => |t| c.text.width(t.str, t.style),
+            // Without a frame, an icon is as wide as its size.
+            .icon => |ic| switch (ch.style.width) {
+                .px => |px| px,
+                else => ic.size,
+            },
             else => switch (ch.style.width) {
                 .px => |px| px,
                 else => natural(c, child),

@@ -46,12 +46,7 @@ pub fn weighted(div: ui.Div, v: f32) ui.Div {
 }
 
 /// `l` with its points times `k`.
-pub fn scaled(l: ui.Length, k: f32) ui.Length {
-    return switch (l) {
-        .px => |v| .{ .px = v * k },
-        else => l,
-    };
-}
+pub const scaled = @import("surface.zig").scaled;
 
 /// The track of the kit's progress bar, for where no part is.
 pub fn track(c: *ui.Context) ui.Color {
@@ -337,7 +332,8 @@ pub const Inspect = struct {
     /// the keys stop on them.
     pub fn beginFrom(c: *ui.Context, index: u32, count: usize, first: usize, points: bool) Inspect {
         // Not a button: Enter and Space are left for what comes after it.
-        const it = c.interact(index, .{ .focusable = true, .text = true });
+        // With nothing to point at, Tab passes it by.
+        const it = c.interact(index, .{ .focusable = count > first, .text = true });
         // The slot pointed at or moved to, and where the pointer was when
         // it last picked one (none while it is off the chart).
         // Whether a screen reader stepped to it: the slot stays current
@@ -388,16 +384,21 @@ pub const Inspect = struct {
 };
 
 /// Left and Right move a slot, Home and End to the ends: from `first`.
+/// The keys it moves by are its own, used up even at an end, so what
+/// comes after the chart doesn't take them too.
 fn keys(c: *ui.Context, slot: usize, count: usize, first: usize) usize {
     focus.keysOf(c, &.{ .left, .right, .home, .end });
     const key = c.input.key orelse return slot;
-    return switch (key) {
+    const to = switch (key) {
         .left => @max(first, slot -| 1),
         .right => @min(slot + 1, count - 1),
         .home => first,
         .end => count - 1,
-        else => slot,
+        else => return slot,
     };
+    c.input.key = null;
+    if (to != slot) c.changed = true;
+    return to;
 }
 
 test {

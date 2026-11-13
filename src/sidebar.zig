@@ -31,6 +31,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const motion = ui.motion;
 const focus = @import("focus.zig");
+const parts = @import("parts.zig");
 const measure = @import("measure.zig");
 const keys_mod = @import("sidebar_keys.zig");
 const count_mod = @import("sidebar_count.zig");
@@ -305,7 +306,7 @@ pub const Sidebar = struct {
         var row_box = ui.div(c).row().wFull().itemsCenter().gap(@round(text * 0.6) * k).px(pad).pl(if (narrow) pad else sb.inset()).h(size.height() * k).rounded(radius(c, k));
         if (narrow) row_box = row_box.justifyCenter();
         // A disabled row still shows its tooltip, but takes no clicks.
-        var it = row_box.interaction();
+        var it = if (opts.disabled) parts.still(c, row_box) else row_box.interaction();
         if (opts.disabled) {
             it.clicked = false;
             it.secondary_clicked = false;

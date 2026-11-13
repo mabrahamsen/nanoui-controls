@@ -161,3 +161,75 @@ test "a click shows the choice in the frame it is made in" {
         else => {},
     };
 }
+
+test "options with the same label, or none, are told apart" {
+    const T = struct {
+        index: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            _ = segmented(c, &.{ .{ .label = "Copy" }, .{ .label = "Copy" }, .{ .label = "", .icon = "list.bullet" }, .{ .label = "", .icon = "square.grid.2x2" } }, &x.index, .{});
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 400, .height = 60 });
+    defer t.deinit();
+    t.settle(1);
+    // The options' boxes, in order: four, each in a place of its own.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqual(@as(usize, 4), list.items.len);
+    for (1..4) |i| try std.testing.expect(list.items[i].rect.x > list.items[i - 1].rect.x);
+    // The first of each pair is chosen, not the other with its label.
+    x.index = 1;
+    t.settle(1);
+    const first = list.items[0].rect;
+    t.click(first.x + first.w / 2, first.y + first.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), x.index);
+    const icon = list.items[2].rect;
+    t.click(icon.x + icon.w / 2, icon.y + icon.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 2), x.index);
+}
+
+test "an index past the last option moves to the last that can be chosen, as a change" {
+    const T = struct {
+        index: usize = 7,
+        changes: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            if (segmented(c, &.{ .{ .label = "A" }, .{ .label = "B" }, .{ .label = "C", .disabled = true } }, &x.index, .{})) x.changes += 1;
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 60 });
+    defer t.deinit();
+    t.frame();
+    try std.testing.expectEqual(@as(usize, 1), x.index);
+    try std.testing.expectEqual(@as(usize, 1), x.changes);
+}
+
+test "a group whose options are all disabled doesn't take Tab" {
+    const T = struct {
+        index: usize = 0,
+        field: ui.TextBuffer = .{},
+        field_focused: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().gap(8);
+            defer root.end();
+            _ = segmented(c, &.{ .{ .label = "A", .disabled = true }, .{ .label = "B", .disabled = true } }, &x.index, .{});
+            x.field_focused = ui.textField(c, &x.field, .{}).focused;
+        }
+    };
+    var x: T = .{};
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 100 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+}
