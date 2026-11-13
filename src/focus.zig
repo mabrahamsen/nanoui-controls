@@ -119,13 +119,17 @@ pub fn take(c: *ui.Context, box: ui.Div) ui.Interaction {
 
 /// As `take`, when the control `wants` the keyboard: one that is disabled
 /// or has nothing in it doesn't take Tab. The box is made either way, so
-/// what follows it keeps its place.
+/// what follows it keeps its place. It is focused only while it wants the
+/// keyboard: disabled with it, it takes no key in that frame.
 pub fn takeIf(c: *ui.Context, box: ui.Div, wants: bool) ui.Interaction {
     const taker = ui.div(c).absolute().w(0).h(0);
     // The control takes Enter and Space itself, and draws its own ring, as
     // a text field does: nanoui is not to click it with them.
     var own = c.interact(taker.index, .{ .focusable = wants, .text = true });
     taker.end();
+    // nanoui says a box is focused while the keyboard is on it, until the
+    // frame ends, whether it still takes the keyboard or not.
+    if (!wants) own.focused = false;
     if (wants and c.focus == c.node(box.index).id) {
         c.focus = own.id;
         own.focused = true;

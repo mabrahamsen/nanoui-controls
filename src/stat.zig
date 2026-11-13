@@ -130,6 +130,8 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
         .role = if (clickable) .button else .static_text,
         .label = label,
         .value = if (opts.change.len > 0 and !opts.loading) c.print("{s}, {s}", .{ figure, opts.change }) else figure,
+        // The detail says what the figure is of: "over the last hour".
+        .hint = opts.detail,
     });
     // Compact, the label is a caption, as `caption` draws one.
     const small = compact(opts);
@@ -204,6 +206,31 @@ test "a stat says its label, figure and change, and a screen reader hears them a
     try std.testing.expectEqual(@as(usize, 1), list.items.len);
     try std.testing.expectEqualStrings("Requests", list.items[0].label);
     try std.testing.expectEqualStrings("12,480, +8%", list.items[0].value);
+}
+
+test "a stat's detail is its hint to a screen reader, a button's too" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(240);
+            defer root.end();
+            stat(c, "Requests", "42", .{ .detail = "over the last hour" });
+            _ = statButton(c, "Errors", "3", .{ .detail = "since midnight" });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqual(@as(usize, 2), list.items.len);
+    try std.testing.expectEqualStrings("42", list.items[0].value);
+    try std.testing.expectEqualStrings("over the last hour", list.items[0].hint);
+    try std.testing.expectEqual(ui.access.Role.button, list.items[1].role);
+    try std.testing.expectEqualStrings("since midnight", list.items[1].hint);
 }
 
 test "a stat without a change or a history draws neither" {

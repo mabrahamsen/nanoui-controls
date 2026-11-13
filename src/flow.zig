@@ -3,6 +3,11 @@
 //! rows would. It takes its parent's width as the last frame laid it out,
 //! as the legend does, so it wraps anew when the window is resized.
 //!
+//! The cells are all in the flow's box, placed by the flow from their
+//! sizes in the last frame, not in a box for each row: nanoui's ids follow
+//! their parent's, so a cell that moved to another row would be a new box,
+//! and what has the keyboard in it would lose it.
+//!
 //!     var f = controls.flow(c, 180, .{ .gap = 16 });
 //!     for (readings) |r| {
 //!         const cell = f.cell();
@@ -34,7 +39,7 @@ pub const Options = struct {
 /// before `scale`: add them with `cell`, then `end` it.
 pub fn flow(c: *ui.Context, cell_width: f32, opts: Options) Flow {
     const k = opts.scale;
-    const box = ui.div(c).column().wFull().gap(opts.row_gap * k);
+    const box = ui.div(c).column().wFull();
     // The width as the last frame laid it out; until then, the window's.
     const width = if (measure.lastSize(c, box.index)) |s| s.w else c.size.w;
     // A cell and its gap take at least a point, so a row holds a finite
@@ -60,20 +65,28 @@ pub const Flow = struct {
     opts: Options,
     /// Each cell's width, in points as drawn.
     cell_px: f32,
-    row: ?ui.Div = null,
     /// Cells in the row being filled.
     in_row: usize = 0,
+    /// The top of the row being filled, and its height so far: its
+    /// tallest cell's.
+    top: f32 = 0,
+    row_h: f32 = 0,
 
     /// The next cell's box, a column: draw in it, then end it.
     pub fn cell(f: *Flow) ui.Div {
-        if (f.row == null or f.in_row == f.per_row) {
-            if (f.row) |r| r.end();
-            f.row = ui.div(f.c).row().wFull().itemsStart().gap(f.opts.gap * f.opts.scale);
+        const k = f.opts.scale;
+        if (f.rows == 0 or f.in_row == f.per_row) {
+            if (f.rows > 0) f.top += f.row_h + f.opts.row_gap * k;
             f.rows += 1;
             f.in_row = 0;
+            f.row_h = 0;
         }
+        var d = ui.div(f.c).column().w(f.cell_px).clip().absolute();
+        // Until it has been laid out, a cell takes no height.
+        if (measure.lastSize(f.c, d.index)) |s| f.row_h = @max(f.row_h, s.h);
+        d = d.offset(@as(f32, @floatFromInt(f.in_row)) * (f.cell_px + f.opts.gap * k), f.top);
         f.in_row += 1;
-        return ui.div(f.c).column().w(f.cell_px).clip();
+        return d;
     }
 
     /// Puts a stat in the next cell: with `.size = .xs, .card = null`, a
@@ -86,12 +99,12 @@ pub const Flow = struct {
 
     /// Starts the next cell on a new row.
     pub fn breakRow(f: *Flow) void {
-        if (f.row != null) f.in_row = f.per_row;
+        if (f.rows > 0) f.in_row = f.per_row;
     }
 
-    /// Ends the flow.
+    /// Ends the flow, as tall as its rows.
     pub fn end(f: *Flow) void {
-        if (f.row) |r| r.end();
+        _ = f.box.h(f.top + f.row_h);
         f.box.end();
     }
 };
@@ -226,4 +239,40 @@ test "a flow of compact readings wraps as it narrows, each one element to a scre
     try std.testing.expectEqual(@as(usize, 3), list.items.len);
     try std.testing.expectEqualStrings("FILES", list.items[0].label);
     try std.testing.expectEqualStrings("312", list.items[0].value);
+}
+
+test "a cell keeps the keyboard in it when the flow wraps it onto another row" {
+    const T = struct {
+        width: f32 = 400,
+        clicked: [3]usize = @splat(0),
+        fn view(x: *@This(), c: *ui.Context) void {
+            const box = ui.div(c).column().w(x.width);
+            defer box.end();
+            var f = flow(c, 120, .{});
+            for (&x.clicked, 0..) |*n, i| {
+                const cell = f.cell();
+                defer cell.end();
+                if (stat_mod.statButton(c, "Reading", c.print("{d}", .{i}), .{}).clicked) n.* += 1;
+            }
+            f.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 400 });
+    defer t.deinit();
+    t.settle(1);
+    for (0..3) |_| t.key(.tab);
+    t.settle(1);
+    const focus = t.ctx.focus;
+    try std.testing.expectEqual(t.findText("0").?.y, t.findText("2").?.y);
+    // One to a row: the third moves to the third row, and keeps the keyboard.
+    x.width = 200;
+    for (0..2) |_| t.frame();
+    try std.testing.expect(t.findText("2").?.y > t.findText("1").?.y);
+    try std.testing.expect(t.findText("1").?.y > t.findText("0").?.y);
+    try std.testing.expectEqual(focus, t.ctx.focus);
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expectEqual([3]usize{ 0, 0, 1 }, x.clicked);
 }

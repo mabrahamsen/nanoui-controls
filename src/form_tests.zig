@@ -253,12 +253,15 @@ fn elements(t: *ui.Tester, arena: std.mem.Allocator) ![]const ui.access.Element 
 
 const Toggles = struct {
     on: bool = true,
+    width: f32 = 400,
+    /// The toggle's own name.
+    name: []const u8 = "",
     fn view(x: *Toggles, c: *ui.Context) void {
-        const root = ui.div(c).column().w(400);
+        const root = ui.div(c).column().w(x.width);
         defer root.end();
-        var f = form(c, .{});
+        var f = form(c, .{ .stack_below = 360 });
         const r = f.row("Notify", .{ .required = true, .info = "When a backup ends." });
-        _ = ui.toggle(c, "", &x.on);
+        _ = ui.toggle(c, x.name, &x.on);
         r.end();
         f.end();
     }
@@ -274,6 +277,43 @@ test "a row's label names its control to a screen reader, saying it is required 
     const list = try elements(&t, arena.allocator());
     try std.testing.expectEqual(@as(usize, 1), list.len);
     try std.testing.expectEqualStrings("Notify, required", list[0].label);
+}
+
+test "a row names its control with its ⓘ as the hint, its label beside it or above it" {
+    var x: Toggles = .{};
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    for ([_]f32{ 400, 300 }) |width| {
+        x.width = width;
+        // A frame to lay out the width, and one to stack (or not) for it.
+        for (0..2) |_| t.frame();
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        const list = try elements(&t, arena.allocator());
+        try std.testing.expectEqual(@as(usize, 1), list.len);
+        try std.testing.expectEqual(ui.access.Role.switch_toggle, list[0].role);
+        try std.testing.expectEqualStrings("Notify, required", list[0].label);
+        try std.testing.expectEqualStrings("When a backup ends.", list[0].hint);
+        // Beside the toggle at 400, above it at 300.
+        const label = t.findText("Notify").?;
+        if (width < 360) {
+            try std.testing.expect(label.y + label.h <= list[0].rect.y);
+        } else try std.testing.expect(list[0].rect.x > label.x + label.w);
+    }
+}
+
+test "a control with a name of its own keeps it, the row's label read before it" {
+    var x: Toggles = .{ .name = "Email" };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    const list = try elements(&t, arena.allocator());
+    try std.testing.expectEqual(@as(usize, 2), list.len);
+    try std.testing.expectEqualStrings("Notify, required", list[0].label);
+    try std.testing.expectEqualStrings("Email", list[1].label);
 }
 
 test "an ⓘ after a label says more in a tooltip, and the column makes room for it" {

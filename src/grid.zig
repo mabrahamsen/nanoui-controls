@@ -68,6 +68,7 @@ const rows = @import("grid_rows.zig");
 const cells = @import("grid_cells.zig");
 const widths_mod = @import("grid_widths.zig");
 const select = @import("grid_select.zig");
+const parts = @import("parts.zig");
 
 pub const Column = struct {
     title: []const u8 = "",
@@ -474,7 +475,10 @@ pub const Grid = struct {
             const gs = g.opts.groups.?;
             if (gs.within(it.group(), f) and !(is_heading and it.group() == f)) g.c.node(r.index).style.opacity = g.fade;
         };
-        const it: ui.Interaction = if (g.opts.clickable) r.interaction() else .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
+        var it: ui.Interaction = .{ .id = 0, .rect = null, .hovered = false, .pressed = false, .clicked = false, .focused = false };
+        // A row that isn't clickable still knows the pointer is over it,
+        // for its cells' tooltips, without the hand or a click.
+        if (g.opts.clickable) it = r.interaction() else if (g.opts.tooltips) it.hovered = parts.still(g.c, r).hovered;
         if (it.secondary_clicked) {
             // The menu's keys go to the grid, as a click's do.
             if (g.own != 0) g.c.focus = g.own;
