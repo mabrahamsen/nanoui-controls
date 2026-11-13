@@ -284,6 +284,30 @@ test "disabled swatches take no clicks or keys, and none at all don't take Tab" 
     try std.testing.expect(x.field_focused);
 }
 
+test "swatches disabled while they have the keyboard take no key in that frame" {
+    const T = struct {
+        chosen: ?usize = 0,
+        disabled: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            if (c.frame == 0) c.focusNext(false);
+            _ = swatches(c, &palette, &x.chosen, .{ .disabled = x.disabled });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 60 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.right);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 1), x.chosen);
+    // Disabled, and a key in the same frame.
+    x.disabled = true;
+    t.key(.right);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 1), x.chosen);
+}
+
 test "Up and Down move as Left and Right, and the row's label is said with each swatch" {
     const T = struct {
         chosen: ?usize = 1,

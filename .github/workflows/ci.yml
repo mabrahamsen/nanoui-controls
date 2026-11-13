@@ -38,7 +38,7 @@ jobs:
         run: |
           zig build test-snapshots --summary all
           zig-out/bin/gallery --nanoui-snapshot=zig-out/example-grid.png
-          zig-out/bin/gallery --nanoui-snapshot=zig-out/example-charts.png --nanoui-script="click:Charts"
+          zig-out/bin/gallery --nanoui-snapshot=zig-out/example-charts.png --nanoui-script="click:Monitor"
       - name: Keep the drawings that differ
         if: failure() && runner.os == 'macOS'
         uses: actions/upload-artifact@v4

@@ -232,13 +232,14 @@ const Sizes = struct {
     widths: [2]f32 = .{ 0, 0 },
     fit_all: bool = false,
     reset: bool = false,
+    clickable: bool = true,
     const columns = [_]Column{
         .{ .title = "Name" },
         .{ .title = "Size", .width = 40, .alignment = .end },
     };
     const long = "1234567890 KB";
     fn view(s: *Sizes, c: *ui.Context) void {
-        var g = grid(c, &columns, .{ .count = 3, .widths = &s.widths });
+        var g = grid(c, &columns, .{ .count = 3, .widths = &s.widths, .clickable = s.clickable });
         if (s.fit_all) g.fitAll();
         if (s.reset) g.resetWidths();
         s.fit_all = false;
@@ -327,6 +328,22 @@ test "a cut-off cell shows its whole text on hover, and a whole one doesn't" {
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 0), countText(&t, Sizes.long));
     try std.testing.expectEqual(@as(usize, 1), countText(&t, "file 1"));
+}
+
+test "a grid whose rows aren't clickable shows its cut-off cells' tooltips too, without the hand" {
+    var s: Sizes = .{ .clickable = false };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&s, Sizes.view), .{ .width = 400, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    const row = t.findText("file 1").?;
+    t.moveTo(360, row.y + row.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 1), countText(&t, Sizes.long));
+    try std.testing.expect(!t.ctx.cursor_hand);
+    t.moveTo(row.x + 2, row.y + row.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), countText(&t, Sizes.long));
 }
 
 /// The fruit grid, whose columns' order the caller keeps.

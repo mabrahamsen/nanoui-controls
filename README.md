@@ -134,7 +134,7 @@ g.end();
 - **Cards:** `rows = .cards` draws each row as a card, in the theme's surface with a border and its corners and room between them, the selected one tinted in the accent. `header = false` leaves out the column titles. `row.status(.danger)` tints a row's edge in a status's color: a card's border, or a bar at a plain row's leading edge.
 - **Back and Escape:** while the grid has the keyboard, Backspace or Cmd+Up (Alt+Up on Windows and Linux) sets `g.back`, for a browser to go to the parent folder, and Escape sets `g.escaped`, for an app that clears a search or closes a pane.
 - **A set number of rows:** `max_rows = 5` shows at most five, without scrolling, and takes only their height.
-- **Tables to read:** `clickable = false` makes rows that take no clicks, don't light up and show no pointing hand, for a summary or comparison; a screen reader still hears them as rows.
+- **Tables to read:** `clickable = false` makes rows that take no clicks, don't light up and show no pointing hand, for a summary or comparison; a screen reader still hears them as rows, and a cut-off cell still shows its tooltip.
 - **Hiding columns:** a column with `min_window_width` hides in narrower windows, one with `min_grid_width` while the grid itself is narrower, as when a pane beside it narrows it, and `hidden` hides columns on the caller's say. Build cells with `g.cellAt(i)`, which returns false for a hidden column, so columns keep their numbers.
 - **Lines:** `row_lines` draws a line between rows, which then meet it square, and `column_lines` one down the middle of each gap between columns, through the titles. With `freeze_first`, the frozen column has a line at its edge while the others are scrolled.
 - **Look:** `striped`, `hover`, `padding`, `header_line`, `row_height` and the gaps, `title_style` (`GridTitleStyle`) for the column titles, and `scale` for apps that zoom their layout with `c.setZoom`. The grid takes `scale` rather than the kit's `size`, as the pager does, because the kit has no sizes for a grid: `scale` multiplies all its lengths. Colors come from the theme unless set.
@@ -233,7 +233,7 @@ f.end();
 ```
 
 - `row` puts its label in the column and leaves the row open for a control. A `hint` sits under the control, muted, or an `err` in its place in the theme's danger color, and `required` marks the label with "*", as the kit's field has them. `info` adds an ⓘ after the label that says more in a tooltip; `disabled` dims the label and hint beside a control the caller disables; `label_top` puts the label at the top, beside a control taller than a line. An empty label leaves just the control column, for a checkbox with its own title or buttons under the controls.
-- A row's label names its control to a screen reader, whole even when it is cut short, as nanoui names a control by the text before it on its line. A required row's name says so ("Name, required"; `required_text`), as the "*" isn't said.
+- A row's label names its control to a screen reader, whole even when it is cut short, beside it or stacked above it, with the ⓘ's text as its hint. A required row's name says so ("Name, required"; `required_text`), as the "*" isn't said. A control with a name of its own keeps it, the label read before it.
 - `property` shows a label and a value that wraps within the room left, the label beside its first line; a screen reader hears them as one ("Hostname, studio.local"). With `selectable`, the value can be selected and copied; with `wrap = false`, it keeps to a line, ends in "…" and shows whole in a tooltip.
 - `heading` titles the rows after it, with a muted `description` under the title if wanted, and a `status` (danger for what can't be undone) that colors its title and its card. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them. `row_lines` draws a line between rows.
 - `foldingHeading` folds the rows after it and opens them again, eased, on a click or Enter or Space; the caller keeps whether it is open and draws its rows while it returns true. A screen reader hears it as a button that says whether it is expanded (`expanded_text`, `collapsed_text`).
@@ -272,6 +272,7 @@ f.end();
 ```
 
 - `breakRow` starts the next cell on a new row; `per_row` and `rows` say how it laid them out.
+- A cell is the same box whatever row it falls in, so a button or field in it keeps the keyboard, and its animations, as the flow wraps it onto another row.
 - `fill` stretches the cells to share each row's width, the cell width the narrowest they get, for cards that span their pane; a last row of fewer cells keeps their width.
 - `f.stat(label, value, opts)` puts a stat in the next cell. With `.size = .xs, .card = null` it is a compact reading, so a row of them ("FILES 312 · SIZE 4.2 GB · TIME 0:42") wraps as the window narrows.
 
@@ -614,6 +615,7 @@ controls.meter(c, 1, .{ .ramp = &hues, .gap = 0, .radius = 0, .segments = 48 });
 - With a `gap` of 0, lit all the way, it is a strip of colors in steps, for the gradients nanoui can't fill, such as under a slider. Its segments overlap by a point, so no seams show, and a `radius` rounds only the strip's ends.
 - `zones` labels equal runs of the segments, one a run ("<20", "<40", "80+"), with a wider `zone_gap` between runs: a scale in bands.
 - `min` and `max` take a value in its own units (a temperature from 20 to 110). `height` is a `ui.Length`, and a null `radius` rounds the segments' ends.
+- A value that isn't a number (NaN) is a reading not known: no segment is lit, at once, as a gauge shows none, and a screen reader hears nothing for it.
 
 ## gauge
 
@@ -639,7 +641,7 @@ controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .
 - At `.xs` without a tile, it is a compact reading: the label a caption, and the figure a point over the kit's text, for readings packed in rows with `flow`'s `stat`. `mono` writes the figure in the monospaced font.
 - `value_color` colors the figure, for one that says how something stands: without a tile, a reading such as "Thermal: Nominal" in the success color.
 - A row of stats shares it, each `.fill` wide; with the row's `itemsStretch`, the tiles are one height.
-- `unit` follows the figure, smaller and muted ("87" then "%"); `detail` is a muted line under it ("over the last hour"); and `loading` shows a spinner in place of a figure not yet known, so it never reads as 0 (a screen reader hears `loading_text`).
+- `unit` follows the figure, smaller and muted ("87" then "%"); `detail` is a muted line under it ("over the last hour"), which a screen reader hears after the figure; and `loading` shows a spinner in place of a figure not yet known, so it never reads as 0 (a screen reader hears `loading_text`).
 - `key` puts a dot before the label in the color of the series the stat reads in a chart beside it.
 - `scale` multiplies its lengths, as the charts'. Its history takes a scale as a trend does (`history_min`, `history_max`, `history_fixed_max`) and `history_ramp`.
 - `statButton` draws a stat that can be clicked, to lead to more: it lightens under the pointer, takes the keyboard as a button does (Tab, then Enter or Space), is a button to a screen reader, and returns its `ui.Interaction`.

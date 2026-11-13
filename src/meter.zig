@@ -88,7 +88,10 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     const known = std.math.isFinite(value);
     const said = if (opts.value_text.len > 0 or opts.label.len == 0 or !known) opts.value_text else c.print("{d}%", .{@round(v * 100)});
     chart.describe(c, r.index, opts.label, said, false, "");
-    const shown = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
+    // An unknown reading lights none at once, as a gauge shows none,
+    // rather than falling to empty as if to zero.
+    const tweened = ui.motion.number(c, "meter", v, .{ .tween = .{ .duration = 0.35 } });
+    const shown = if (known) tweened else 0;
     var run: ?ui.Div = null;
     var zone: usize = 0;
     for (0..opts.segments) |i| {
@@ -181,6 +184,37 @@ test "a meter lights the segments whose middle the value reaches" {
     try std.testing.expectEqual(@as(usize, 8), try litCount(7));
     try std.testing.expectEqual(@as(usize, 0), try litCount(-1));
     try std.testing.expectEqual(@as(usize, 0), try litCount(std.math.nan(f32)));
+}
+
+test "a meter whose reading becomes unknown lights none at once, and animates between known ones" {
+    const T = struct {
+        value: f32 = 1,
+        fn view(x: *@This(), c: *ui.Context) void {
+            meter(c, x.value, .{ .segments = 8, .color = cyan });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 200, .height = 40 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 8), litNow(&t));
+    x.value = std.math.nan(f32);
+    t.frame();
+    try std.testing.expectEqual(@as(usize, 0), litNow(&t));
+    // Known again, it rises from where the animation is.
+    x.value = 1;
+    t.frame();
+    try std.testing.expect(litNow(&t) < 8);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 8), litNow(&t));
+}
+
+/// Segments drawn lit in `cyan` in the tester's frame.
+fn litNow(t: *ui.Tester) usize {
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| n += @intFromBool(node.style.height == .fill and std.meta.eql(node.style.background, cyan));
+    return n;
 }
 
 test "a meter's ramp colors lit segments by their place, and unlit ones are the track" {

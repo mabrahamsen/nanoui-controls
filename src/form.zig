@@ -166,10 +166,10 @@ pub const Form = struct {
         const k = f.opts.scale;
         f.before(label, opts.required, opts.info.len > 0);
         const r = f.openRow(!opts.label_top);
-        f.drawLabel(label, .{ .required = opts.required, .info = opts.info, .disabled = opts.disabled, .names = true });
+        const label_box = f.drawLabel(label, .{ .required = opts.required, .info = opts.info, .disabled = opts.disabled, .names = true });
         const at_end = f.atEnd();
         if (at_end) ui.spacer(c);
-        return .{ .c = c, .row = r, .opts = opts, .size = f.opts.size, .indent = if (f.stacked) 0 else f.columnWidth() + f.opts.gap * k, .at_end = at_end };
+        return .{ .c = c, .row = r, .opts = opts, .size = f.opts.size, .indent = if (f.stacked) 0 else f.columnWidth() + f.opts.gap * k, .at_end = at_end, .label_box = label_box };
     }
 
     /// `label` in the form's column, then `value`, wrapping within the
@@ -182,7 +182,7 @@ pub const Form = struct {
         defer r.end();
         ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
         const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
-        f.drawLabel(label, .{ .top = f.firstLine(.{ .size = style.size }) });
+        _ = f.drawLabel(label, .{ .top = f.firstLine(.{ .size = style.size }) });
         var v = ui.div(c).wFull().pt(f.firstLine(style));
         if (f.atEnd()) v = v.row().justifyEnd();
         if (opts.selectable) c.node(v.index).style.selectable = true;
@@ -219,7 +219,7 @@ pub const Form = struct {
         if (live and it.hovered) c.cursor_hand = true;
         if (focus.showRing(c, it.focused)) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
-        f.drawLabel(label, .{ .disabled = opts.disabled });
+        _ = f.drawLabel(label, .{ .disabled = opts.disabled });
         {
             var v = ui.div(c).wFull().row().itemsCenter().justifyEnd().gap(4 * k);
             if (opts.disabled) v = v.opacity(focus.dimmed);
@@ -313,8 +313,8 @@ pub const Form = struct {
     }
 
     /// `text` in the labels' column, or across the row when stacked, with
-    /// its required mark and its ⓘ.
-    fn drawLabel(f: *const Form, text: []const u8, l: Label) void {
+    /// its required mark and its ⓘ; returns its box.
+    fn drawLabel(f: *const Form, text: []const u8, l: Label) u32 {
         const c = f.c;
         const k = f.opts.scale;
         const t = kit.tokens(c);
@@ -342,6 +342,7 @@ pub const Form = struct {
             ui.icon(c, "info.circle", .{ .size = size - 1, .color = t.muted });
             kit.tooltip(c, parts.still(c, i), l.info, .{});
         }
+        return col.index;
     }
 
     /// Measures `label` for the column, unless it is set, and draws the
@@ -393,9 +394,12 @@ pub const Row = struct {
     indent: f32,
     /// The control is at the row's end, and its hint under it there.
     at_end: bool,
+    /// The label's box, which names the control.
+    label_box: u32,
 
     /// Ends the row, then puts its hint or error under the control.
     pub fn end(r: Row) void {
+        nameControl(r.c, r.label_box);
         r.row.end();
         const msg = if (r.opts.err.len > 0) r.opts.err else r.opts.hint;
         if (msg.len == 0) return;
@@ -407,6 +411,34 @@ pub const Row = struct {
         endText(r.c, msg, .{ .size = r.size.text() - 1, .color = if (r.opts.err.len > 0) t.danger else t.muted, .wrap = true }, r.at_end, under.index, r.indent);
     }
 };
+
+/// Gives the first control after the label in box `label_box` that has no
+/// name of its own the label's description ("Notify, required", and the
+/// ⓘ's text as its hint), and leaves the label out, so it isn't read
+/// twice. nanoui would name it from the label only while the label is
+/// just before it on its line, and without the hint.
+fn nameControl(c: *ui.Context, label_box: u32) void {
+    const items = c.a11y_items.items;
+    const from = for (items, 0..) |it, i| {
+        if (it.node_index == label_box) break i;
+    } else return;
+    const label = &items[from];
+    if (label.hidden or label.label.len == 0) return;
+    for (items[from + 1 ..]) |*it| {
+        if (it.hidden) continue;
+        switch (it.role) {
+            .static_text, .group, .list, .row, .image, .popover => continue,
+            else => {},
+        }
+        if (it.label.len > 0) return;
+        const text = ui.access.textOf(c, c.alloc(), it.node_index) catch return;
+        if (text.len > 0) return;
+        it.label = label.label;
+        if (it.hint.len == 0) it.hint = label.hint;
+        label.hidden = true;
+        return;
+    }
+}
 
 test {
     _ = @import("form_tests.zig");

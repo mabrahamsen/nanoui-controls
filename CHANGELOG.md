@@ -2,6 +2,17 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Fixed
+
+- Form: a row names its control to a screen reader with its label stacked above it too (`stack_below`), where nanoui named it only from a label beside it; the ⓘ's text is the control's hint, and the label isn't read again. A control with a name of its own keeps it.
+- Flow: a cell is the same box whatever row it falls in, so a button or field in it keeps the keyboard as the window narrows or widens and the flow wraps it onto another row.
+- A control disabled while it has the keyboard takes no key in that frame: swatches moved their selection with an arrow key.
+- Grid: a grid whose rows aren't `clickable` shows a cut-off cell's tooltip.
+- `stat` and `statButton` say their `detail` to a screen reader, as the hint.
+- A meter whose reading becomes unknown (NaN) lights no segment at once, as a gauge shows none, rather than fading as if to zero.
+
 ## 0.8.1
 
 ### Fixed
