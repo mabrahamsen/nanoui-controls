@@ -248,10 +248,11 @@ pub fn natural(c: *ui.Context, index: u32) f32 {
         count += 1;
         const cw = switch (ch.content) {
             .text => |t| c.text.width(t.str, t.style),
-            // Without a frame, an icon is as wide as its size.
+            // Without a frame, an icon is as wide as nanoui lays out its
+            // symbol, or its size where it has none.
             .icon => |ic| switch (ch.style.width) {
                 .px => |px| px,
-                else => ic.size,
+                else => if (c.text.atlas.symbol(ic.name, ic.size, @backingInt(ic.weight))) |sp| sp.w + 2 * sp.x else ic.size,
             },
             else => switch (ch.style.width) {
                 .px => |px| px,
