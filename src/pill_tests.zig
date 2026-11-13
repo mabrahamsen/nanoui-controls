@@ -5,6 +5,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const pill_mod = @import("pill.zig");
+const parts = @import("parts.zig");
 const pill = pill_mod.pill;
 const pillOpen = pill_mod.pillOpen;
 
@@ -30,7 +31,7 @@ fn textNode(t: *ui.Tester, text: []const u8) ?@TypeOf(t.ctx.nodes.items[0]) {
     return null;
 }
 
-test "a pill is the accent by default, a status's color with one, and proportional" {
+test "a pill is the accent by default, a status's color with one, its label a shade that reads, and proportional" {
     const T = struct {
         fn view(_: *@This(), c: *ui.Context) void {
             const row = ui.div(c).row().gap(8).p(8);
@@ -46,9 +47,10 @@ test "a pill is the accent by default, a status's color with one, and proportion
     defer t.deinit();
     const tk = kit.tokens(&t.ctx);
     const live = textNode(&t, "LIVE").?.content.text.style;
-    try std.testing.expectEqual(tk.primary, live.color.?);
+    try std.testing.expectEqual(parts.readable(tk, tk.primary, 0.08), live.color.?);
     try std.testing.expect(!live.mono);
-    try std.testing.expectEqual(tk.danger, textNode(&t, "FAILED").?.content.text.style.color.?);
+    try std.testing.expectEqual(parts.readable(tk, tk.danger, 0.08), textNode(&t, "FAILED").?.content.text.style.color.?);
+    // A color of the caller's is as it is.
     try std.testing.expectEqual(ui.Color.hex(0x00ff00), textNode(&t, "OWN").?.content.text.style.color.?);
 }
 

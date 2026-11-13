@@ -285,7 +285,8 @@ controls.pill(c, "LIVE", .{ .status = .success, .lead = .{ .dot = .{} } });
 controls.pill(c, "P", .{ .shape = .box, .tooltip = "Performance cores" });
 ```
 
-- `status` takes the kit's status colors, neutral the accent; `color` goes over it.
+- `status` takes the kit's status colors, neutral the accent; `color` goes over it. A status's color is the tint's, the border's and the lead's, and the label takes a shade of it that reads at 4.5:1 on the tint (lighter or darker as the theme is), where the light theme's green, say, reads faint as text; a `color` of the caller's is the label's as it is. Notices' titles, panels' captions, form headings and gauges' figures in a status's color take such a shade too.
+- `max_width` cuts a long label short with "…", whole in a tooltip and to a screen reader.
 - `lead` is a dot that glows (`dim` draws it faint, the off beat of a blink) or an icon. `shape` is `.capsule` or `.box`.
 - `size` (`.xs`) sets the label a point under the kit's text, and its padding, gap and corners follow it; `text_size`, `px`, `py`, `gap`, `radius` and `height` set them one by one. `pillLengths(opts)` gives them, to measure a pill before drawing it.
 - `mono` writes the label in the monospaced font, so figures line up from pill to pill; `weight`, and `fill` and `edge`, the tint's and border's opacity.
@@ -386,6 +387,7 @@ if (controls.tabStrip(c, &tabs, &tab, .{})) scrollToTop();
 
 - A screen reader hears each as a tab, with its count or `loading_text` as its value.
 - `tabStripOf` keeps the tab as an enum's value. `tabStripOpen` leaves the tabs' line open for a button at its end; its `end()` draws the rule and says whether the tab changed.
+- Tabs too many for the strip scroll sideways, by the wheel (either way) and the trackpad, between chevrons at its ends that page through them; the chosen tab, by a click, the keys or the caller, is scrolled into view. Tabs that fit have no chevrons.
 - `size` or `text_size`, `max_count`, `disabled` and `scale`.
 
 ## toasts
@@ -401,6 +403,7 @@ if (controls.toasts(c, &s.toasts, .{})) |hit| if (hit.tag == undo) restore(hit.p
 - `show(message, ToastShow)` adds one and returns its id: `status` (an icon and an edge in its color), `title`, `action` (a button's words), `seconds` (4; 0 stays until closed), and the caller's `tag` and `payload`. The same toast shown again starts its time again instead of showing twice. At most 6 are kept, a seventh pushing out the oldest; their texts are copied in and cut short past fixed lengths.
 - `close(id)` slides one out, `dismiss(id)` removes it at once, and `items()` lists them.
 - `toasts(c, &list, opts)` returns the toast whose action was clicked (`id`, `tag`, `payload`), which then closes. A toast's time doesn't run while the pointer rests on it; they slide in and out, at once with reduced motion.
+- The stack keeps within the window's height: the oldest show first, and one that doesn't fit after them waits until they go, its time not running and not yet said.
 - A screen reader hears each toast once as it comes ("title. text"). Tab reaches its action and its close button (`close_text`), and a click on either leaves the keyboard where it was, as the toast goes.
 - `corner` (top or bottom, left, center or right), `width` (narrowed to fit the window), `margin`, `size` or `text_size`, `layer` (over popovers, under tooltips) and `scale`.
 
@@ -415,7 +418,7 @@ if (r.removed) |i| removeTime(i);
 ```
 
 - A separator (`separators`, "," by default) or Enter ends a chip, and pasting text with separators makes several. Backspace in the empty field removes the last. `added` are the chips made this frame, trimmed and never empty; `removed` the index of one closed; `focused` whether the field has the keyboard.
-- The chips wrap where the width ends, and the field starts a new line when less than `field_width` is left.
+- The chips wrap where the width ends, and the field starts a new line when less than `field_width` is left. A chip is never wider than the field: a longer one ends in "…", keeping its ×, shows whole in a tooltip and is said whole.
 - `invalid`, one flag a chip kept by the caller, draws a chip that doesn't read in the danger color, said with `invalid_text`. `inherited` values come first, muted and without a ×, `inherited_note` saying what they are.
 - Tab reaches each ×, named with `remove_text` ("Remove {}"), and Space or Enter removes its chip, the field taking the keyboard.
 - `placeholder` and `add_placeholder`, `width`, `size` or `text_size`, `mono`, `disabled` (the chips without a × or a field) and `scale`.
@@ -625,7 +628,7 @@ A ring of ticks from the bottom left round to the bottom right, lit up to a valu
 controls.gauge(c, score, .{ .ramp = &strength, .text = "B", .caption = "62 bits", .label = "Strength" });
 ```
 
-- Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them; unlit ones are the `track`. The figure is in the value's color.
+- Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them; unlit ones are the `track`. The figure is in the value's color, in a shade that reads as text.
 - `diameter` is its width across and `ticks` how many; their length, width and glow keep in proportion to the diameter, within its box. `min` and `max` take a value in its own units. `inner_line` draws a thin circle inside them.
 - A screen reader hears its value as a percentage, unless given a `value_text`.
 

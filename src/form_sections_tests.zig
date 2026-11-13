@@ -6,6 +6,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const form_mod = @import("form.zig");
+const parts = @import("parts.zig");
 const form = form_mod.form;
 
 /// A form of a plain section, a folding one, a link and a note.
@@ -168,18 +169,19 @@ test "a note sits under its section, and the rows after it start a new card" {
     try std.testing.expectEqual(@as(usize, 2), cards);
 }
 
-test "a danger heading's title and card are in the danger color" {
+test "a danger heading's card is in the danger color, and its title in a shade of it that reads" {
     var x: Settings = .{ .opts = .{ .grouped = true } };
     var t: ui.Tester = undefined;
     try start(&x, &t);
     defer t.deinit();
-    const danger = kit.tokens(&t.ctx).danger;
+    const tk = kit.tokens(&t.ctx);
+    const danger = tk.danger;
     var title_tinted = false;
     var card_tinted = false;
     for (t.ctx.nodes.items) |node| {
         switch (node.content) {
             .text => |tx| if (std.mem.eql(u8, tx.str, "Danger zone")) {
-                title_tinted = std.meta.eql(tx.style.color.?, danger);
+                title_tinted = std.meta.eql(tx.style.color.?, parts.readable(tk, danger, 0));
             },
             else => {},
         }
