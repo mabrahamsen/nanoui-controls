@@ -74,7 +74,7 @@ pub const Options = struct {
 pub fn callout(c: *ui.Context, text: []const u8, opts: Options) bool {
     const r = calloutOpen(c, text, opts);
     defer r.end();
-    return opts.closable and buttons.closeButton(c, opts.close_text).clicked;
+    return opts.closable and buttons.closeButton(c, opts.close_text, false).clicked;
 }
 
 /// A callout, left open after its text for more, such as a button at its

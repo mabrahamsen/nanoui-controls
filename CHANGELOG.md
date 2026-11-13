@@ -6,6 +6,11 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ### Added
 
+- `segmented` and `segmentedOf`: one choice out of a few as one bordered group, one stop for Tab, the arrows, Home and End choosing and passing disabled options; heard as radio buttons.
+- `tabStrip`, `tabStripOf` and `tabStripOpen`: tabs on a rule with counts in badges, a spinner while a count loads, and an alert, chosen as `segmented` is; heard as tabs. Both take `Choice`: a label, an icon, a count, loading, alert, disabled and a tooltip.
+- `Toasts` and `toasts`: messages in a corner that the app keeps in fixed buffers, with a status, a title, an action, a time that pauses under the pointer, and a tag and a payload given back with the action; the same message shown twice shows once, each is said to a screen reader once, and a click on its buttons leaves the keyboard where it was.
+- `chipInput`: a field of chips to type into, ended by a separator or Enter, several pasted at once, Backspace taking the last back, each × reached by Tab and named; chips flagged `invalid` in the danger color, and `inherited` ones muted.
+- `chip`: an option shown as a chip that is on or off, heard as a checkbox, with a color swatch if wanted.
 - `pill` and `pillOpen`: a short label tinted in a status's color, led by a glowing dot or an icon, as a capsule or a badge, with a tooltip and `value_text` for a screen reader; `pillLengths` measures one.
 - `caption` and `captionOpen`: a small heading in muted capitals, heard as a heading, with an aside, an icon, a line left open for a count or a button at its end, and cutting short.
 - `panel`: a bordered box that groups what is in it under a caption, tinted by a status, and folding with `open`, its head one button that Tab reaches and a screen reader hears as expanded or collapsed.

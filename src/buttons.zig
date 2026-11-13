@@ -20,6 +20,10 @@ pub const Options = struct {
     /// Shown when the pointer rests on it.
     tooltip: []const u8 = "",
     disabled: bool = false,
+    /// A click leaves the keyboard where it was, whatever
+    /// `setFocusRingShows` says: for a button that goes as it is pressed,
+    /// a toast's.
+    keep_keyboard: bool = false,
 };
 
 /// A button reading `title`; its interaction, `clicked` by a click, or by
@@ -37,7 +41,11 @@ pub fn button(c: *ui.Context, title: []const u8, opts: Options) ui.Interaction {
     const name = if (opts.label.len > 0) opts.label else if (title.len > 0) title else opts.tooltip;
     ui.access.describe(c, index, .{ .role = .button, .label = name, .enabled = !opts.disabled });
     if (opts.disabled) return it;
-    const own = focus.button(c, index, true);
+    var own = focus.button(c, index, true);
+    if (opts.keep_keyboard and c.input.pressed and was != own.id and c.focus == own.id) {
+        c.focus = was;
+        own.focused = false;
+    }
     if (focus.showRing(c, own.focused)) {
         const n = c.node(index);
         n.style.border = focus.ring(c);
@@ -60,8 +68,8 @@ pub fn iconButton(c: *ui.Context, icon: []const u8, opts: Options) ui.Interactio
 
 /// A ✕, `text` in its tooltip and its name to a screen reader: what
 /// closes a callout or a toast.
-pub fn closeButton(c: *ui.Context, text: []const u8) ui.Interaction {
-    return iconButton(c, "xmark", .{ .size = .xs, .label = text, .tooltip = text });
+pub fn closeButton(c: *ui.Context, text: []const u8, keep_keyboard: bool) ui.Interaction {
+    return iconButton(c, "xmark", .{ .size = .xs, .label = text, .tooltip = text, .keep_keyboard = keep_keyboard });
 }
 
 test "a button is reached by Tab, pressed with Enter or Space, and named by its words" {
@@ -72,7 +80,7 @@ test "a button is reached by Tab, pressed with Enter or Space, and named by its 
             const row = ui.div(c).row().gap(8).p(8);
             defer row.end();
             if (iconButton(c, "eye", .{ .label = "Show password", .disabled = x.disabled }).clicked) x.clicked += 1;
-            if (closeButton(c, "Close").clicked) x.clicked += 10;
+            if (closeButton(c, "Close", false).clicked) x.clicked += 10;
         }
     };
     var x: T = .{};
