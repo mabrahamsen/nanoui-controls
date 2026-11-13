@@ -23,6 +23,9 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`tabStrip`](#tabstrip) | Tabs on a rule, each with a count in a badge, a spinner while it loads, or an alert. |
 | [`toasts`](#toasts) | Short messages that come and go in a corner, with an action such as "Undo". |
 | [`chipInput`](#chipinput) and [`chip`](#chip) | A field of chips to type values into, and an option shown as a chip that is on or off. |
+| [`iconTile`](#icontile) | A symbol in a rounded square tinted in a status's color, lit or off. |
+| [`header`](#header) | What a window or a pane is: a tile, a title and a subtitle, with pills and buttons at its end. |
+| [`inputBox`](#inputbox) | A text field in a frame of its own: an icon, a clear button, Paste, and an eye for a secret. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -48,7 +51,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.4"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.8.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -428,6 +431,50 @@ if (controls.chip(c, "Mine only", &mine, .{})) refilter();
 - A screen reader hears a checkbox, with `on_text` or `off_text`.
 - `swatch` puts a color dot before the label; `size` or `text_size`, `disabled` and `scale`.
 
+## iconTile
+
+An SF Symbol in a rounded square tinted in its color, for a device, an app or a kind of thing, and the lead of a `header`.
+
+```zig
+controls.iconTile(c, "sun.max", .{ .status = .warning, .lit = on, .label = "Light, on" });
+```
+
+- `status` or `color` tints it; `lit = false` draws it in the surface's colors with a muted icon, or `icon_color`, for something off.
+- `size` (its side, 32), `radius` (28% of the side), `icon_size` (45%), `fill` and `edge` (the tint's and the border's opacity), `glow` and `glow_blur`, and `scale`.
+- A screen reader hears an image named `label`; without one it is a decoration and left out.
+- `iconTileOpen` leaves it open for an icon the app draws, at the `icon_size` and in the `icon_color` it gives; `end` it.
+
+## header
+
+What a window or a pane is, at its top: an icon tile, a title and a muted subtitle under it. It is left open after them, for pills and buttons at its end, and the caller ends it.
+
+```zig
+const h = controls.header(c, .{ .icon = "internaldrive", .title = "Backups", .subtitle = "~/Documents", .subtitle_mono = true });
+controls.pill(c, "RUNNING", .{ .status = .success });
+h.end();
+```
+
+- `icon` (empty leaves the tile out) and `tile`, the tile's options, which take the header's `status` or `color` unless they set their own.
+- The title is the kit's text at `size` (`.md`) and two points, or `text_size`; the subtitle three points under it, monospaced with `subtitle_mono`, for a path or a host.
+- A screen reader hears the title as a heading, then the subtitle. In a narrow pane both are cut short with an ellipsis, whole in a tooltip, and what is at the end keeps its room.
+
+## inputBox
+
+nanoui's text field in a frame of its own, as a search box or a password field has it. The caller keeps the text and does what the buttons ask.
+
+```zig
+const r = controls.inputBox(c, &search, .{ .icon = "magnifyingglass", .placeholder = "Search" });
+if (r.cleared) search.set("");
+
+_ = controls.inputBox(c, &password, .{ .icon = "lock", .label = "Password", .shown = &show, .paste = true });
+```
+
+- While the field has the keyboard, the frame and the icon take the accent (`color`) and it glows (`glow`). Each box glows for its own field.
+- `shown` makes it a secret, its text dots until the eye shows it; a screen reader isn't told a hidden secret's text.
+- `clearable` (null: while there is text, unless it is a secret) adds a clear button, and `paste` a Paste button; `cleared` and `pasted` say they were pressed. A click on a button gives the field the keyboard back, so typing goes on; Tab reaches each.
+- A screen reader hears the field by its `label`, or its placeholder; each button by its words (`show_text`, `hide_text`, `clear_text`, `paste_text`).
+- `card` is the frame's `Surface` (the theme's surface, border and radius, as wide as its parent; in a row, the room the rest leaves); a width in points is multiplied by `scale`. `mono`, `size` or `text_size`, and `disabled`, which shows its text (a hidden secret's as dots) without the field or the buttons.
+
 ## Surface
 
 The look of a box a control draws itself in, which `panel`, `notice` and `stat` take as their `card`: `fill`, `border`, `border_width`, `radius`, `px`, `py`, `gap`, `width`, `height` and a `glow`. A field left null takes the control's own, so an app keeps its look as a preset and passes it in; `a.over(b)` lays one look over another, field by field.
@@ -618,7 +665,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. Status is a backup service at a glance ([`status.zig`](examples/gallery/status.zig)): pills, compact readings written by `format`, callouts to close and bring back, panels side by side and one that folds, and a notice while its server is stopped or connecting. Choices is a backup's history to filter ([`choices.zig`](examples/gallery/choices.zig)): a segmented range, a tab strip with counts, chips on and off, times of day typed as chips, and buttons that raise toasts, one with an Undo. The controls ring only while the keyboard is in use.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. Status is a backup service at a glance ([`status.zig`](examples/gallery/status.zig)): a header, pills, compact readings written by `format`, callouts to close and bring back, panels side by side and one that folds, a password in an input box, and a notice while its server is stopped or connecting. Choices is a backup's history to filter ([`choices.zig`](examples/gallery/choices.zig)): a search box, a segmented range, a tab strip with counts, chips on and off, times of day typed as chips, and buttons that raise toasts, one with an Undo. The controls ring only while the keyboard is in use.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, fit them all or reset them, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)) in cards, its controls at the rows' ends: a text field, swatches, a number input, a select and toggles in rows under headings with descriptions, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, a note, an "Advanced" section that folds, properties to read, copy, or read whole in a tooltip, a row that leads somewhere, and a danger zone. Narrow the window and its labels go above their controls; switch off the cards, the lines between rows, and the controls at the ends, or put the labels by their controls.

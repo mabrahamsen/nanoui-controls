@@ -2,10 +2,13 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.8.0
 
 ### Added
 
+- `iconTile` and `iconTileOpen`: a symbol in a rounded square tinted in a status's color, lit or off (`icon_color` for an off one's icon), glowing if asked; an image named `label` to a screen reader, or a decoration.
+- `header`: an icon tile, a title heard as a heading and a subtitle, left open for pills and buttons at its end; in a narrow pane the words are cut short, whole in a tooltip.
+- `inputBox`: a text field in a frame of its own that glows while it has the keyboard, with a leading icon, a clear button, a Paste button, and for a secret dots and an eye; each button named and reached by Tab, a click giving the field the keyboard back; a `label` for a field without a placeholder, and a hidden secret's text kept from a screen reader.
 - `segmented` and `segmentedOf`: one choice out of a few as one bordered group, one stop for Tab, the arrows, Home and End choosing and passing disabled options; heard as radio buttons.
 - `tabStrip`, `tabStripOf` and `tabStripOpen`: tabs on a rule with counts in badges, a spinner while a count loads, and an alert, chosen as `segmented` is; heard as tabs. Both take `Choice`: a label, an icon, a count, loading, alert, disabled and a tooltip.
 - `Toasts` and `toasts`: messages in a corner that the app keeps in fixed buffers, with a status, a title, an action, a time that pauses under the pointer, and a tag and a payload given back with the action; the same message shown twice shows once, each is said to a screen reader once, and a click on its buttons leaves the keyboard where it was.

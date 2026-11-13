@@ -2,7 +2,9 @@
 //! say how it stands, a row of compact readings what it last did (in
 //! sizes and times as `format` writes them), and callouts what needs a
 //! look; close the warning, or bring it back with "Show the warning".
-//! Panels group its settings, one of them folding, and "Server" stops,
+//! A header names it, its tile green while it runs. Panels group its
+//! settings, one of them folding, with its password in an input box that
+//! hides it until the eye shows it, and "Server" stops,
 //! starts and connects the service, its pane a notice while it isn't
 //! running.
 const std = @import("std");
@@ -16,6 +18,8 @@ pub const Backups = struct {
     server: enum { running, stopped, connecting } = .running,
     warning: bool = true,
     advanced: bool = false,
+    password: ui.TextBuffer = .{},
+    show_password: bool = false,
     since: f64 = 0,
     /// The readings, as the last backup left them.
     files: u64 = 312_480,
@@ -34,9 +38,8 @@ pub const Backups = struct {
             if (c.time - b.since > 1.5) b.server = .running else c.frameIn(0.1);
         }
         {
-            const bar = ui.div(c).row().wFull().itemsCenter().gap(8);
+            const bar = controls.header(c, .{ .icon = "internaldrive", .title = "Backups", .subtitle = "~/Documents to the office server", .subtitle_mono = true, .status = if (b.server == .running) .success else .warning });
             defer bar.end();
-            ui.text(c, "Backups", .{ .size = 16, .weight = .semibold });
             switch (b.server) {
                 .running => controls.pill(c, "RUNNING", .{ .status = .success, .lead = .{ .dot = .{ .dim = @mod(c.time, 2) > 1.4 } } }),
                 .stopped => controls.pill(c, "STOPPED", .{ .status = .warning }),
@@ -44,7 +47,6 @@ pub const Backups = struct {
             }
             if (b.server == .running) c.frameIn(0.2);
             controls.pill(c, "E2E", .{ .shape = .box, .tooltip = "Encrypted end to end", .value_text = "Encrypted end to end" });
-            ui.spacer(c);
             const label = switch (b.server) {
                 .running => "Stop server",
                 .stopped => "Start server",
@@ -99,6 +101,8 @@ pub const Backups = struct {
             const p = controls.panel(c, .{ .title = "ADVANCED", .open = &b.advanced });
             defer p.end();
             if (b.advanced) {
+                controls.caption(c, "REPOSITORY PASSWORD", .{ .heading = false });
+                if (controls.inputBox(c, &b.password, .{ .icon = "lock", .label = "Repository password", .shown = &b.show_password, .paste = true, .size = .sm }).cleared) b.password.set("");
                 const h = controls.captionOpen(c, "COMPRESSION", .{ .aside = "zstd", .heading = false });
                 h.trailing();
                 controls.pill(c, "FAST", .{ .status = .info });

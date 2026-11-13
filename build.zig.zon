@@ -1,6 +1,6 @@
 .{
     .name = .nanoui_controls,
-    .version = "0.7.4",
+    .version = "0.8.0",
     .fingerprint = 0x573c19433a205e58,
     .minimum_zig_version = "0.17.1",
     .dependencies = .{

@@ -1,4 +1,5 @@
-//! The gallery's choices pane: a backup's history to filter. A segmented
+//! The gallery's choices pane: a backup's history to filter, by words in
+//! a search box (its ✕ clears it) and by more. A segmented
 //! group picks the range (its counts change with it), a tab strip what
 //! kind of run, chips that turn on and off narrow it, and a field of
 //! chips holds the times of day it runs (type "9:00," or paste several;
@@ -16,6 +17,7 @@ const Range = enum { today, week, month, year };
 pub const History = struct {
     range: Range = .week,
     tab: usize = 0,
+    search: ui.TextBuffer = .{},
     mine: bool = false,
     large: bool = true,
     /// The times of day, kept here: what the field gives is the frame's.
@@ -39,6 +41,10 @@ pub const History = struct {
             .month => 120,
             .year => 1460,
         };
+        {
+            const r = controls.inputBox(c, &h.search, .{ .icon = "magnifyingglass", .placeholder = "Filter runs", .size = .sm });
+            if (r.cleared) h.search.set("");
+        }
         _ = controls.segmentedOf(c, Range, &h.range, &.{
             .{ .label = "Today" },
             .{ .label = "Week" },

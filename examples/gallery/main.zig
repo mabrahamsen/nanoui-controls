@@ -149,6 +149,8 @@ pub fn main(init: std.process.Init) !void {
     defer state.browser.search.deinit();
     defer state.settings.name.deinit();
     defer state.history.field.deinit();
+    defer state.history.search.deinit();
+    defer state.backups.password.deinit();
     _ = try app.newWindow(.{
         .title = "nanoui-controls",
         .width = 980,
