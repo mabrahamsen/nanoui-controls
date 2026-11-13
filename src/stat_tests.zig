@@ -103,7 +103,7 @@ test "a stat's key is a dot before its label, in a card and without one, and sil
         fn view(x: *@This(), c: *ui.Context) void {
             const root = ui.div(c).column().w(240);
             defer root.end();
-            stat_mod.stat(c, "Read", "2.4 MB/s", .{ .key = red, .card = x.card });
+            stat_mod.stat(c, "Read", "2.4 MB/s", .{ .key = red, .card = if (x.card) .{} else null });
         }
         fn dot(t: *ui.Tester) ?ui.Rect {
             for (t.ctx.nodes.items) |node| if (node.style.background) |bg| if (std.meta.eql(bg, red)) return t.ctx.rects.get(node.id).?;
