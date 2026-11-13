@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.7.4
+
+### Changed
+
+- Built on nanoui 0.14.2, which an app using these controls must pin too. The controls work as before.
+
 ## 0.7.3
 
 ### Changed

@@ -30,7 +30,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | | Version |
 |---|---|
 | Zig | 0.17.1 or later |
-| nanoui | 0.14.1 |
+| nanoui | 0.14.2 |
 
 The app must pin the same nanoui release as this library, so both share one copy of nanoui. Otherwise nanoui's types don't match and the build fails.
 
@@ -39,7 +39,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.3"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.7.4"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
