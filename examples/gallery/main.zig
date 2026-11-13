@@ -8,7 +8,9 @@
 //! whose charts move with its readings, its alerts (readings over 80%) in
 //! a pill, and "Every chart" each chart once, as figures it doesn't change
 //! (charts.zig), a branch with the charts of histories and of parts under
-//! it. "More to come" is a row that can't be chosen yet. The counts load
+//! it; "Status" a backup service at a glance, in pills, readings,
+//! callouts, panels and notices (status.zig). "More to come" is a row
+//! that can't be chosen yet. The counts load
 //! for a moment at launch.
 //!
 //! Drag the splitter beside the sidebar to resize it, or click it and use
@@ -26,6 +28,7 @@ const charts = @import("charts.zig");
 const form = @import("form.zig");
 const sidebar = @import("sidebar.zig");
 const groups = @import("groups.zig");
+const status = @import("status.zig");
 
 const Gallery = struct {
     /// The key of the view shown, as the sidebar chose it.
@@ -45,6 +48,7 @@ const Gallery = struct {
     settings: form.Settings,
     tuning: sidebar.Tuning = .{},
     pulls: groups.Pulls = .{},
+    backups: status.Backups = .{},
     /// When the first frame was drawn: the counts load for a moment after.
     launched: ?f64 = null,
 
@@ -85,6 +89,7 @@ const Gallery = struct {
                 }
                 group.end();
             }
+            sb.item("status", "Status", .{ .icon = "checklist" });
             sb.item("more", "More to come", .{ .icon = "sparkles", .disabled = true });
             if (sb.end()) |key| g.shown = key;
             if (sb.secondary_clicked) |key| {
@@ -119,6 +124,8 @@ const Gallery = struct {
             g.settings.view(c);
         } else if (std.mem.eql(u8, g.shown, "grouped")) {
             g.pulls.view(c);
+        } else if (std.mem.eql(u8, g.shown, "status")) {
+            g.backups.view(c);
         } else if (std.mem.eql(u8, g.shown, "sidebar")) {
             g.tuning.view(c);
         } else g.browser.view(c);

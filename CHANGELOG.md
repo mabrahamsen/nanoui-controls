@@ -6,8 +6,20 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ### Added
 
+- `pill` and `pillOpen`: a short label tinted in a status's color, led by a glowing dot or an icon, as a capsule or a badge, with a tooltip and `value_text` for a screen reader; `pillLengths` measures one.
+- `caption` and `captionOpen`: a small heading in muted capitals, heard as a heading, with an aside, an icon, a line left open for a count or a button at its end, and cutting short.
+- `panel`: a bordered box that groups what is in it under a caption, tinted by a status, and folding with `open`, its head one button that Tab reaches and a screen reader hears as expanded or collapsed.
+- `callout` and `calloutOpen`: an icon and wrapping text in a tinted box, with a title, a ✕ that Tab reaches and is named, and said to a screen reader once when a danger or a warning one appears.
+- `notice` and `noticeOpen`: a large icon, a title and a centered description in a panel, for a pane that is empty, stopped or waiting, with a spinner while loading and room for a button.
+- `Surface`, the look of a box a control draws itself in, which `panel`, `notice` and `stat` take as `card`; `over` lays one over another.
+- `format`: sizes, rates, grouped figures, clocks, spans, how long ago and paths in the home folder, for the frame or into a buffer, with the words for time replaceable.
+- `stat`: `mono`, and at `.xs` without a tile a compact reading, a caption over a figure; `Flow.stat` puts one in a flow's next cell.
 - `setFocusRingShows(.keyboard)`, called once by an app, shows the controls' ring only while the keyboard is in use, as on a Mac: a key shows it and the pointer hides it, the ring nanoui draws round a control's box included. A click on a control that is a button (the stat button, a bar list's row, the form's link rows and folding headings) then leaves the keyboard where it was. Controls with keys of their own still take the keyboard on a click. The default, `.focused`, is as before.
 - Grid: `g.headingRow(opts)` makes a group's heading row with nothing drawn in it, for the caller's own chevron, title and lines, and says whether the group is `open` and its `depth`; the grid keeps folding it, its keys, the selection and what a screen reader hears. `indent_step` sets how far each level steps in, and `fade_in = false` shows a group's rows at once as it opens.
+
+### Changed
+
+- `stat`'s `card` is a `?Surface`: `.{}` is the tile as before, any of its fields can be set, and `null` replaces `card = false`. A stat at `.xs` without a tile is now a compact reading, its figure a point over the kit's text rather than twice it.
 
 ## 0.7.4
 

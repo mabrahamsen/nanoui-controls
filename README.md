@@ -14,6 +14,11 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`form`](#form) | Rows with a label beside a control or a value, the labels in one column, for a settings pane or an inspector. |
 | [`swatches`](#swatches) | A row of round colors to pick one from, with the mouse or the keys. |
 | [`flow`](#flow) | Cells of one width, as many to a row as fit, wrapping onto more rows. |
+| [`pill`](#pill) | A short label tinted in a status's color, led by a glowing dot or an icon: "● LIVE", "3 FAILED", a badge. |
+| [`caption`](#caption) | A small heading in muted capitals, with an aside, or a count or a button at the end of its line. |
+| [`panel`](#panel) | A bordered box that groups what is in it, under a caption, tinted by a status, folding if wanted. |
+| [`callout`](#callout) | An icon and text in a box tinted in a status's color: a warning, a finding, a note. |
+| [`notice`](#notice) | What a pane shows in place of its content when it is empty, stopped or waiting. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -261,6 +266,111 @@ f.end();
 
 - `breakRow` starts the next cell on a new row; `per_row` and `rows` say how it laid them out.
 - `fill` stretches the cells to share each row's width, the cell width the narrowest they get, for cards that span their pane; a last row of fewer cells keeps their width.
+- `f.stat(label, value, opts)` puts a stat in the next cell. With `.size = .xs, .card = null` it is a compact reading, so a row of them ("FILES 312 · SIZE 4.2 GB · TIME 0:42") wraps as the window narrows.
+
+## pill
+
+A short label in a box tinted in its color: a status in a capsule, or a badge in a box at least as wide as it is tall. The kit's `tag` with a lead, a tooltip, a height, and the tint's strength to set.
+
+```zig
+controls.pill(c, "LIVE", .{ .status = .success, .lead = .{ .dot = .{} } });
+controls.pill(c, "P", .{ .shape = .box, .tooltip = "Performance cores" });
+```
+
+- `status` takes the kit's status colors, neutral the accent; `color` goes over it.
+- `lead` is a dot that glows (`dim` draws it faint, the off beat of a blink) or an icon. `shape` is `.capsule` or `.box`.
+- `size` (`.xs`) sets the label a point under the kit's text, and its padding, gap and corners follow it; `text_size`, `px`, `py`, `gap`, `radius` and `height` set them one by one. `pillLengths(opts)` gives them, to measure a pill before drawing it.
+- `mono` writes the label in the monospaced font, so figures line up from pill to pill; `weight`, and `fill` and `edge`, the tint's and border's opacity.
+- `pillOpen` leaves it open after its label, for a button in it; the caller ends it.
+- A screen reader hears its label, or `value_text` in its place for a symbol or an abbreviation, and its `tooltip` after it. It takes no keyboard.
+
+## caption
+
+A small heading in muted capitals, semibold, heard as a heading so a screen reader can move from section to section. A panel's title is one.
+
+```zig
+controls.caption(c, "MEMORY", .{ .aside = "16 GB" });
+
+const h = controls.captionOpen(c, "LIGHTS", .{});
+controls.pill(c, "3 ON", .{});
+h.trailing();
+ui.text(c, "80%", .{});
+h.end();
+```
+
+- `aside` is a muted note after it, heard after it; `icon` an SF Symbol before it, in its color.
+- `captionOpen` leaves its line open for what goes right after it, then, after `trailing()`, at the line's end.
+- `cut` cuts it short with an ellipsis where the room its line leaves ends, so what follows keeps its room: a path before buttons.
+- `size` (`.xs`) or `text_size`, `color` (the muted text by default), `mono`, and `heading = false` for one that only labels a value beside it.
+
+## panel
+
+A rounded box with a border that groups what is in it, headed by a caption if it has a `title`. It is open for its content, which the caller ends; it isn't an element to a screen reader, so what it holds is reached as it is.
+
+```zig
+const p = controls.panel(c, .{ .title = "RETENTION" });
+defer p.end();
+
+const adv = controls.panel(c, .{ .title = "ADVANCED", .open = &advanced });
+defer adv.end();
+if (advanced) drawAdvanced(c);
+```
+
+- `status`, other than neutral, tints its border and caption, as the form's danger heading does its card.
+- With `open`, its head is one button, the caption and a chevron: a click, or Space or Enter once Tab reaches it, folds or opens it, and a screen reader hears its title and `expanded_text` or `collapsed_text`. The caller draws what it holds only while it is open.
+- `card` is its `Surface`: the theme's surface, border and radius, 14 points of padding and 10 between, as wide as its parent, unless it says. A width of `.auto` takes its content's, for panels side by side.
+
+## callout
+
+An icon and text that wraps, in a box tinted in the icon's color, in the flow of a page. The kit's `alert` with its title optional, the text in the theme's text color, and the icon, tint and padding the caller's to set.
+
+```zig
+controls.callout(c, "That folder doesn't exist.", .{ .status = .warning });
+if (controls.callout(c, "The disk is full.", .{ .status = .danger, .closable = true })) dismissed = true;
+```
+
+- `status` sets the icon and tint (neutral: the accent and an info icon); `color` and `icon` go over them, and `title` is a line above the text.
+- `closable` adds a ✕ at its end, named `close_text` to a screen reader and reached by Tab; `callout` returns true when it is clicked.
+- `calloutOpen` leaves it open after its text for a button ("Retry"); the caller ends it, and draws its own ✕ if it wants one.
+- A screen reader hears its title and text as one. `announce` says them when it appears or changes, once; by default a danger or a warning callout is said, and others aren't.
+- `width` (`.fill`, or `.auto` for as wide as its text), `plain` for the icon and text without the box, `icon_align`, `text_color`, `size` or `text_size`, `icon_size`, `fill`, `edge`, `px`, `py`, `gap`, `radius` and `scale`.
+
+## notice
+
+What a pane shows in place of its content when it is empty, stopped or waiting: a large icon, a title and a description, centered in a panel. The kit's `empty` with a status, a spinner, and room for a button.
+
+```zig
+controls.notice(c, .{ .icon = "tray", .title = "No snapshots yet", .description = "They show here once the first backup runs." });
+
+const n = controls.noticeOpen(c, .{ .icon = "network", .title = "Server stopped", .status = .warning });
+if (kit.button(c, "Start", .{ .variant = .primary }).clicked) start();
+n.end();
+```
+
+- `status` colors the icon and title; `color` and `icon_color` go over it. `loading` puts a spinner where the icon goes, without moving the title.
+- A short description sits on one line; a long one wraps into lines of about one length, centered.
+- A screen reader hears the title as a heading, then the description; `announce` says them once when it appears or changes.
+- `card` goes over the panel's look, with 32 points of room above and below by default; `mono`, `size` or `text_size`, `icon_size` and `scale`.
+
+## Surface
+
+The look of a box a control draws itself in, which `panel`, `notice` and `stat` take as their `card`: `fill`, `border`, `border_width`, `radius`, `px`, `py`, `gap`, `width`, `height` and a `glow`. A field left null takes the control's own, so an app keeps its look as a preset and passes it in; `a.over(b)` lays one look over another, field by field.
+
+```zig
+const card: controls.Surface = .{ .radius = 12, .px = 16 };
+const p = controls.panel(c, .{ .title = "RETENTION", .card = (controls.Surface{ .glow = .{} }).over(card) });
+```
+
+## format
+
+Figures as people read them, each for the frame (`format.size(c, …)`, in its arena as `c.print` is) and into a buffer (`format.sizeBuf(buf, …)`, for use outside a frame):
+
+- `size`: "145.7 MB", "0 B", in units of 1000, as drive makers and the system count, with at most one decimal; `rate`: "12.3 MB/s".
+- `grouped`: "1,234,567"; `clock`: "1:02:03" or "2:03".
+- `span`: "45 s", "12 min", "20 days", in its largest whole unit; `ago`: "just now", "12 min ago".
+- `tilde`: "~/Documents", the home folder shown as ~.
+
+`span` and `ago` take `TimeWords`, the units and how a span reads in the past ("{} ago"), so an app can put them in its own language.
 
 ## Charts
 
@@ -402,8 +512,9 @@ A figure to read at a glance, in a tile: its label, the figure large, how it cha
 controls.stat(c, "Requests", "12,480", .{ .change = "+8%", .status = .success, .history = per_minute });
 ```
 
-- `size` (`.md` by default) sizes the figure at twice the kit's text at that size; `card = false` leaves out the tile.
-- `value_color` colors the figure, for one that says how something stands: with `card = false`, a reading such as "Thermal: Nominal" in the success color.
+- `size` (`.md` by default) sizes the figure at twice the kit's text at that size. `card` is the tile's `Surface` (the theme's surface, border and radius by default), and `null` leaves it out.
+- At `.xs` without a tile, it is a compact reading: the label a caption, and the figure a point over the kit's text, for readings packed in rows with `flow`'s `stat`. `mono` writes the figure in the monospaced font.
+- `value_color` colors the figure, for one that says how something stands: without a tile, a reading such as "Thermal: Nominal" in the success color.
 - A row of stats shares it, each `.fill` wide; with the row's `itemsStretch`, the tiles are one height.
 - `unit` follows the figure, smaller and muted ("87" then "%"); `detail` is a muted line under it ("over the last hour"); and `loading` shows a spinner in place of a figure not yet known, so it never reads as 0 (a screen reader hears `loading_text`).
 - `key` puts a dot before the label in the color of the series the stat reads in a chart beside it.
@@ -431,7 +542,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. The controls ring only while the keyboard is in use.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. Status is a backup service at a glance ([`status.zig`](examples/gallery/status.zig)): pills, compact readings written by `format`, callouts to close and bring back, panels side by side and one that folds, and a notice while its server is stopped or connecting. The controls ring only while the keyboard is in use.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, fit them all or reset them, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)) in cards, its controls at the rows' ends: a text field, swatches, a number input, a select and toggles in rows under headings with descriptions, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, a note, an "Advanced" section that folds, properties to read, copy, or read whole in a tooltip, a row that leads somewhere, and a danger zone. Narrow the window and its labels go above their controls; switch off the cards, the lines between rows, and the controls at the ends, or put the labels by their controls.

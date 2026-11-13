@@ -457,7 +457,7 @@ pub fn catalog(c: *ui.Context, shelf: Shelf) void {
         }
         {
             const cell = f.cell();
-            controls.stat(c, "Thermal", "Nominal", .{ .card = false, .size = .xs, .value_color = t.success });
+            controls.stat(c, "Thermal", "Nominal", .{ .card = null, .size = .xs, .value_color = t.success });
             cell.end();
         }
         f.end();

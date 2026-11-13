@@ -16,6 +16,8 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
+const surface = @import("surface.zig");
+const Surface = surface.Surface;
 const trend_mod = @import("trend.zig");
 
 pub const Options = struct {
@@ -44,14 +46,19 @@ pub const Options = struct {
     /// ("Nominal" in the success color); null takes the theme's text.
     value_color: ?ui.Color = null,
     /// The figure's size, as the kit's: `.md` draws it at twice the kit's
-    /// text at that size.
+    /// text at that size. At `.xs` without a `card`, it is a compact
+    /// reading: the label a caption, and the figure a point over the kit's
+    /// text, for readings packed in rows ("FILES 312 · SIZE 4.2 GB").
     size: kit.Size = .md,
+    /// The figure in the monospaced font, so figures line up.
+    mono: bool = false,
     /// The parent's width by default; in a row, a share of the room the
     /// rest leaves.
     width: ui.Length = .fill,
-    /// A tile with a background and a border; without, the stat sits on
-    /// what it is drawn on.
-    card: bool = true,
+    /// Its tile: the theme's surface, border and radius and 12 points of
+    /// padding, unless it says; null draws none, and the stat sits on what
+    /// it is drawn on.
+    card: ?Surface = .{},
     /// After the figure, smaller and muted, on its line: "87" then "%".
     unit: []const u8 = "",
     /// A line of muted text under the figure: "over the last hour".
@@ -86,7 +93,7 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
     const it = focus.button(c, box.index, true);
     if (it.hovered) {
         c.cursor_hand = true;
-        box = box.bg(if (opts.card) t.surface_hover else t.surface_hover.alpha(0.6));
+        box = box.bg(if (opts.card != null) t.surface_hover else t.surface_hover.alpha(0.6));
     }
     // Enter or Space clicks it while it has the keyboard, as nanoui
     // clicks any focusable box.
@@ -100,12 +107,20 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
 fn open(c: *ui.Context, opts: Options, clickable: bool) ui.Div {
     const t = kit.tokens(c);
     const k = opts.scale;
-    var box = ui.div(c).column().gap(4 * k);
+    if (opts.card) |card| {
+        const box = surface.open(c, card, .{ .fill = t.surface, .border = t.border, .px = 12, .py = 12, .gap = 4, .scale = k });
+        if (card.width == null) c.node(box.index).style.width = opts.width;
+        return box;
+    }
+    var box = ui.div(c).column().gap(@as(f32, if (compact(opts)) 3 else 4) * k);
     c.node(box.index).style.width = opts.width;
-    if (opts.card) {
-        box = box.p(12 * k).rounded(t.radius * k).bg(t.surface).border(t.border);
-    } else if (clickable) box = box.p(6 * k).rounded(t.radius * k);
+    if (clickable) box = box.p(6 * k).rounded(t.radius * k);
     return box;
+}
+
+/// A compact reading: a caption over a figure a point over the kit's text.
+fn compact(opts: Options) bool {
+    return opts.size == .xs and opts.card == null;
 }
 
 fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts: Options, clickable: bool) void {
@@ -116,14 +131,20 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
         .label = label,
         .value = if (opts.change.len > 0 and !opts.loading) c.print("{s}, {s}", .{ figure, opts.change }) else figure,
     });
+    // Compact, the label is a caption, as `caption` draws one.
+    const small = compact(opts);
+    const label_style: ui.TextStyle = if (small)
+        .{ .size = opts.size.text() - 1, .weight = .semibold, .color = t.muted, .truncate = .ellipsis }
+    else
+        .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis };
     if (opts.key) |color| {
         const head = ui.div(c).row().itemsCenter().gap(6 * opts.scale);
         defer head.end();
         ui.div(c).w(6 * opts.scale).h(6 * opts.scale).roundedFull().bg(color).end();
-        ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
-    } else ui.text(c, label, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
+        ui.text(c, label, label_style);
+    } else ui.text(c, label, label_style);
     {
-        const size = opts.size.text() * 2;
+        const size = if (small) opts.size.text() + 1 else opts.size.text() * 2;
         const row = ui.div(c).row().itemsCenter().gap(8 * opts.scale);
         defer row.end();
         if (opts.loading) {
@@ -134,11 +155,11 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
             // The unit on the figure's line, at its foot.
             const fig = ui.div(c).row().itemsEnd().gap(3 * opts.scale);
             defer fig.end();
-            ui.text(c, value, .{ .size = size, .weight = .semibold, .color = opts.value_color orelse t.foreground });
+            ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = opts.value_color orelse t.foreground });
             const u = ui.div(c).pb(@round(size * 0.12));
             defer u.end();
             ui.text(c, opts.unit, .{ .size = @round(size * 0.55), .weight = .medium, .color = t.muted });
-        } else ui.text(c, value, .{ .size = size, .weight = .semibold, .color = opts.value_color orelse t.foreground });
+        } else ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = opts.value_color orelse t.foreground });
         if (opts.change.len > 0 and !opts.loading) kit.tag(c, opts.change, .{ .status = opts.status, .size = .xs, .pill = true });
     }
     if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
@@ -186,7 +207,7 @@ test "a stat says its label, figure and change, and a screen reader hears them a
 test "a stat without a change or a history draws neither" {
     const T = struct {
         fn view(_: *@This(), c: *ui.Context) void {
-            stat(c, "Uptime", "14 days", .{ .card = false });
+            stat(c, "Uptime", "14 days", .{ .card = null });
         }
     };
     var x: T = .{};
@@ -203,7 +224,7 @@ test "a stat's figure takes value_color, and the theme's text without it" {
     const T = struct {
         color: ?ui.Color = null,
         fn view(x: *@This(), c: *ui.Context) void {
-            stat(c, "Thermal", "Nominal", .{ .card = false, .value_color = x.color });
+            stat(c, "Thermal", "Nominal", .{ .card = null, .value_color = x.color });
         }
         fn figure(t: *ui.Tester) ui.Color {
             for (t.ctx.nodes.items) |node| switch (node.content) {

@@ -134,6 +134,43 @@ pub const flow = flow_mod.flow;
 pub const Flow = flow_mod.Flow;
 pub const FlowOptions = flow_mod.Options;
 
+const surface_mod = @import("surface.zig");
+pub const Surface = surface_mod.Surface;
+pub const SurfaceGlow = surface_mod.Glow;
+
+const pill_mod = @import("pill.zig");
+pub const pill = pill_mod.pill;
+pub const pillOpen = pill_mod.pillOpen;
+pub const pillLengths = pill_mod.lengths;
+pub const PillOptions = pill_mod.Options;
+pub const PillLead = pill_mod.Lead;
+pub const PillShape = pill_mod.Shape;
+pub const PillLengths = pill_mod.Lengths;
+
+const caption_mod = @import("caption.zig");
+pub const caption = caption_mod.caption;
+pub const captionOpen = caption_mod.captionOpen;
+pub const CaptionOptions = caption_mod.Options;
+pub const CaptionLine = caption_mod.CaptionLine;
+
+const panel_mod = @import("panel.zig");
+pub const panel = panel_mod.panel;
+pub const PanelOptions = panel_mod.Options;
+
+const callout_mod = @import("callout.zig");
+pub const callout = callout_mod.callout;
+pub const calloutOpen = callout_mod.calloutOpen;
+pub const CalloutOptions = callout_mod.Options;
+
+const notice_mod = @import("notice.zig");
+pub const notice = notice_mod.notice;
+pub const noticeOpen = notice_mod.noticeOpen;
+pub const NoticeOptions = notice_mod.Options;
+
+/// Figures as people read them: sizes, rates, counts, clocks, spans of
+/// time and paths (`format.zig`).
+pub const format = @import("format.zig");
+
 const focus_mod = @import("focus.zig");
 /// When the controls' focus ring shows: whenever a control has the
 /// keyboard (the default), or only while the keyboard is in use.
@@ -160,4 +197,13 @@ test {
     _ = flow_mod;
     _ = gauge_mod;
     _ = focus_mod;
+    _ = surface_mod;
+    _ = pill_mod;
+    _ = caption_mod;
+    _ = panel_mod;
+    _ = callout_mod;
+    _ = notice_mod;
+    _ = format;
+    _ = @import("parts.zig");
+    _ = @import("buttons.zig");
 }

@@ -673,7 +673,7 @@ const Gauges = struct {
         }
         {
             const cell = f.cell();
-            controls.stat(c, "Thermal", "Nominal", .{ .card = false, .size = .xs, .value_color = t.success });
+            controls.stat(c, "Thermal", "Nominal", .{ .card = null, .size = .xs, .value_color = t.success });
             cell.end();
         }
         f.end();
@@ -1007,11 +1007,130 @@ fn keyedCharts(_: *u8, c: *ui.Context) void {
     const row = ui.div(c).row().wFull().gap(10).itemsStretch();
     defer row.end();
     controls.stat(c, "Read", "2.4", .{ .unit = "MB/s", .key = t.primary, .size = .sm });
-    controls.stat(c, "Write", "0.9", .{ .unit = "MB/s", .key = t.success, .size = .sm, .card = false });
+    controls.stat(c, "Write", "0.9", .{ .unit = "MB/s", .key = t.success, .size = .sm, .card = null });
 }
 
 test "bars with a baseline and a fade, and stats with a key, light and dark" {
     var x: u8 = 0;
     try expectView("charts-keyed", .init(&x, keyedCharts), .{ .height = 170 });
     try expectView("charts-keyed-dark", .init(&x, keyedCharts), .{ .height = 170, .dark = true });
+}
+
+/// Pills in each status, lead and shape, and a size up; captions with an
+/// aside, an open line and one cut short; and a row of compact readings.
+fn pillsAndCaptions(_: *u8, c: *ui.Context) void {
+    const t = kit.tokens(c);
+    const root = ui.div(c).column().sizeFull().p(10).gap(10);
+    defer root.end();
+    {
+        const row = ui.div(c).row().gap(6).itemsCenter();
+        defer row.end();
+        controls.pill(c, "LIVE", .{ .status = .success, .lead = .{ .dot = .{} } });
+        controls.pill(c, "3 FAILED", .{ .status = .danger });
+        controls.pill(c, "SYNCING", .{ .lead = .{ .icon = .{ .name = "arrow.clockwise" } } });
+        controls.pill(c, "REC", .{ .status = .warning, .lead = .{ .dot = .{ .dim = true } } });
+    }
+    {
+        const row = ui.div(c).row().gap(6).itemsCenter();
+        defer row.end();
+        controls.pill(c, "P", .{ .shape = .box });
+        controls.pill(c, "ROSETTA", .{ .shape = .box, .status = .info });
+        controls.pill(c, "0.42", .{ .mono = true, .status = .neutral });
+        controls.pill(c, "Ready", .{ .size = .sm, .status = .success });
+    }
+    controls.caption(c, "MEMORY", .{ .aside = "16 GB" });
+    {
+        const h = controls.captionOpen(c, "LIGHTS", .{ .icon = "sun.max" });
+        controls.pill(c, "3 ON", .{ .status = .warning });
+        h.trailing();
+        ui.text(c, "80%", .{ .size = 12, .color = t.muted });
+        h.end();
+    }
+    {
+        const h = controls.captionOpen(c, "/Users/someone/Documents/Projects/a-long-folder-name", .{ .cut = true });
+        h.trailing();
+        _ = kit.button(c, "Open", .{ .size = .xs });
+        h.end();
+    }
+    var f = controls.flow(c, 100, .{ .gap = 12 });
+    const reading: controls.StatOptions = .{ .size = .xs, .card = null, .mono = true };
+    f.stat("FILES", "312", reading);
+    f.stat("SIZE", "4.2 GB", reading);
+    f.stat("TIME", "0:42", reading);
+    f.end();
+}
+
+test "pills, captions and compact readings, light and dark" {
+    var x: u8 = 0;
+    try expectView("pills-captions", .init(&x, pillsAndCaptions), .{ .height = 230 });
+    try expectView("pills-captions-dark", .init(&x, pillsAndCaptions), .{ .height = 230, .dark = true });
+}
+
+/// Panels: plain and titled, tinted by a status, folding (one open, one
+/// folded), and notices with a button and loading.
+const Panels = struct {
+    open: bool = true,
+    folded: bool = false,
+
+    fn view(x: *Panels, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).column().sizeFull().p(10).gap(10);
+        defer root.end();
+        {
+            const row = ui.div(c).row().wFull().gap(10).itemsStart();
+            defer row.end();
+            {
+                const p = controls.panel(c, .{ .title = "RETENTION", .card = .{ .width = .{ .px = 165 } } });
+                defer p.end();
+                ui.text(c, "Keep 10 snapshots", .{ .size = 12 });
+            }
+            {
+                const p = controls.panel(c, .{ .title = "DANGER ZONE", .status = .danger, .card = .{ .width = .{ .px = 165 } } });
+                defer p.end();
+                ui.text(c, "Can't be undone.", .{ .size = 12, .color = t.muted });
+            }
+        }
+        {
+            const p = controls.panel(c, .{ .title = "ADVANCED", .open = &x.open });
+            defer p.end();
+            if (x.open) ui.text(c, "Compression: zstd", .{ .size = 12 });
+        }
+        controls.panel(c, .{ .title = "LOGS", .open = &x.folded }).end();
+        {
+            const n = controls.noticeOpen(c, .{ .icon = "network", .title = "Server stopped", .description = "Start it to back up again.", .status = .warning });
+            defer n.end();
+            _ = kit.button(c, "Start", .{ .size = .sm, .variant = .primary });
+        }
+        controls.notice(c, .{ .loading = true, .title = "Connecting", .description = "Asking the server.", .card = .{ .py = 16 } });
+    }
+};
+
+test "panels and notices, light and dark" {
+    var x: Panels = .{};
+    try expectView("panels-notices", .init(&x, Panels.view), .{ .height = 520 });
+    x = .{};
+    try expectView("panels-notices-dark", .init(&x, Panels.view), .{ .height = 520, .dark = true });
+}
+
+/// Callouts in each status, with a title, plain, closable, and open with
+/// a button.
+fn callouts(_: *u8, c: *ui.Context) void {
+    const root = ui.div(c).column().sizeFull().p(10).gap(8);
+    defer root.end();
+    _ = controls.callout(c, "Snapshots are kept for 30 days.", .{});
+    _ = controls.callout(c, "Backed up 312 files.", .{ .status = .success, .announce = false });
+    _ = controls.callout(c, "That folder doesn't exist any more, so it is skipped.", .{ .status = .warning, .title = "Missing folder", .announce = false });
+    _ = controls.callout(c, "The disk is full.", .{ .status = .danger, .closable = true, .announce = false });
+    {
+        const r = controls.calloutOpen(c, "Couldn't reach the server.", .{ .status = .info });
+        defer r.end();
+        _ = kit.button(c, "Retry", .{ .size = .xs });
+    }
+    _ = controls.callout(c, "Everything is up to date.", .{ .plain = true, .status = .success, .announce = false });
+}
+
+test "callouts, light and dark" {
+    var x: u8 = 0;
+    try expectView("callouts", .init(&x, callouts), .{ .height = 330 });
+    try expectView("callouts-dark", .init(&x, callouts), .{ .height = 330, .dark = true });
 }

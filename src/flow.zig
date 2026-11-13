@@ -14,6 +14,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const measure = @import("measure.zig");
+const stat_mod = @import("stat.zig");
 
 pub const Options = struct {
     /// Between the cells in a row, and between the rows, in points before
@@ -73,6 +74,14 @@ pub const Flow = struct {
         }
         f.in_row += 1;
         return ui.div(f.c).column().w(f.cell_px).clip();
+    }
+
+    /// Puts a stat in the next cell: with `.size = .xs, .card = null`, a
+    /// row of compact readings that wraps as the window narrows.
+    pub fn stat(f: *Flow, label: []const u8, value: []const u8, opts: stat_mod.Options) void {
+        const box = f.cell();
+        defer box.end();
+        stat_mod.stat(f.c, label, value, opts);
     }
 
     /// Starts the next cell on a new row.
@@ -178,4 +187,43 @@ test "breakRow starts the next cell on a new row" {
     try std.testing.expectEqual(t.findText("one").?.x, t.findText("two").?.x);
     try std.testing.expectEqual(t.findText("two").?.y, t.findText("four").?.y);
     try std.testing.expectEqual(@as(usize, 2), x.rows);
+}
+
+test "a flow of compact readings wraps as it narrows, each one element to a screen reader" {
+    const T = struct {
+        width: f32 = 400,
+        rows: usize = 0,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const box = ui.div(c).column().w(x.width);
+            defer box.end();
+            var f = flow(c, 90, .{ .gap = 12 });
+            const reading: stat_mod.Options = .{ .size = .xs, .card = null, .mono = true };
+            f.stat("FILES", "312", reading);
+            f.stat("SIZE", "4.2 GB", reading);
+            f.stat("TIME", "0:42", reading);
+            x.rows = f.rows;
+            f.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 500, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 1), x.rows);
+    // The caption over the figure, which is the larger.
+    const label = t.findText("FILES").?;
+    const figure = t.findText("312").?;
+    try std.testing.expect(figure.y > label.y and figure.h > label.h);
+    // It wraps from the width the last frame laid out.
+    x.width = 200;
+    for (0..2) |_| t.frame();
+    try std.testing.expectEqual(@as(usize, 2), x.rows);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqual(@as(usize, 3), list.items.len);
+    try std.testing.expectEqualStrings("FILES", list.items[0].label);
+    try std.testing.expectEqualStrings("312", list.items[0].value);
 }
