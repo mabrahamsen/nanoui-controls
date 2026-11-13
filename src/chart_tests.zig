@@ -59,3 +59,58 @@ test "a box's measured size is kept by the box, not by where it is looked up" {
     t.frame();
     try std.testing.expectEqual(@as(?f32, null), t.ctx.frame_in);
 }
+
+/// Interactive bars, then a text field, and whether a key reached what
+/// comes after the chart.
+const Keyed = struct {
+    count: usize = 6,
+    field: ui.TextBuffer = .{},
+    field_focused: bool = false,
+    key_left: bool = false,
+    current: ?usize = null,
+
+    fn view(x: *Keyed, c: *ui.Context) void {
+        const root = ui.div(c).column().w(240).gap(8);
+        defer root.end();
+        var b = @import("bars.zig").bars(c, .{ .count = x.count, .height = .{ .px = 40 }, .interactive = true, .label = "Traffic" });
+        while (b.next()) |slot| slot.bar(&.{.{ .value = 0.5, .color = red }});
+        x.current = b.current;
+        b.end();
+        x.key_left = c.input.key != null;
+        x.field_focused = ui.textField(c, &x.field, .{}).focused;
+    }
+};
+
+test "an interactive chart uses up the keys it moves by, even at an end" {
+    var x: Keyed = .{};
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Keyed.view), .{ .width = 300, .height = 120 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.tab);
+    t.key(.home);
+    try std.testing.expectEqual(@as(?usize, 0), x.current);
+    try std.testing.expect(!x.key_left);
+    t.key(.left);
+    try std.testing.expectEqual(@as(?usize, 0), x.current);
+    try std.testing.expect(!x.key_left);
+    t.key(.right);
+    try std.testing.expectEqual(@as(?usize, 1), x.current);
+    try std.testing.expect(!x.key_left);
+    // A key it doesn't move by is left for what comes after it.
+    t.key(.enter);
+    try std.testing.expect(x.key_left);
+}
+
+test "an interactive chart with nothing to point at doesn't take Tab" {
+    var x: Keyed = .{ .count = 0 };
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Keyed.view), .{ .width = 300, .height = 120 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+}

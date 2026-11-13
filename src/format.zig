@@ -138,18 +138,26 @@ pub fn ago(c: *ui.Context, secs: i64, words: TimeWords) []const u8 {
     return c.print("{s}", .{agoBuf(&buf, secs, words)});
 }
 
-/// "~/Documents": `path` with the home folder `home` as ~; `path` as it
-/// is when it isn't in it.
+/// "~/Documents": `path` with the home folder `home` as ~ (given with a
+/// separator at its end or not); `path` as it is when it isn't in it.
 pub fn tildeBuf(buf: []u8, path: []const u8, home: []const u8) []const u8 {
-    if (home.len < 2 or !std.mem.startsWith(u8, path, home)) return path;
-    const rest = path[home.len..];
-    if (rest.len > 0 and rest[0] != '/' and rest[0] != '\\') return path;
-    return std.fmt.bufPrint(buf, "~{s}", .{rest}) catch path;
+    const rest = inHome(path, home) orelse return path;
+    return std.fmt.bufPrint(buf, "~{s}", .{rest}) catch "?";
 }
 
 pub fn tilde(c: *ui.Context, path: []const u8, home: []const u8) []const u8 {
-    var buf: [std.fs.max_path_bytes]u8 = undefined;
-    return c.print("{s}", .{tildeBuf(&buf, path, home)});
+    const rest = inHome(path, home) orelse return path;
+    return c.print("~{s}", .{rest});
+}
+
+/// What follows `home` in `path`, from its separator on; null when `path`
+/// isn't in it.
+fn inHome(path: []const u8, home: []const u8) ?[]const u8 {
+    const h = std.mem.trimEnd(u8, home, "/\\");
+    if (h.len == 0 or !std.mem.startsWith(u8, path, h)) return null;
+    const rest = path[h.len..];
+    if (rest.len > 0 and rest[0] != '/' and rest[0] != '\\') return null;
+    return rest;
 }
 
 test "sizes in units of 1000, with one decimal at most" {
@@ -205,10 +213,16 @@ test "the words for time can be another language's, the span where it puts it" {
 
 test "paths in the home folder start with ~, and others are as they are" {
     var b: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("~/Documents", tildeBuf(&b, "/Users/ann/Documents", "/Users/ann/"));
+    try std.testing.expectEqualStrings("?", tildeBuf(b[0..4], "/Users/ann/Documents", "/Users/ann"));
     try std.testing.expectEqualStrings("~/Documents", tildeBuf(&b, "/Users/ann/Documents", "/Users/ann"));
     try std.testing.expectEqualStrings("~", tildeBuf(&b, "/Users/ann", "/Users/ann"));
     try std.testing.expectEqualStrings("/Users/anna/x", tildeBuf(&b, "/Users/anna/x", "/Users/ann"));
     try std.testing.expectEqualStrings("/tmp", tildeBuf(&b, "/tmp", "/Users/ann"));
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }
 
 test "each also writes into the frame's memory" {
@@ -217,6 +231,10 @@ test "each also writes into the frame's memory" {
             ui.text(c, size(c, 145_700_000), .{});
             ui.text(c, ago(c, 12 * 60, .{}), .{});
             ui.text(c, grouped(c, 1_234), .{});
+            ui.text(c, rate(c, 12_300_000), .{});
+            ui.text(c, clock(c, 123), .{});
+            ui.text(c, span(c, 45, .{}), .{});
+            ui.text(c, tilde(c, "/Users/ann/Documents", "/Users/ann"), .{});
         }
     };
     var x: T = .{};
@@ -225,4 +243,5 @@ test "each also writes into the frame's memory" {
     defer t.deinit();
     t.frame();
     try std.testing.expect(t.hasText("145.7 MB") and t.hasText("12 min ago") and t.hasText("1,234"));
+    try std.testing.expect(t.hasText("12.3 MB/s") and t.hasText("2:03") and t.hasText("45 s") and t.hasText("~/Documents"));
 }

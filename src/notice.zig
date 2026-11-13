@@ -67,7 +67,7 @@ pub fn noticeOpen(c: *ui.Context, opts: Options) ui.Div {
     const col = parts.statusColor(t, opts.status, opts.color, .accent);
     const icon = opts.icon orelse parts.statusIcon(opts.status);
     const size = opts.text_size orelse opts.size.text();
-    if (opts.announce) parts.announceOnce(c, if (opts.description.len > 0) c.print("{s}. {s}", .{ opts.title, opts.description }) else opts.title);
+    if (opts.announce) parts.announceOnce(c, if (opts.title.len > 0 and opts.description.len > 0) c.print("{s}. {s}", .{ opts.title, opts.description }) else if (opts.title.len > 0) opts.title else opts.description);
     const p = panel(c, .{ .card = opts.card.over(.{ .py = 32 }), .scale = k }).itemsCenter();
     if (opts.loading) {
         // Over the icon, drawn clear, so the title doesn't move when it

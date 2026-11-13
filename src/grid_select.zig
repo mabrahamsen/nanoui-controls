@@ -76,7 +76,9 @@ pub fn pick(g: *Grid, i: usize, how: Pick) void {
 /// Follows the keys with `selection`: the row they moved to alone, or with
 /// Shift the rows from the anchor to it.
 pub fn useKeys(g: *Grid, before: ?usize, k: keys.Keys) void {
-    g.opened = k.opened;
+    // Enter opens the row the keys are on while it is selected: not one
+    // Cmd-click (Ctrl-click) took out of the selection.
+    g.opened = if (k.opened) |i| (if (g.isSelected(i)) i else null) else null;
     const s = g.opts.selected orelse return;
     const i = s.* orelse return;
     if (i != before) g.pick(i, if (k.extend) .extend else .only);

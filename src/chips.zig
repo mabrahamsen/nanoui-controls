@@ -17,6 +17,7 @@ const focus = @import("focus.zig");
 const measure = @import("measure.zig");
 const parts = @import("parts.zig");
 const pill_mod = @import("pill.zig");
+const surface = @import("surface.zig");
 
 pub const InputOptions = struct {
     /// One flag a chip, kept by the caller: a flagged chip doesn't read,
@@ -35,12 +36,14 @@ pub const InputOptions = struct {
     /// A chip's × to a screen reader, `{}` standing for the chip:
     /// "Remove 9:00".
     remove_text: []const u8 = "Remove {}",
-    /// Typed or pasted, each of these ends a chip; Enter always does.
+    /// Typed or pasted, each of these characters ends a chip; Enter and a
+    /// line's end always do.
     separators: []const u8 = ",",
     /// The room the field keeps for typing, in points before `scale`: a
     /// line with less left starts a new one for it.
     field_width: f32 = 110,
-    /// The parent's width by default.
+    /// The parent's width by default; a width in points is multiplied by
+    /// `scale`.
     width: ui.Length = .fill,
     /// The text's size, as the kit's; `text_size` in points, over it.
     size: kit.Size = .sm,
@@ -77,7 +80,7 @@ pub fn chipInput(c: *ui.Context, chips: []const []const u8, buffer: *ui.TextBuff
     const pad: f32 = 8;
     var box = ui.div(c).column().px(pad * k).py(6 * k).gap(6 * k).rounded(t.radius * k).bg(t.surface).border(t.border);
     if (opts.disabled) box = box.opacity(focus.dimmed);
-    c.node(box.index).style.width = opts.width;
+    c.node(box.index).style.width = surface.scaled(opts.width, k);
     defer box.end();
     // The room for chips: the box's width as the last frame laid it out,
     // or in its first, the window's.
@@ -94,15 +97,11 @@ pub fn chipInput(c: *ui.Context, chips: []const []const u8, buffer: *ui.TextBuff
         rows.place(chipWidth(c, v, style, k, !opts.disabled));
         const ok = i >= opts.invalid.len or !opts.invalid[i];
         ui.key(c, c.print("chip-{d}", .{i}));
-        switch (chip_(c, v, .{ .style = style, .k = k, .color = if (ok) t.foreground else t.danger, .closes = !opts.disabled, .tooltip = if (ok) "" else opts.invalid_text, .remove_text = opts.remove_text })) {
-            .none => {},
-            .clicked => result.removed = i,
-            // Its × had the keyboard, and goes with the chip: the field
-            // takes it.
-            .pressed => {
-                result.removed = i;
-                buffer.focus();
-            },
+        // Its × goes with the chip: the field takes the keyboard, by a
+        // click or by the keys alike.
+        if (chip_(c, v, .{ .style = style, .k = k, .color = if (ok) t.foreground else t.danger, .closes = !opts.disabled, .tooltip = if (ok) "" else opts.invalid_text, .remove_text = opts.remove_text })) {
+            result.removed = i;
+            buffer.focus();
         }
     }
     if (opts.disabled) {
@@ -139,24 +138,49 @@ fn backspaced(c: *ui.Context) bool {
     return false;
 }
 
-/// The chips typed into `buffer`: those ended by a separator, and with
-/// Enter (`submitted`) the rest; what follows the last separator stays.
+/// The chips typed into `buffer`: those ended by a separator or a line's
+/// end, and with Enter (`submitted`) the rest; what follows the last
+/// separator stays. Separators are whole characters, any of `separators`.
 fn take(c: *ui.Context, buffer: *ui.TextBuffer, separators: []const u8, submitted: bool) []const []const u8 {
     const text = buffer.text();
-    const ends = std.mem.lastIndexOfAny(u8, text, separators) orelse std.mem.lastIndexOfScalar(u8, text, '\n');
-    if (ends == null and !submitted) return &.{};
     var out: std.ArrayList([]const u8) = .empty;
-    const done = if (submitted) text.len else ends.? + 1;
-    var it = std.mem.tokenizeAny(u8, text[0..done], separators);
-    while (it.next()) |part| {
-        var lines = std.mem.tokenizeAny(u8, part, "\r\n");
-        while (lines.next()) |line| {
-            const v = std.mem.trim(u8, line, " \t");
-            if (v.len > 0) out.append(c.alloc(), c.print("{s}", .{v})) catch {};
+    var start: usize = 0;
+    var ended = false;
+    var i: usize = 0;
+    while (i < text.len) {
+        const n = @min(text.len - i, std.unicode.utf8ByteSequenceLength(text[i]) catch 1);
+        const ch = text[i .. i + n];
+        if (isSeparator(ch, separators)) {
+            add(c, &out, text[start..i]);
+            start = i + n;
+            ended = true;
         }
+        i += n;
     }
-    buffer.set(c.print("{s}", .{std.mem.trimStart(u8, text[done..], " ")}));
+    if (submitted) {
+        add(c, &out, text[start..]);
+        start = text.len;
+    } else if (!ended) return &.{};
+    buffer.set(c.print("{s}", .{std.mem.trimStart(u8, text[start..], " ")}));
     return out.items;
+}
+
+/// `ch`, one character, ends a chip: a line's end, or one of `separators`.
+fn isSeparator(ch: []const u8, separators: []const u8) bool {
+    if (std.mem.eql(u8, ch, "\n") or std.mem.eql(u8, ch, "\r")) return true;
+    var i: usize = 0;
+    while (i < separators.len) {
+        const n = @min(separators.len - i, std.unicode.utf8ByteSequenceLength(separators[i]) catch 1);
+        if (std.mem.eql(u8, ch, separators[i .. i + n])) return true;
+        i += n;
+    }
+    return false;
+}
+
+/// Adds `piece`, trimmed, to the chips made, unless it is empty.
+fn add(c: *ui.Context, out: *std.ArrayList([]const u8), piece: []const u8) void {
+    const v = std.mem.trim(u8, piece, " \t");
+    if (v.len > 0) out.append(c.alloc(), c.print("{s}", .{v})) catch {};
 }
 
 /// Boxes placed in lines that run on to a new one where `width` ends:
@@ -201,13 +225,9 @@ const ChipLook = struct {
     remove_text: []const u8 = "",
 };
 
-/// A chip's × this frame: clicked with the pointer, or pressed with the
-/// keys while it had the keyboard.
-const Closed = enum { none, clicked, pressed };
-
 /// A value as a pill, with a × after it that Tab reaches and Space or
-/// Enter presses.
-fn chip_(c: *ui.Context, v: []const u8, s: ChipLook) Closed {
+/// Enter presses; true when it was.
+fn chip_(c: *ui.Context, v: []const u8, s: ChipLook) bool {
     const t = kit.tokens(c);
     const k = s.k;
     const box = pill_mod.pillOpen(c, v, .{
@@ -224,7 +244,7 @@ fn chip_(c: *ui.Context, v: []const u8, s: ChipLook) Closed {
         .scale = k,
     });
     defer box.end();
-    if (!s.closes) return .none;
+    if (!s.closes) return false;
     var x = ui.div(c).w(close_w * k).h(close_w * k).center().roundedFull().control();
     const xi = focus.button(c, x.index, true);
     if (xi.hovered) x = x.bg(t.muted.alpha(0.25));
@@ -234,7 +254,7 @@ fn chip_(c: *ui.Context, v: []const u8, s: ChipLook) Closed {
     const name = if (at) |a| c.print("{s}{s}{s}", .{ s.remove_text[0..a], v, s.remove_text[a + 2 ..] }) else c.print("{s} {s}", .{ s.remove_text, v });
     ui.access.describe(c, x.index, .{ .role = .button, .label = name });
     ui.icon(c, "xmark", .{ .size = 8 * k, .color = t.muted });
-    return if (!xi.clicked) .none else if (xi.focused) .pressed else .clicked;
+    return xi.clicked;
 }
 
 pub const Options = struct {

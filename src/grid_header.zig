@@ -52,24 +52,28 @@ pub fn header(c: *ui.Context, columns: []const Column, opts: Options, l: Layout)
             // The edge after it, which stays with it.
             if (nextShown(c, columns, opts, l, f)) |_| edge(c, columns, opts, l, f, opts.column_lines or l.sx > 0, &fit);
         }
-        // The rest, cut off past the frozen column and scrolled.
-        const cut = ui.div(c).row().grow().clip();
-        defer cut.end();
         {
-            var inner = ui.div(c).row().itemsCenter().offset(-l.sx, 0);
-            if (l.frozen == null) inner = inner.pl(opts.padding * k);
-            defer inner.end();
-            for (l.order) |i| {
-                if (i == l.frozen or !shown(c, columns, opts, i, l.grid_w)) continue;
-                if (before) |b| if (b != l.frozen) edge(c, columns, opts, l, b, opts.column_lines, &fit);
-                before = i;
-                titles[i] = title(c, columns, opts, l, i, &drag, &head);
+            // The rest, cut off past the frozen column and scrolled.
+            const cut = ui.div(c).row().grow().clip();
+            defer cut.end();
+            {
+                var inner = ui.div(c).row().itemsCenter().offset(-l.sx, 0);
+                if (l.frozen == null) inner = inner.pl(opts.padding * k);
+                defer inner.end();
+                for (l.order) |i| {
+                    if (i == l.frozen or !shown(c, columns, opts, i, l.grid_w)) continue;
+                    if (before) |b| if (b != l.frozen) edge(c, columns, opts, l, b, opts.column_lines, &fit);
+                    before = i;
+                    titles[i] = title(c, columns, opts, l, i, &drag, &head);
+                }
+                const end_pad = opts.padding * k + lay_mod.gutter(opts);
+                if (opts.widths != null) fit_all = pastTitles(c, end_pad) else ui.div(c).w(end_pad).end();
             }
-            const end_pad = opts.padding * k + lay_mod.gutter(opts);
-            if (opts.widths != null) fit_all = pastTitles(c, end_pad) else ui.div(c).w(end_pad).end();
+            if (opts.widths != null) fit_all = pastTitles(c, null) or fit_all;
         }
-        if (opts.widths != null) fit_all = pastTitles(c, null) or fit_all;
-        if (drag.col != null and drag.moved) dropLine(c, columns, opts, l, drag.col.?);
+        // Over the titles, not cut off with them: in the grid's own
+        // places, as the columns show.
+        if (drag.col != null and drag.moved) dropLine(c, columns, opts, l, drag.col.?, outer.index);
     }
     head.titles = titles;
     if (fit_all or fit != null) head.fit = widths_mod.fits(c, columns, opts, l, titles, if (fit_all) null else fit);
@@ -214,29 +218,38 @@ fn edge(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, a: us
 const EdgeDrag = struct { on: bool = false, x: f32 = 0, width: f32 = 0, moved: bool = false };
 
 /// The column a title dragged to the pointer goes before, or null for
-/// after the last.
+/// after the last. A column scrolled under the frozen one, out of sight,
+/// isn't one.
 fn dropBefore(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, dragged: usize) ?usize {
     const mx = c.input.mouse.x - l.left;
     for (l.order) |i| {
-        if (i == dragged or !shown(c, columns, opts, i, l.grid_w)) continue;
+        if (i == dragged or !shown(c, columns, opts, i, l.grid_w) or hidden(l, i)) continue;
         if (mx < l.at(i) + l.w[i] / 2) return i;
     }
     return null;
 }
 
-/// A line where the dragged title would go.
-fn dropLine(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, dragged: usize) void {
+/// Column `i` is scrolled out of sight under the frozen column.
+fn hidden(l: Layout, i: usize) bool {
+    return l.frozen != null and l.frozen != i and l.at(i) + l.w[i] <= l.clip_x;
+}
+
+/// A line where the dragged title would go, in the header's box `outer`.
+fn dropLine(c: *ui.Context, columns: []const Column, opts: Options, l: Layout, dragged: usize, outer: u32) void {
     const k = opts.scale;
     const gap = opts.column_gap * k;
     var x: f32 = 0;
     if (dropBefore(c, columns, opts, l, dragged)) |b| {
         x = l.at(b) - gap / 2;
+        // Before the first column past the frozen one, partly under it:
+        // where the scrolled ones start.
+        if (l.frozen != null and b != l.frozen) x = @max(x, l.clip_x - gap / 2);
     } else for (l.order) |i| {
         if (i != dragged and shown(c, columns, opts, i, l.grid_w)) x = l.at(i) + l.w[i] + gap / 2;
     }
-    // In the scrolled titles' row, whose boxes start past the frozen
-    // column, or past the padding, and scroll.
-    const origin = (if (l.frozen != null) l.clip_x else opts.padding * k) - l.sx;
+    // The places are the grid's; the header's box starts where the grid
+    // does, as the last frame laid it out.
+    const origin = if (c.rects.get(c.node(outer).id)) |r| r.x - l.left else 0;
     ui.div(c).absolute().offset(x - origin - 1, 0).w(2).hFull().bg(kit.tokens(c).primary).end();
 }
 

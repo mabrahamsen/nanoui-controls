@@ -134,3 +134,45 @@ test "with .keyboard, a control with keys of its own takes the keyboard on a cli
     try std.testing.expectEqual(@as(?usize, 1), x.chosen);
     try std.testing.expectEqual(@as(usize, 1), ringed(&t));
 }
+
+test "a click on what only shows a tooltip, or is disabled, leaves the keyboard where it was, without a hand" {
+    const form_mod = @import("form.zig");
+    const T = struct {
+        field: ui.TextBuffer = .{},
+        chosen: ?usize = 0,
+        field_focused: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(300).gap(8);
+            defer root.end();
+            x.field_focused = ui.textField(c, &x.field, .{}).focused;
+            _ = swatches_mod.swatches(c, &Pane.colors, &x.chosen, .{ .disabled = true });
+            var f = form_mod.form(c, .{});
+            const r = f.row("Port", .{ .info = "The port the server listens on." });
+            ui.text(c, "8080", .{});
+            r.end();
+            f.end();
+        }
+    };
+    var x: T = .{};
+    defer x.field.deinit();
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 320, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    t.key(.tab);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+    const at = swatchAt(&t);
+    t.moveTo(at.x, at.y);
+    try std.testing.expect(!t.ctx.cursor_hand);
+    t.click(at.x, at.y);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+    // The ⓘ after the label.
+    const port = t.findText("Port").?;
+    t.moveTo(port.x + port.w + 8, port.y + port.h / 2);
+    try std.testing.expect(!t.ctx.cursor_hand);
+    t.click(port.x + port.w + 8, port.y + port.h / 2);
+    t.settle(1);
+    try std.testing.expect(x.field_focused);
+}

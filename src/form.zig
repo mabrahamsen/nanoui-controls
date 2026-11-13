@@ -20,6 +20,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
+const parts = @import("parts.zig");
 const measure = @import("measure.zig");
 const sections = @import("form_sections.zig");
 
@@ -195,7 +196,7 @@ pub const Form = struct {
         s.truncate = .ellipsis;
         ui.text(c, value, s);
         // Whole in a tooltip, when the last frame cut it short.
-        var it = v.interaction();
+        var it = parts.still(c, v);
         it.hovered = it.hovered and if (c.rects.get(c.node(v.index).id)) |rect| c.text.width(value, style) > rect.w + 0.5 else false;
         kit.tooltip(c, it, value, .{});
     }
@@ -339,7 +340,7 @@ pub const Form = struct {
             const i = ui.div(c).pl(2 * k).w(infoWidth(size, k)).center();
             defer i.end();
             ui.icon(c, "info.circle", .{ .size = size - 1, .color = t.muted });
-            kit.tooltip(c, i.interaction(), l.info, .{});
+            kit.tooltip(c, parts.still(c, i), l.info, .{});
         }
     }
 

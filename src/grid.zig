@@ -469,7 +469,7 @@ pub const Grid = struct {
         var r = ui.div(g.c).wFull().h(lay_mod.rowHeight(g.opts) * k);
         if (cards) {
             r = r.rounded(t.radius).bg(t.surface).border(t.border);
-        } else if (!g.opts.row_lines) r = r.rounded(t.radius - 2);
+        } else if (!g.opts.row_lines) r = r.rounded(@max(0, t.radius - 2));
         if (item) |it| if (g.fade < 1) if (g.fade_group) |f| {
             const gs = g.opts.groups.?;
             if (gs.within(it.group(), f) and !(is_heading and it.group() == f)) g.c.node(r.index).style.opacity = g.fade;
@@ -594,4 +594,5 @@ test {
     _ = @import("grid_groups.zig");
     _ = @import("grid_more_tests.zig");
     _ = @import("grid_heading_tests.zig");
+    _ = @import("grid_reorder_tests.zig");
 }

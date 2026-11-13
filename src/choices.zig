@@ -87,7 +87,8 @@ pub fn Typed(comptime E: type) type {
 /// A choice group taking the keyboard: the keys choose while it has it,
 /// and a click on an option chooses it and gives the group the keyboard.
 /// The chosen option, a disabled one and every one while the group is
-/// disabled show no hand. An index past the last option is the last.
+/// disabled show no hand. An index past the last option moves to the last
+/// that isn't disabled, a change as a click is.
 pub const Group = struct {
     /// The group's own interaction: `focused` while it has the keyboard.
     own: ui.Interaction,
@@ -96,10 +97,17 @@ pub const Group = struct {
     disabled: bool,
     changed: bool = false,
 
-    /// Takes the keyboard for `box`, open now, unless disabled or empty.
+    /// Takes the keyboard for `box`, open now, unless disabled or with no
+    /// option that can be chosen.
     pub fn take(c: *ui.Context, box: ui.Div, index: *usize, choices: []const Choice, disabled: bool) Group {
-        if (choices.len > 0 and index.* >= choices.len) index.* = choices.len - 1;
-        return .{ .own = focus.takeIf(c, box, !disabled and choices.len > 0), .index = index, .choices = choices, .disabled = disabled };
+        const usable = seek(choices, null, 1) != null;
+        var changed = false;
+        if (choices.len > 0 and index.* >= choices.len) {
+            const to = seek(choices, choices.len, -1) orelse choices.len - 1;
+            changed = to != index.*;
+            index.* = to;
+        }
+        return .{ .own = focus.takeIf(c, box, !disabled and usable), .index = index, .choices = choices, .disabled = disabled, .changed = changed };
     }
 
     /// The group's ring shows now.

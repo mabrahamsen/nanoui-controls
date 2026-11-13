@@ -20,6 +20,8 @@ const Many = struct {
     frames: usize = 0,
     burst: usize = 0,
     drag_rows: bool = false,
+    /// How many rows Enter or a double click opened.
+    opened: usize = 0,
     /// The row a drag started on, and how many rows it carried.
     dragged: ?usize = null,
     carried: usize = 0,
@@ -44,6 +46,7 @@ const Many = struct {
             }
         }
         while (g.next()) |row| {
+            if (row.opened) m.opened += 1;
             if (row.secondary_clicked) m.menu = row.index;
             if (row.drag_started) {
                 m.dragged = row.index;
@@ -365,4 +368,21 @@ test "a row held and barely moved is a click, and rows don't drag unless asked" 
     try dragRow(&t, 8, 40);
     try std.testing.expectEqual(@as(?usize, null), m.dragged);
     try std.testing.expect(t.ctx.drag_request == null);
+}
+
+test "Enter doesn't open a row Cmd-click (Ctrl-click) took out of the selection" {
+    var m: Many = .{};
+    var t: ui.Tester = undefined;
+    try start(&t, &m);
+    defer t.deinit();
+    try clickRow(&t, 2, .{});
+    try clickRow(&t, 2, .{ .adds = true });
+    try m.expectRows(&.{});
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 0), m.opened);
+    try clickRow(&t, 3, .{});
+    t.key(.enter);
+    t.settle(1);
+    try std.testing.expectEqual(@as(usize, 1), m.opened);
 }

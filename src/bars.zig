@@ -98,7 +98,10 @@ const Scale = struct {
     fn of(opts: Options, peak: f32) Scale {
         if (opts.units) {
             const fixed = opts.fixed_max and opts.max != null;
-            return .{ .lo = opts.min, .hi = chart.scaleTop(opts.min, opts.max, fixed, peak), .base = @max(opts.min, 0), .squeeze = fixed };
+            const hi = chart.scaleTop(opts.min, opts.max, fixed, peak);
+            // Bars start from zero, or from the scale's end nearest it: its
+            // bottom when it is all above zero, its top when all below.
+            return .{ .lo = opts.min, .hi = hi, .base = std.math.clamp(0, opts.min, hi), .squeeze = fixed };
         }
         const below = if (opts.below > 0) @min(opts.below, 1) else 0;
         return .{ .lo = -below, .hi = 1 - below, .base = 0, .squeeze = true };
@@ -137,20 +140,26 @@ pub const Slot = struct {
         const up_room = (sc.hi - sc.base) / range;
         const down_room = (sc.base - sc.lo) / range;
         const ups = c.alloc().alloc(f32, parts.len) catch return;
+        const downs = c.alloc().alloc(f32, parts.len) catch return;
         var up: f32 = 0;
         var down: f32 = 0;
         var total: f32 = 0;
-        // Above zero, a scale that starts higher takes its start off the
-        // bars, from the part nearest it.
+        // A scale that starts above zero, or ends below it, takes that
+        // much off the bars, from the part nearest zero.
         var skip = @max(sc.base, 0);
-        for (parts, ups) |p, *u| {
+        var skip_down = @max(-sc.base, 0);
+        for (parts, ups, downs) |p, *u, *d| {
             const v = chart.partShare(p.value);
             total += v;
             const cut = @min(v, skip);
             skip -= cut;
             u.* = (v - cut) / range;
             up += u.*;
-            if (down_room > 0) down += chart.partShare(-p.value) / range;
+            const n = chart.partShare(-p.value);
+            const cut_down = @min(n, skip_down);
+            skip_down -= cut_down;
+            d.* = if (down_room > 0) (n - cut_down) / range else 0;
+            down += d.*;
         }
         s.peak.* = @max(s.peak.*, total);
         var up_k = if (up > up_room and (sc.squeeze or up_room <= 0)) (if (up > 0) up_room / up else 1) else 1;
@@ -171,9 +180,8 @@ pub const Slot = struct {
             if (ups[i] > 0) chart.weighted(ui.div(c).wFull().bg(parts[i].color.alpha(s.opacity)), ups[i] * up_k).end();
         }
         if (down_room == 0) return;
-        for (parts) |p| {
-            const v = chart.partShare(-p.value) / range;
-            if (v > 0) chart.weighted(ui.div(c).wFull().bg(p.color.alpha(s.opacity)), v * down_k).end();
+        for (parts, downs) |p, d| {
+            if (d > 0) chart.weighted(ui.div(c).wFull().bg(p.color.alpha(s.opacity)), d * down_k).end();
         }
         chart.weighted(ui.div(c).wFull(), @max(0, down_room - down * down_k)).end();
     }
@@ -301,4 +309,5 @@ pub fn opacity(i: usize, n: usize, fade: ?f32) f32 {
 
 test {
     _ = @import("bars_tests.zig");
+    _ = @import("bars_scale_tests.zig");
 }

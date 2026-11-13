@@ -12,6 +12,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
+const parts = @import("parts.zig");
 
 pub const Swatch = struct {
     color: ui.Color,
@@ -89,7 +90,7 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
         defer dot.end();
-        var it = dot.interaction();
+        var it = if (opts.disabled) parts.still(c, dot) else dot.interaction();
         if (opts.disabled) it.clicked = false else if (it.hovered) c.cursor_hand = true;
         if (it.clicked) {
             selected.* = i;
