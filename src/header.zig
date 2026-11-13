@@ -131,16 +131,31 @@ test "in a narrow pane the words are cut short, whole in a tooltip, and what is 
     for (0..2) |_| t.frame();
     const end = t.findText("RUNNING").?;
     try std.testing.expectApproxEqAbs(@as(f32, 150), end.x + end.w + 8, 1);
-    // The title, cut short: nanoui keeps the words it shows, "Backup…".
+    // The title's text: the words shown ("Backup…") on the Mac, where
+    // nanoui cuts it as it lays it out, or all of them elsewhere, where it
+    // cuts it as it paints.
     var title: ?ui.Rect = null;
     for (t.ctx.nodes.items) |n| switch (n.content) {
-        .text => |s| if (std.mem.startsWith(u8, s.str, "Backup") and std.mem.endsWith(u8, s.str, "…")) {
+        .text => |s| if (std.mem.startsWith(u8, s.str, "Backup")) {
             title = n.rect;
         },
         else => {},
     };
+    try std.testing.expectEqual(@as(usize, 1), titles(&t));
     t.moveTo(title.?.x + 4, title.?.y + 4);
     t.advance(1.5);
-    // Whole in its tooltip.
+    // Whole in its tooltip, a second text.
+    try std.testing.expectEqual(@as(usize, 2), titles(&t));
     try std.testing.expect(t.hasText("Backups of every folder"));
+}
+
+/// How many texts begin with the narrow pane's title: the title's own, and
+/// its tooltip's.
+fn titles(t: *ui.Tester) usize {
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| switch (node.content) {
+        .text => |s| n += @intFromBool(std.mem.startsWith(u8, s.str, "Backup")),
+        else => {},
+    };
+    return n;
 }
