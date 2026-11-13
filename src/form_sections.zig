@@ -5,6 +5,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
+const parts = @import("parts.zig");
 const form_mod = @import("form.zig");
 const Form = form_mod.Form;
 const HeadingOptions = form_mod.HeadingOptions;
@@ -92,7 +93,7 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
     {
         const line = ui.div(c).row().wFull().itemsCenter().gap(6 * k);
         defer line.end();
-        ui.text(c, title, .{ .size = text - 0.5, .weight = .semibold, .color = tint orelse t.foreground });
+        ui.text(c, title, .{ .size = text - 0.5, .weight = .semibold, .color = if (tint) |col| parts.readable(t, col, 0) else t.foreground });
         if (open) |o| {
             ui.spacer(c);
             ui.icon(c, if (o.*) "chevron.down" else "chevron.right", .{ .size = text - 3.5, .color = if (hovered) t.foreground else t.muted });
