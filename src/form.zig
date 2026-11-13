@@ -213,10 +213,10 @@ pub const Form = struct {
         ui.key(c, c.print("form-link-{s}", .{label}));
         var r = f.openRow(true);
         defer r.end();
-        const it = c.interact(r.index, .{ .focusable = !opts.disabled });
+        const it = focus.button(c, r.index, !opts.disabled);
         const live = !opts.disabled;
         if (live and it.hovered) c.cursor_hand = true;
-        if (it.focused) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
+        if (focus.showRing(c, it.focused)) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
         f.drawLabel(label, .{ .disabled = opts.disabled });
         {

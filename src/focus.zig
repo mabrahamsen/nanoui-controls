@@ -1,7 +1,7 @@
 //! Taking the keyboard for a control whose own box mustn't take clicks,
-//! shared by the grid, the sidebar and the swatches; and the look every
-//! control gives the keyboard's ring and something disabled. Not a
-//! control of its own.
+//! shared by the grid, the sidebar and the swatches; a box that is a
+//! button; and the look every control gives the keyboard's ring, when it
+//! shows, and something disabled. Not a control of its own.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -22,6 +22,55 @@ pub fn ringIn(c: *const ui.Context, color: ui.Color) ui.Color {
 /// The ring's width: the app's, or a point.
 pub fn ringWidth(c: *const ui.Context) f32 {
     return if (c.focus_ring) |r| r.width else 1;
+}
+
+/// When a control's ring shows.
+pub const RingShows = enum {
+    /// Whenever the control has the keyboard, as nanoui rings a focusable
+    /// box.
+    focused,
+    /// Only while the keyboard is in use (`c.keyboard_modality`: a key
+    /// shows it, the pointer hides it), as on a Mac; and a click on a
+    /// control that is a button leaves the keyboard where it was.
+    keyboard,
+};
+
+/// When every control's ring shows: the app's, set once with
+/// `setRingShows`.
+var ring_shows: RingShows = .focused;
+
+/// Sets when every control's ring shows, once, as the app sets
+/// `c.focus_ring`.
+pub fn setRingShows(shows: RingShows) void {
+    ring_shows = shows;
+}
+
+/// A control that has the keyboard (`focused`) shows its ring now.
+pub fn showRing(c: *const ui.Context, focused: bool) bool {
+    return focused and (ring_shows == .focused or c.keyboard_modality);
+}
+
+/// Interacts with a box that is a button, `focusable` or not, as
+/// `c.interact` does: Tab reaches it, and Enter or Space clicks it. With
+/// `.keyboard`, a click on it leaves the keyboard where it was, and the
+/// ring nanoui draws round it (the app's `c.focus_ring`) comes off while
+/// the pointer is in use; the control draws its own ring when
+/// `showRing` says.
+pub fn button(c: *ui.Context, index: u32, focusable: bool) ui.Interaction {
+    const style = c.node(index).style;
+    const was = c.focus;
+    var it = c.interact(index, .{ .focusable = focusable });
+    if (ring_shows == .focused) return it;
+    if (c.input.pressed and was != it.id and c.focus == it.id) {
+        c.focus = was;
+        it.focused = false;
+    }
+    if (!showRing(c, it.focused)) {
+        const n = c.node(index);
+        n.style.border = style.border;
+        n.style.border_width = style.border_width;
+    }
+    return it;
 }
 
 /// A key, as `c.input.key` has it.
@@ -82,4 +131,8 @@ pub fn takeIf(c: *ui.Context, box: ui.Div, wants: bool) ui.Interaction {
         own.focused = true;
     }
     return own;
+}
+
+test {
+    _ = @import("focus_tests.zig");
 }

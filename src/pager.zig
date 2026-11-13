@@ -46,7 +46,7 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
     // Not a button: Enter and Space are left for what comes after it.
     const it = c.interact(box.index, .{ .focusable = true, .text = true });
-    if (it.focused) {
+    if (focus.showRing(c, it.focused)) {
         c.node(box.index).style.border = focus.ring(c);
         c.node(box.index).style.border_width = focus.ringWidth(c);
     }

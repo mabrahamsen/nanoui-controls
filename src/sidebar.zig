@@ -326,7 +326,7 @@ pub const Sidebar = struct {
             const base = sb.opts.background orelse t.foreground.alpha(0);
             row_box = row_box.bg(base.mix(t.foreground.alpha(0.07), wash));
         } else if (sb.opts.background) |bg| row_box = row_box.bg(bg);
-        if (at_cursor) row_box = row_box.border(focus.ringIn(c, tint.alpha(0.6))).borderW(focus.ringWidth(c));
+        if (at_cursor and focus.showRing(c, true)) row_box = row_box.border(focus.ringIn(c, tint.alpha(0.6))).borderW(focus.ringWidth(c));
         if (opts.disabled) c.node(row_box.index).style.opacity = focus.dimmed;
         defer row_box.end();
         if (holds) sb.seen = true;
@@ -443,7 +443,7 @@ pub const Sidebar = struct {
             defer head.end();
             const it = head.interaction();
             if (it.hovered) c.cursor_hand = true;
-            if (at_cursor) _ = head.border(focus.ringIn(c, (sb.opts.color orelse t.primary).alpha(0.6))).borderW(focus.ringWidth(c));
+            if (at_cursor and focus.showRing(c, true)) _ = head.border(focus.ringIn(c, (sb.opts.color orelse t.primary).alpha(0.6))).borderW(focus.ringWidth(c));
             if (it.clicked) {
                 open.* = !open.*;
                 c.changed = true;

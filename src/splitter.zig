@@ -77,9 +77,10 @@ pub fn splitter(c: *ui.Context, width: *f32, opts: Options) bool {
     const drag = c.state(struct { on: bool = false, x: f32 = 0, width: f32 = 0 }, "splitter");
     const lit = it.hovered or it.pressed or drag.on;
     if (lit) c.cursor = if (opts.stacked) .resize_up_down else .resize_left_right;
-    if (opts.center_line or lit or it.focused) {
-        const col = if (it.focused) focus.ring(c) else if (lit) t.muted else t.border;
-        const line_w = (if (lit or it.focused) @as(f32, 2) else 1) * k;
+    const ringed = focus.showRing(c, it.focused);
+    if (opts.center_line or lit or ringed) {
+        const col = if (ringed) focus.ring(c) else if (lit) t.muted else t.border;
+        const line_w = (if (lit or ringed) @as(f32, 2) else 1) * k;
         const line = if (opts.stacked) ui.div(c).h(line_w).wFull() else ui.div(c).w(line_w).hFull();
         line.bg(col).end();
     }

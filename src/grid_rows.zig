@@ -28,6 +28,18 @@ pub const Heading = struct {
     label: []const u8 = "",
 };
 
+/// A heading's row the caller draws in (`Grid.headingRow`).
+pub const HeadingRow = struct {
+    /// The row's box, open for the caller's chevron, title and the rest:
+    /// across the columns stepped in by `depth`, or with `cells` the
+    /// first column's cell. The caller ends it.
+    box: ui.Div,
+    /// The group is open, after this frame's click or key.
+    open: bool,
+    /// How many groups it is in: 0 at the top.
+    depth: u8,
+};
+
 /// A cell's two lines (`Grid.twoLines`).
 pub const TwoLines = struct {
     /// The title's size; the detail is a point and a half smaller.
@@ -36,10 +48,6 @@ pub const TwoLines = struct {
     detail_color: ?ui.Color = null,
     mono_detail: bool = false,
 };
-
-/// How far in each level of a group goes: a heading's chevron and the
-/// gap after it, in points before `scale`.
-pub const indent_step = 18;
 
 /// Keeps `selected` on the row it was on when the rows in view changed
 /// under it, as a group above it folded or opened; on the nearest heading
@@ -86,10 +94,25 @@ pub fn headingOpen(g: *Grid, opts: Heading) ui.Div {
     return draw(g, opts, true).?;
 }
 
-/// Draws a heading, returning its box left open with `open`, or else the
-/// box the caller ends: null in the first column's cell, which the grid
-/// ends.
-fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
+/// Makes the row being built its group's heading with nothing drawn in
+/// it, for a heading that looks the caller's way: the caller draws its
+/// chevron (the way `open` says), title and the rest in `box`, and ends
+/// it. The grid keeps the rest of a heading: a click folds or opens it,
+/// the keys, the selection, and what a screen reader hears of `opts`.
+pub fn headingRow(g: *Grid, opts: Heading) HeadingRow {
+    const at = place(g, opts);
+    const c = g.c;
+    // The cell is the grid's to end: the caller's content goes in a box of
+    // its own in it.
+    const box = if (at.in_cell) ui.div(c).row().wFull().itemsCenter().gap(g.opts.column_gap * g.opts.scale / 2) else at.box;
+    return .{ .box = box, .open = at.open, .depth = at.depth };
+}
+
+/// A heading's row made ready: its group folded or opened by a click, its
+/// description, and the box its content goes in.
+const Place = struct { box: ui.Div, in_cell: bool, open: bool, depth: u8 };
+
+fn place(g: *Grid, opts: Heading) Place {
     const gs = g.opts.groups orelse @panic("grid: `heading` needs `groups`");
     const item = gs.at(g.row_index);
     if (item != .heading) @panic("grid: `heading` on a row that isn't one");
@@ -97,9 +120,7 @@ fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
     if (g.row_clicked) toggle(g, group);
     const open = gs.open[group];
     const c = g.c;
-    const t = kit.tokens(c);
     const k = g.opts.scale;
-    const gap = g.opts.column_gap * k / 2;
     const label = if (opts.label.len > 0) opts.label else if (opts.detail.len > 0) c.print("{s}, {s}", .{ opts.title, opts.detail }) else opts.title;
     ui.access.describe(c, g.row.?.index, .{
         .role = .row,
@@ -110,11 +131,26 @@ fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
     // In the first column's cell, unless that column is hidden.
     const in_cell = opts.cells and g.cellAt(0);
     const box = if (in_cell) g.cell_box.? else blk: {
-        const x = (g.opts.padding + @as(f32, @floatFromInt(item.heading.depth)) * indent_step) * k;
-        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(gap);
+        const x = (g.opts.padding + @as(f32, @floatFromInt(item.heading.depth)) * g.opts.indent_step) * k;
+        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(g.opts.column_gap * k / 2);
     };
+    return .{ .box = box, .in_cell = in_cell, .open = open, .depth = item.heading.depth };
+}
+
+/// Draws a heading, returning its box left open with `open`, or else the
+/// box the caller ends: null in the first column's cell, which the grid
+/// ends.
+fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
+    const at = place(g, opts);
+    const c = g.c;
+    const t = kit.tokens(c);
+    const k = g.opts.scale;
+    const gap = g.opts.column_gap * k / 2;
+    const in_cell = at.in_cell;
+    const box = at.box;
+    const open = at.open;
     {
-        const slot = ui.div(c).w((indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
+        const slot = ui.div(c).w(@max(0, g.opts.indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
         defer slot.end();
         ui.icon(c, if (open) "chevron.down" else "chevron.right", .{ .size = 9.5 * k, .color = t.muted });
     }
@@ -149,7 +185,7 @@ pub fn toggle(g: *Grid, group: usize) void {
 /// Where the rows of the group opened last are in fading in.
 pub fn fadeFrom(g: *Grid, o: Opening) void {
     const group = o.group orelse return;
-    if (g.opts.groups == null) return;
+    if (g.opts.groups == null or !g.opts.fade_in) return;
     const c = g.c;
     const u: f32 = if (c.reduced_motion) 1 else @floatCast(std.math.clamp((c.time - o.at) / fade_time, 0, 1));
     if (u >= 1) return;

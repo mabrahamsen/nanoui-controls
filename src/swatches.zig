@@ -83,8 +83,9 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         const chosen = selected.* == i;
         // With the keyboard and nothing chosen, the first is where the
         // keys start.
-        const ringed = chosen or (own.focused and none and i == 0);
-        const edge = if (ringed and own.focused) focus.ringIn(c, t.primary) else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
+        const keyed = focus.showRing(c, own.focused);
+        const ringed = chosen or (keyed and none and i == 0);
+        const edge = if (ringed and keyed) focus.ringIn(c, t.primary) else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
         defer dot.end();

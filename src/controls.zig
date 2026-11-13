@@ -19,6 +19,7 @@ pub const GridRow = grid_mod.Row;
 pub const GridTitleStyle = grid_mod.TitleStyle;
 pub const GridLoading = grid_mod.Loading;
 pub const GridHeading = grid_mod.Heading;
+pub const GridHeadingRow = grid_mod.HeadingRow;
 pub const GridTwoLines = grid_mod.TwoLines;
 pub const GridRowLook = grid_mod.RowLook;
 pub const GridGroups = @import("grid_groups.zig").Groups;
@@ -133,6 +134,12 @@ pub const flow = flow_mod.flow;
 pub const Flow = flow_mod.Flow;
 pub const FlowOptions = flow_mod.Options;
 
+const focus_mod = @import("focus.zig");
+/// When the controls' focus ring shows: whenever a control has the
+/// keyboard (the default), or only while the keyboard is in use.
+pub const FocusRingShows = focus_mod.RingShows;
+pub const setFocusRingShows = focus_mod.setRingShows;
+
 test {
     _ = grid_mod;
     _ = pager_mod;
@@ -152,5 +159,5 @@ test {
     _ = swatches_mod;
     _ = flow_mod;
     _ = gauge_mod;
-    _ = @import("focus.zig");
+    _ = focus_mod;
 }

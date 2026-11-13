@@ -347,7 +347,7 @@ pub const Inspect = struct {
         if (kept.slot) |s| if (s >= count) {
             kept.slot = count - 1;
         };
-        if (it.focused) {
+        if (focus.showRing(c, it.focused)) {
             c.node(index).style.border = focus.ring(c);
             c.node(index).style.border_width = focus.ringWidth(c);
         }
