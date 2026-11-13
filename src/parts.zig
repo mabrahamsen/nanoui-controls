@@ -47,6 +47,33 @@ pub fn dot(c: *ui.Context, color: ui.Color, diameter: f32, glow: f32) void {
     d.end();
 }
 
+/// Gives box `index`, which nanoui described already, `label` (if not
+/// empty) and `value` to a screen reader instead: nanoui keeps a box's
+/// first description, and its text field is named by its placeholder and
+/// tells a password's text. It reads nanoui's list of described boxes, as
+/// the pager reads its boxes, and goes once the text field takes a name
+/// and keeps a password to itself.
+pub fn redescribe(c: *ui.Context, index: u32, label: []const u8, value: []const u8) void {
+    var i = c.a11y_items.items.len;
+    while (i > 0) {
+        i -= 1;
+        const item = &c.a11y_items.items[i];
+        if (item.node_index != index) continue;
+        if (label.len > 0) item.label = c.alloc().dupe(u8, label) catch label;
+        item.value = c.alloc().dupe(u8, value) catch value;
+        return;
+    }
+}
+
+/// A dot for each character of `text`, at most 32, for a secret shown
+/// hidden.
+pub fn dots(c: *ui.Context, text: []const u8) []const u8 {
+    const n = @min(std.unicode.utf8CountCodepoints(text) catch text.len, 32);
+    const out = c.alloc().alloc(u8, n * 3) catch return "";
+    for (0..n) |i| @memcpy(out[i * 3 ..][0..3], "•");
+    return out;
+}
+
 /// `box`'s interaction without the pointing hand, for a box that listens
 /// only for its tooltip.
 pub fn still(c: *ui.Context, box: ui.Div) ui.Interaction {

@@ -1214,3 +1214,57 @@ test "chips to type into and chips on and off, light and dark" {
     try expectView("chips", .init(&x, Chipping.view), .{ .height = 150 });
     try expectView("chips-dark", .init(&x, Chipping.view), .{ .height = 150, .dark = true });
 }
+
+/// Icon tiles lit, unlit and glowing; a header with a tile, a subtitle
+/// and pills; and input boxes empty, with text, a secret hidden, and
+/// disabled.
+const Framed = struct {
+    search: ui.TextBuffer = .{},
+    name: ui.TextBuffer = .{},
+    secret: ui.TextBuffer = .{},
+    off: ui.TextBuffer = .{},
+    shown: bool = false,
+    started: bool = false,
+
+    fn view(x: *Framed, c: *ui.Context) void {
+        if (!x.started) {
+            x.name.set("Backups of my laptop");
+            x.secret.set("hunter2");
+            x.off.set("read-only");
+            x.started = true;
+        }
+        const root = ui.div(c).column().sizeFull().p(10).gap(10);
+        defer root.end();
+        {
+            const row = ui.div(c).row().gap(10).itemsCenter();
+            defer row.end();
+            controls.iconTile(c, "sun.max", .{ .status = .warning });
+            controls.iconTile(c, "sun.max", .{ .status = .warning, .lit = false });
+            controls.iconTile(c, "lock", .{ .color = .hex(0x22d3ee), .glow = 0.45 });
+            controls.iconTile(c, "network", .{ .status = .success, .size = 40 });
+        }
+        {
+            const h = controls.header(c, .{ .icon = "internaldrive", .title = "Backups", .subtitle = "~/Documents/Projects", .subtitle_mono = true });
+            defer h.end();
+            controls.pill(c, "RUNNING", .{ .status = .success, .lead = .{ .dot = .{} } });
+        }
+        _ = controls.inputBox(c, &x.search, .{ .icon = "magnifyingglass", .placeholder = "Search" });
+        _ = controls.inputBox(c, &x.name, .{ .placeholder = "Name" });
+        _ = controls.inputBox(c, &x.secret, .{ .icon = "lock", .label = "Password", .shown = &x.shown, .paste = true });
+        _ = controls.inputBox(c, &x.off, .{ .placeholder = "Name", .disabled = true });
+    }
+
+    fn deinit(x: *Framed) void {
+        x.search.deinit();
+        x.name.deinit();
+        x.secret.deinit();
+        x.off.deinit();
+    }
+};
+
+test "icon tiles, a header and input boxes, light and dark" {
+    var x: Framed = .{};
+    defer x.deinit();
+    try expectView("framed", .init(&x, Framed.view), .{ .height = 330 });
+    try expectView("framed-dark", .init(&x, Framed.view), .{ .height = 330, .dark = true });
+}

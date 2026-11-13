@@ -197,6 +197,21 @@ pub const ChipInputResult = chips_mod.InputResult;
 pub const chip = chips_mod.chip;
 pub const ChipOptions = chips_mod.Options;
 
+const icon_tile_mod = @import("icon_tile.zig");
+pub const iconTile = icon_tile_mod.iconTile;
+pub const iconTileOpen = icon_tile_mod.iconTileOpen;
+pub const IconTileOptions = icon_tile_mod.Options;
+pub const IconTileOpen = icon_tile_mod.IconTileOpen;
+
+const header_mod = @import("header.zig");
+pub const header = header_mod.header;
+pub const HeaderOptions = header_mod.Options;
+
+const input_box_mod = @import("input_box.zig");
+pub const inputBox = input_box_mod.inputBox;
+pub const InputBoxOptions = input_box_mod.Options;
+pub const InputBoxResult = input_box_mod.Result;
+
 /// Figures as people read them: sizes, rates, counts, clocks, spans of
 /// time and paths (`format.zig`).
 pub const format = @import("format.zig");
@@ -239,6 +254,9 @@ test {
     _ = tab_strip_mod;
     _ = toasts_mod;
     _ = chips_mod;
+    _ = icon_tile_mod;
+    _ = header_mod;
+    _ = input_box_mod;
     _ = @import("parts.zig");
     _ = @import("buttons.zig");
 }
