@@ -167,6 +167,36 @@ pub const notice = notice_mod.notice;
 pub const noticeOpen = notice_mod.noticeOpen;
 pub const NoticeOptions = notice_mod.Options;
 
+pub const Choice = @import("choices.zig").Choice;
+
+const segmented_mod = @import("segmented.zig");
+pub const segmented = segmented_mod.segmented;
+pub const segmentedOf = segmented_mod.segmentedOf;
+pub const SegmentedOptions = segmented_mod.Options;
+
+const tab_strip_mod = @import("tab_strip.zig");
+pub const tabStrip = tab_strip_mod.tabStrip;
+pub const tabStripOf = tab_strip_mod.tabStripOf;
+pub const tabStripOpen = tab_strip_mod.tabStripOpen;
+pub const TabStripOptions = tab_strip_mod.Options;
+pub const TabStripOpen = tab_strip_mod.TabStripOpen;
+
+const toasts_mod = @import("toasts.zig");
+pub const toasts = toasts_mod.toasts;
+pub const Toasts = toasts_mod.Toasts;
+pub const Toast = toasts_mod.Toast;
+pub const ToastShow = toasts_mod.Show;
+pub const ToastsOptions = toasts_mod.Options;
+pub const ToastHit = toasts_mod.Hit;
+pub const ToastCorner = toasts_mod.Corner;
+
+const chips_mod = @import("chips.zig");
+pub const chipInput = chips_mod.chipInput;
+pub const ChipInputOptions = chips_mod.InputOptions;
+pub const ChipInputResult = chips_mod.InputResult;
+pub const chip = chips_mod.chip;
+pub const ChipOptions = chips_mod.Options;
+
 /// Figures as people read them: sizes, rates, counts, clocks, spans of
 /// time and paths (`format.zig`).
 pub const format = @import("format.zig");
@@ -204,6 +234,11 @@ test {
     _ = callout_mod;
     _ = notice_mod;
     _ = format;
+    _ = @import("choices.zig");
+    _ = segmented_mod;
+    _ = tab_strip_mod;
+    _ = toasts_mod;
+    _ = chips_mod;
     _ = @import("parts.zig");
     _ = @import("buttons.zig");
 }

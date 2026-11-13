@@ -9,7 +9,10 @@
 //! a pill, and "Every chart" each chart once, as figures it doesn't change
 //! (charts.zig), a branch with the charts of histories and of parts under
 //! it; "Status" a backup service at a glance, in pills, readings,
-//! callouts, panels and notices (status.zig). "More to come" is a row
+//! callouts, panels and notices (status.zig); "Choices" a backup's
+//! history filtered by a segmented group, a tab strip and chips, its
+//! times of day typed as chips, and toasts raised by buttons
+//! (choices.zig). "More to come" is a row
 //! that can't be chosen yet. The counts load
 //! for a moment at launch.
 //!
@@ -29,6 +32,7 @@ const form = @import("form.zig");
 const sidebar = @import("sidebar.zig");
 const groups = @import("groups.zig");
 const status = @import("status.zig");
+const choices = @import("choices.zig");
 
 const Gallery = struct {
     /// The key of the view shown, as the sidebar chose it.
@@ -49,6 +53,7 @@ const Gallery = struct {
     tuning: sidebar.Tuning = .{},
     pulls: groups.Pulls = .{},
     backups: status.Backups = .{},
+    history: choices.History = .{},
     /// When the first frame was drawn: the counts load for a moment after.
     launched: ?f64 = null,
 
@@ -90,6 +95,7 @@ const Gallery = struct {
                 group.end();
             }
             sb.item("status", "Status", .{ .icon = "checklist" });
+            sb.item("choices", "Choices", .{ .icon = "slider.horizontal.3" });
             sb.item("more", "More to come", .{ .icon = "sparkles", .disabled = true });
             if (sb.end()) |key| g.shown = key;
             if (sb.secondary_clicked) |key| {
@@ -124,6 +130,8 @@ const Gallery = struct {
             g.settings.view(c);
         } else if (std.mem.eql(u8, g.shown, "grouped")) {
             g.pulls.view(c);
+        } else if (std.mem.eql(u8, g.shown, "choices")) {
+            g.history.view(c);
         } else if (std.mem.eql(u8, g.shown, "status")) {
             g.backups.view(c);
         } else if (std.mem.eql(u8, g.shown, "sidebar")) {
@@ -140,6 +148,7 @@ pub fn main(init: std.process.Init) !void {
     var state: Gallery = .{ .browser = try grid.init(init.arena.allocator()), .monitor = charts.init(), .settings = form.init() };
     defer state.browser.search.deinit();
     defer state.settings.name.deinit();
+    defer state.history.field.deinit();
     _ = try app.newWindow(.{
         .title = "nanoui-controls",
         .width = 980,

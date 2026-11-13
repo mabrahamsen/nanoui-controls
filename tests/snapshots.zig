@@ -1134,3 +1134,83 @@ test "callouts, light and dark" {
     try expectView("callouts", .init(&x, callouts), .{ .height = 330 });
     try expectView("callouts-dark", .init(&x, callouts), .{ .height = 330, .dark = true });
 }
+
+/// Segmented groups and tab strips: counts, a count loading, an alert, a
+/// disabled option, icons, and an open strip with a button.
+const Choosing = struct {
+    range: usize = 1,
+    mode: usize = 0,
+    tab: usize = 0,
+    other: usize = 2,
+
+    fn view(x: *Choosing, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(10).gap(12);
+        defer root.end();
+        _ = controls.segmented(c, &.{ .{ .label = "Today" }, .{ .label = "Week", .count = 12 }, .{ .label = "Month", .disabled = true } }, &x.range, .{});
+        _ = controls.segmented(c, &.{ .{ .label = "List", .icon = "list.bullet" }, .{ .label = "Grid", .icon = "square.grid.2x2" } }, &x.mode, .{ .size = .xs });
+        _ = controls.tabStrip(c, &.{ .{ .label = "Reviews", .count = 3 }, .{ .label = "Failed", .count = 2, .alert = true }, .{ .label = "Work", .loading = true } }, &x.tab, .{});
+        var s = controls.tabStripOpen(c, &.{ .{ .label = "General" }, .{ .label = "Sync", .disabled = true }, .{ .label = "Archive", .count = 1500 } }, &x.other, .{ .size = .xs });
+        _ = kit.button(c, "Manage", .{ .size = .xs, .variant = .ghost });
+        _ = s.end();
+    }
+};
+
+test "segmented groups and tab strips, light and dark" {
+    var x: Choosing = .{};
+    try expectView("choosing", .init(&x, Choosing.view), .{ .height = 190 });
+    x = .{};
+    try expectView("choosing-dark", .init(&x, Choosing.view), .{ .height = 190, .dark = true });
+}
+
+/// Toasts in the bottom right corner: a plain one, each status, a title,
+/// and an action.
+const Toasting = struct {
+    list: controls.Toasts = .{},
+
+    fn view(x: *Toasting, c: *ui.Context) void {
+        if (x.list.n == 0) {
+            _ = x.list.show("Saved.", .{ .seconds = 0 });
+            _ = x.list.show("Restored 120 files.", .{ .status = .success, .action = "Undo", .seconds = 0 });
+            _ = x.list.show("The repository is locked by another client.", .{ .status = .danger, .title = "Backup failed", .seconds = 0 });
+        }
+        ui.div(c).sizeFull().end();
+        _ = controls.toasts(c, &x.list, .{ .width = 320, .margin = 12 });
+    }
+};
+
+test "toasts in a corner, light and dark" {
+    var x: Toasting = .{};
+    try expectView("toasts", .init(&x, Toasting.view), .{ .height = 260 });
+    x = .{};
+    try expectView("toasts-dark", .init(&x, Toasting.view), .{ .height = 260, .dark = true });
+}
+
+/// A chip input with an inherited value and one that doesn't read, a
+/// disabled one, and chips on and off, one with a swatch.
+const Chipping = struct {
+    field: ui.TextBuffer = .{},
+    other: ui.TextBuffer = .{},
+    grouped: bool = true,
+    failing: bool = false,
+    green: bool = true,
+
+    fn view(x: *Chipping, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(10).gap(10);
+        defer root.end();
+        _ = controls.chipInput(c, &.{ "9:00", "21:30", "noon" }, &x.field, .{ .inherited = &.{"3:00"}, .invalid = &.{ false, false, true }, .add_placeholder = "add a time" });
+        _ = controls.chipInput(c, &.{ "*.tmp", "node_modules/" }, &x.other, .{ .disabled = true, .mono = true });
+        const row = ui.div(c).row().gap(6);
+        defer row.end();
+        _ = controls.chip(c, "Grouped", &x.grouped, .{});
+        _ = controls.chip(c, "Failing only", &x.failing, .{});
+        _ = controls.chip(c, "Green", &x.green, .{ .swatch = .hex(0x22c55e) });
+    }
+};
+
+test "chips to type into and chips on and off, light and dark" {
+    var x: Chipping = .{};
+    defer x.field.deinit();
+    defer x.other.deinit();
+    try expectView("chips", .init(&x, Chipping.view), .{ .height = 150 });
+    try expectView("chips-dark", .init(&x, Chipping.view), .{ .height = 150, .dark = true });
+}

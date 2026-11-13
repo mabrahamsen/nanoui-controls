@@ -19,6 +19,10 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`panel`](#panel) | A bordered box that groups what is in it, under a caption, tinted by a status, folding if wanted. |
 | [`callout`](#callout) | An icon and text in a box tinted in a status's color: a warning, a finding, a note. |
 | [`notice`](#notice) | What a pane shows in place of its content when it is empty, stopped or waiting. |
+| [`segmented`](#segmented) | One choice out of a few, as one bordered group, chosen with the mouse or the keys. |
+| [`tabStrip`](#tabstrip) | Tabs on a rule, each with a count in a badge, a spinner while it loads, or an alert. |
+| [`toasts`](#toasts) | Short messages that come and go in a corner, with an action such as "Undo". |
+| [`chipInput`](#chipinput) and [`chip`](#chip) | A field of chips to type values into, and an option shown as a chip that is on or off. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
 | [`bars`](#bars) | A row of slots for any bar chart, each a bar of colored parts, up from zero or down below it, which the user can point at or step through. |
@@ -352,6 +356,78 @@ n.end();
 - A screen reader hears the title as a heading, then the description; `announce` says them once when it appears or changes.
 - `card` goes over the panel's look, with 32 points of room above and below by default; `mono`, `size` or `text_size`, `icon_size` and `scale`.
 
+## segmented
+
+One choice out of a few, as one bordered group, the chosen option filled with the accent: nanoui's `ui.segmented` with the keyboard, counts and icons. Each option is a `Choice`, which `tabStrip` takes too: a `label`, an `icon`, a `count` in a badge (or a spinner while it is `loading`, and in the danger color with `alert`), `disabled`, and a `tooltip`.
+
+```zig
+const ranges = [_]controls.Choice{ .{ .label = "Today" }, .{ .label = "Week", .count = 12 } };
+if (controls.segmented(c, &ranges, &range, .{ .label = "Range" })) refilter();
+```
+
+- It returns true when a click or a key changed the choice, which shows in the frame it is made in.
+- It is one stop for Tab. The arrows, Home and End choose, passing disabled options; the keys it moves by are used up even at an end, and are its own when nanoui offers them first as shortcuts. Enter is the app's. A click chooses and gives it the keyboard; its ring shows as `setFocusRingShows` says.
+- A screen reader hears each option as a radio button, with its count or `loading_text` as its value and the group's `label` after it.
+- `segmentedOf` keeps the choice as a value of an enum, an option for each of its values in their order.
+- `size` or `text_size`, `background` and `border`, `px` and `py`, `max_count` (past it, "999+"), `disabled` and `scale`.
+
+## tabStrip
+
+Tabs on a rule, each a name with a count in a badge, the chosen one in full text with an accent bar under it: the kit's `tabs` with the keyboard and counts. It takes `Choice`s, as `segmented` does, and its keys and clicks are the same.
+
+```zig
+const tabs = [_]controls.Choice{ .{ .label = "Reviews", .count = 3 }, .{ .label = "Failed", .count = 1, .alert = true }, .{ .label = "Work", .loading = true } };
+if (controls.tabStrip(c, &tabs, &tab, .{})) scrollToTop();
+```
+
+- A screen reader hears each as a tab, with its count or `loading_text` as its value.
+- `tabStripOf` keeps the tab as an enum's value. `tabStripOpen` leaves the tabs' line open for a button at its end; its `end()` draws the rule and says whether the tab changed.
+- `size` or `text_size`, `max_count`, `disabled` and `scale`.
+
+## toasts
+
+Short messages that come and go in a corner of the window, over everything else. The app keeps them (`Toasts`, in fixed buffers: showing one never allocates) and draws them once a frame, last.
+
+```zig
+_ = s.toasts.show("Moved to the Trash.", .{ .action = "Undo", .tag = undo, .payload = file_id });
+// ...
+if (controls.toasts(c, &s.toasts, .{})) |hit| if (hit.tag == undo) restore(hit.payload);
+```
+
+- `show(message, ToastShow)` adds one and returns its id: `status` (an icon and an edge in its color), `title`, `action` (a button's words), `seconds` (4; 0 stays until closed), and the caller's `tag` and `payload`. The same toast shown again starts its time again instead of showing twice. At most 6 are kept, a seventh pushing out the oldest; their texts are copied in and cut short past fixed lengths.
+- `close(id)` slides one out, `dismiss(id)` removes it at once, and `items()` lists them.
+- `toasts(c, &list, opts)` returns the toast whose action was clicked (`id`, `tag`, `payload`), which then closes. A toast's time doesn't run while the pointer rests on it; they slide in and out, at once with reduced motion.
+- A screen reader hears each toast once as it comes ("title. text"). Tab reaches its action and its close button (`close_text`), and a click on either leaves the keyboard where it was, as the toast goes.
+- `corner` (top or bottom, left, center or right), `width` (narrowed to fit the window), `margin`, `size` or `text_size`, `layer` (over popovers, under tooltips) and `scale`.
+
+## chipInput
+
+The caller's values as chips, each with a × to remove it, then a field to type the next one into; the caller keeps the values and the field's `ui.TextBuffer`, and applies what the call returns.
+
+```zig
+const r = controls.chipInput(c, times, &field, .{ .placeholder = "9:00", .invalid = bad });
+for (r.added) |v| try addTime(v);
+if (r.removed) |i| removeTime(i);
+```
+
+- A separator (`separators`, "," by default) or Enter ends a chip, and pasting text with separators makes several. Backspace in the empty field removes the last. `added` are the chips made this frame, trimmed and never empty; `removed` the index of one closed; `focused` whether the field has the keyboard.
+- The chips wrap where the width ends, and the field starts a new line when less than `field_width` is left.
+- `invalid`, one flag a chip kept by the caller, draws a chip that doesn't read in the danger color, said with `invalid_text`. `inherited` values come first, muted and without a ×, `inherited_note` saying what they are.
+- Tab reaches each ×, named with `remove_text` ("Remove {}"), and Space or Enter removes its chip, the field taking the keyboard.
+- `placeholder` and `add_placeholder`, `width`, `size` or `text_size`, `mono`, `disabled` (the chips without a × or a field) and `scale`.
+
+## chip
+
+An option shown as a chip that is on or off: on, it is outlined and tinted in the accent with a ✓; off, it is plain. A row of them can be a `flow`'s cells.
+
+```zig
+if (controls.chip(c, "Mine only", &mine, .{})) refilter();
+```
+
+- A click, or Space or Enter once Tab reaches it, turns it; it returns true when it did.
+- A screen reader hears a checkbox, with `on_text` or `off_text`.
+- `swatch` puts a color dot before the label; `size` or `text_size`, `disabled` and `scale`.
+
 ## Surface
 
 The look of a box a control draws itself in, which `panel`, `notice` and `stat` take as their `card`: `fill`, `border`, `border_width`, `radius`, `px`, `py`, `gap`, `width`, `height` and a `glow`. A field left null takes the control's own, so an app keeps its look as a preset and passes it in; `a.over(b)` lays one look over another, field by field.
@@ -542,7 +618,7 @@ l.end();
 
 ## Example
 
-[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. Status is a backup service at a glance ([`status.zig`](examples/gallery/status.zig)): pills, compact readings written by `format`, callouts to close and bring back, panels side by side and one that folds, and a notice while its server is stopped or connecting. The controls ring only while the keyboard is in use.
+[`examples/gallery`](examples/gallery/main.zig) is a window whose `sidebar` picks a view for each kind of control: Grid, and under it Grouped (pull requests in groups that fold, their headings tagged with how many fail or drawn the gallery's own way, as cards or rows of two lines, reloading with sketched rows), Form, Sidebar (the sidebar's own options in a form, which the sidebar takes as they change: size, tint, background, gap, scale, icons only, counts loading, choosing on Enter and fixed branches), and in a Charts group, a live Monitor (its alerts in a pill) and Every chart, each chart once with fixed figures, the gauges in a flow, a branch with the charts of histories and of parts under it. A `splitter` resizes the sidebar, which shows only its icons when dragged narrow; a right-click on a row opens a menu; its counts load for a moment at launch. Status is a backup service at a glance ([`status.zig`](examples/gallery/status.zig)): pills, compact readings written by `format`, callouts to close and bring back, panels side by side and one that folds, and a notice while its server is stopped or connecting. Choices is a backup's history to filter ([`choices.zig`](examples/gallery/choices.zig)): a segmented range, a tab strip with counts, chips on and off, times of day typed as chips, and buttons that raise toasts, one with an Undo. The controls ring only while the keyboard is in use.
 
 - **Grid** is a grid of ten thousand files ([`grid.zig`](examples/gallery/grid.zig)). Sort by a column's title, move, resize and fit columns, fit them all or reset them, show two more columns and scroll them sideways past the names, draw lines between rows and columns, read cut-off names in tooltips, search, narrow the window to hide columns, switch on stripes, show only the five largest files, select one or several files and open them with the mouse or the keyboard, right-click them for a menu to open, select or delete them, drag them out of the window, type a name to jump to it, page through them with a pager, and have rows arrive a page at a time as they scroll into view.
 - **Form** is a settings pane ([`form.zig`](examples/gallery/form.zig)) in cards, its controls at the rows' ends: a text field, swatches, a number input, a select and toggles in rows under headings with descriptions, with hints, an ⓘ, an error when the name is empty, rows dimmed while backups are off, a note, an "Advanced" section that folds, properties to read, copy, or read whole in a tooltip, a row that leads somewhere, and a danger zone. Narrow the window and its labels go above their controls; switch off the cards, the lines between rows, and the controls at the ends, or put the labels by their controls.
