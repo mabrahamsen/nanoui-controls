@@ -131,31 +131,19 @@ test "in a narrow pane the words are cut short, whole in a tooltip, and what is 
     for (0..2) |_| t.frame();
     const end = t.findText("RUNNING").?;
     try std.testing.expectApproxEqAbs(@as(f32, 150), end.x + end.w + 8, 1);
-    // The title's text: the words shown ("Backup…") on the Mac, where
-    // nanoui cuts it as it lays it out, or all of them elsewhere, where it
-    // cuts it as it paints.
+    // Cut short, the title's words aren't all drawn, however many the
+    // fonts leave; its box is where a screen reader finds it.
+    try std.testing.expect(!t.hasText("Backups of every folder"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
     var title: ?ui.Rect = null;
-    for (t.ctx.nodes.items) |n| switch (n.content) {
-        .text => |s| if (std.mem.startsWith(u8, s.str, "Backup")) {
-            title = n.rect;
-        },
-        else => {},
+    for (list.items) |e| if (std.mem.eql(u8, e.label, "Backups of every folder")) {
+        title = e.rect;
     };
-    try std.testing.expectEqual(@as(usize, 1), titles(&t));
-    t.moveTo(title.?.x + 4, title.?.y + 4);
+    t.moveTo(title.?.x + 4, title.?.y + title.?.h / 2);
     t.advance(1.5);
-    // Whole in its tooltip, a second text.
-    try std.testing.expectEqual(@as(usize, 2), titles(&t));
+    // Whole in its tooltip.
     try std.testing.expect(t.hasText("Backups of every folder"));
-}
-
-/// How many texts begin with the narrow pane's title: the title's own, and
-/// its tooltip's.
-fn titles(t: *ui.Tester) usize {
-    var n: usize = 0;
-    for (t.ctx.nodes.items) |node| switch (node.content) {
-        .text => |s| n += @intFromBool(std.mem.startsWith(u8, s.str, "Backup")),
-        else => {},
-    };
-    return n;
 }
