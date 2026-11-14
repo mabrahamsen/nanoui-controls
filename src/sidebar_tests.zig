@@ -494,6 +494,7 @@ test {
     _ = @import("sidebar_branch_tests.zig");
     _ = @import("sidebar_keys_tests.zig");
     _ = @import("sidebar_count_tests.zig");
+    _ = @import("sidebar_of_tests.zig");
 }
 
 test "a long label cut short shows whole in a tooltip, and a sidebar with no rows doesn't take Tab" {

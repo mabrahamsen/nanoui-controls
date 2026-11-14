@@ -3,7 +3,8 @@
 //! pane's own pills and buttons, which sit at its end. A screen reader
 //! hears the title as a heading. In a narrow pane the title and the
 //! subtitle are cut short with an ellipsis, whole in a tooltip, and what
-//! is at the end keeps its room.
+//! is at the end keeps its room. Narrowed (`narrow`), as over a sidebar
+//! narrowed to its icons, it is the tile alone.
 //!
 //!     const h = controls.header(c, .{ .icon = "externaldrive", .title = "Backups", .subtitle = "~/Documents", .subtitle_mono = true });
 //!     controls.pill(c, "RUNNING", .{ .status = .success });
@@ -23,6 +24,8 @@ pub const Options = struct {
     /// the header's.
     tile: tile_mod.Options = .{},
     title: []const u8,
+    /// The title in the monospaced font, for an app's or a host's name.
+    title_mono: bool = false,
     subtitle: []const u8 = "",
     /// The subtitle in the monospaced font, for a path or a host.
     subtitle_mono: bool = false,
@@ -38,6 +41,11 @@ pub const Options = struct {
     /// The room between the tile, the words and what is at the end, in
     /// points before `scale`.
     gap: f32 = 10,
+    /// The tile alone, centered, for a header over a sidebar narrowed to
+    /// its icons: the title shows in a tooltip, and is still heard as a
+    /// heading; the subtitle is left out. What the caller adds goes after
+    /// the tile.
+    narrow: bool = false,
     scale: f32 = 1,
 };
 
@@ -47,19 +55,28 @@ pub fn header(c: *ui.Context, opts: Options) ui.Div {
     const k = opts.scale;
     const t = kit.tokens(c);
     const size = opts.text_size orelse opts.size.text() + 2;
-    const bar = ui.div(c).row().wFull().itemsCenter().gap(opts.gap * k);
-    if (opts.icon.len > 0) {
-        var tile = opts.tile;
-        if (tile.status == .neutral) tile.status = opts.status;
-        tile.color = tile.color orelse opts.color;
-        tile.scale = k;
-        tile_mod.iconTile(c, opts.icon, tile);
+    var bar = ui.div(c).row().wFull().itemsCenter().gap(opts.gap * k);
+    var tile = opts.tile;
+    if (tile.status == .neutral) tile.status = opts.status;
+    tile.color = tile.color orelse opts.color;
+    tile.scale = k;
+    if (opts.narrow) {
+        bar = bar.justifyCenter();
+        // The tile names the header: its title in a tooltip, and a
+        // heading to a screen reader.
+        const box = ui.div(c).row();
+        defer box.end();
+        if (opts.icon.len > 0) tile_mod.iconTile(c, opts.icon, tile);
+        kit.tooltip(c, parts.still(c, box), opts.title, .{ .placement = .right });
+        ui.access.describe(c, box.index, .{ .role = .static_text, .label = opts.title, .header = true });
+        return bar;
     }
+    if (opts.icon.len > 0) tile_mod.iconTile(c, opts.icon, tile);
     // The room the rest leaves, and no less than none: the words give way
     // to what is at the end.
     const words = ui.div(c).column().w(0).grow().gap(1 * k);
     defer words.end();
-    line(c, opts.title, .{ .size = size, .weight = .bold, .color = t.foreground }, true);
+    line(c, opts.title, .{ .size = size, .weight = .bold, .mono = opts.title_mono, .color = t.foreground }, true);
     if (opts.subtitle.len > 0) line(c, opts.subtitle, .{ .size = size - 3, .mono = opts.subtitle_mono, .color = t.muted }, false);
     return bar;
 }
@@ -81,13 +98,15 @@ const Pane = struct {
     width: f32 = 400,
     opts: Options = .{ .icon = "externaldrive", .title = "Backups", .subtitle = "~/Documents/Projects" },
     tile: u32 = 0,
+    /// Text at its end.
+    end: bool = true,
 
     fn view(x: *Pane, c: *ui.Context) void {
         const root = ui.div(c).column().w(x.width).p(8);
         defer root.end();
         x.tile = @intCast(c.nodes.items.len + 1);
         const h = header(c, x.opts);
-        ui.text(c, "RUNNING", .{ .size = 10 });
+        if (x.end) ui.text(c, "RUNNING", .{ .size = 10 });
         h.end();
     }
 };
@@ -120,6 +139,41 @@ test "a screen reader hears the title as a heading, then the subtitle" {
     try std.testing.expect(list.items[0].header);
     try std.testing.expectEqualStrings("~/Documents/Projects", list.items[1].label);
     try std.testing.expect(!list.items[1].header);
+}
+
+test "a mono title is in the monospaced font" {
+    var x: Pane = .{ .opts = .{ .icon = "externaldrive", .title = "Backups", .title_mono = true } };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Pane.view), .{ .width = 420, .height = 80 });
+    defer t.deinit();
+    t.settle(1);
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .text => |tx| if (std.mem.eql(u8, tx.str, "Backups")) try std.testing.expect(tx.style.mono),
+        else => {},
+    };
+}
+
+test "narrowed, the header is its tile alone, centered, its title in a tooltip and heard as a heading" {
+    var x: Pane = .{ .width = 48, .opts = .{ .icon = "externaldrive", .title = "Backups", .subtitle = "~/Documents", .narrow = true }, .end = false };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Pane.view), .{ .width = 100, .height = 80 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expect(!t.hasText("Backups") and !t.hasText("~/Documents"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var heading: ?ui.Rect = null;
+    for (list.items) |e| if (std.mem.eql(u8, e.label, "Backups") and e.header) {
+        heading = e.rect;
+    };
+    // Centered in the pane, between its padding.
+    const r = heading.?;
+    try std.testing.expectApproxEqAbs(@as(f32, 8 + 16), r.x + r.w / 2, 1.5);
+    t.moveTo(r.x + r.w / 2, r.y + r.h / 2);
+    t.advance(1.5);
+    try std.testing.expect(t.hasText("Backups"));
 }
 
 test "in a narrow pane the words are cut short, whole in a tooltip, and what is at the end stays" {

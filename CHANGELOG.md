@@ -13,12 +13,20 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - `GridTwoLines`: the title's `weight` and `mono`, the detail's `detail_size`, and the `gap` between the lines.
 - Form: `card`, a `Surface`, gives a grouped form's cards the app's look; the headings and notes keep in line with the labels by its `px`, and its `border` goes over a danger heading's tint.
 - Form: `propertyOpt` draws a property only when it has a value: null or empty draws no row, no line and takes no room in the labels' column.
+- `sidebarOf` and `SidebarOf`: a sidebar whose rows are keyed by the app's own type, an enum or a tagged union, compared and hashed as it is; `sidebar` is `sidebarOf` strings.
+- `header`: `title_mono`, and `narrow`, the tile alone, centered, its title in a tooltip and heard as a heading.
+- Bar list: `padded`, `text_size`, `show_labels`, and `label_width = 0` leaving the label column out, for plain rows; an item's `icon_color` and `value_weight`.
 
 ### Changed
 
 - Text in a status's color reads at 4.5:1: a pill's label, a notice's title, a panel's caption, a form heading and a gauge's figure take a shade of the color, darker in the light theme (its success green was about 2:1), while dots, icons, tints and borders keep it. A `color` the caller gives a pill or a notice is used as given.
 - A chip in `chipInput` is never wider than the field: a longer one is cut short, keeping its ×, and shows whole in a tooltip.
 - Toasts keep within the window's height: one that doesn't fit after the others waits until they go, its time not running and not yet said.
+- A bar list's badge is a boxed `pill`, its corners and tint as a badge's anywhere else, and a bar's level rounds its ends with or without a glow, as its track does.
+
+### Fixed
+
+- Sidebar: as `icons_only` changes, the selection shows on its row at once, where its marker slid across from the row's old place.
 
 ## 0.8.2
 
