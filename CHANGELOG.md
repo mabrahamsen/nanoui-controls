@@ -2,7 +2,7 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.9.0
 
 ### Added
 
@@ -16,12 +16,17 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - `sidebarOf` and `SidebarOf`: a sidebar whose rows are keyed by the app's own type, an enum or a tagged union, compared and hashed as it is; `sidebar` is `sidebarOf` strings.
 - `header`: `title_mono`, and `narrow`, the tile alone, centered, its title in a tooltip and heard as a heading.
 - Bar list: `padded`, `text_size`, `show_labels`, and `label_width = 0` leaving the label column out, for plain rows; an item's `icon_color` and `value_weight`.
+- `setShape` and `shape`: how round the corners the controls choose themselves are, and how strongly their own glows glow, set for every control as a theme sets their colors. A number the app passes draws as given.
+- `cardChoice`: one choice out of several, as cards of one width whose content is the app's, running on to new rows; one stop for Tab, heard as radio buttons, the arrows choosing by a card and Up and Down by a row, cards that can't be chosen passed; a choice that may be none.
+- A pill's dot lead takes a `glow`: 0 draws a plain dot.
 
 ### Changed
 
 - Text in a status's color reads at 4.5:1: a pill's label, a notice's title, a panel's caption, a form heading and a gauge's figure take a shade of the color, darker in the light theme (its success green was about 2:1), while dots, icons, tints and borders keep it. A `color` the caller gives a pill or a notice is used as given.
 - A chip in `chipInput` is never wider than the field: a longer one is cut short, keeping its ×, and shows whole in a tooltip.
 - Toasts keep within the window's height: one that doesn't fit after the others waits until they go, its time not running and not yet said.
+- `inputBox`'s and `gauge`'s `glow` are `?f32`: null takes their own glow in the app's shape, and a number set at the call draws as before.
+- `segmented`'s and `tabStrip`'s corners follow the kit's radius, as the sidebar's and the toasts' do: the same at its 8.
 - A bar list's badge is a boxed `pill`, its corners and tint as a badge's anywhere else, and a bar's level rounds its ends with or without a glow, as its track does.
 
 ### Fixed

@@ -9,6 +9,7 @@ const grid_mod = @import("grid.zig");
 const Column = grid_mod.Column;
 const Options = grid_mod.Options;
 const sized = @import("grid_widths.zig").sized;
+const shape_mod = @import("shape.zig");
 
 /// The room a scrolling grid leaves at its right edge for the scrollbar's
 /// track, in points as the bar's are, unscaled. Its rows stop short of
@@ -288,7 +289,7 @@ pub fn sideBar(c: *ui.Context, opts: Options, l: *Layout) void {
     const thumb_w = @max(24 * k, l.view * l.view / l.content);
     const travel = @max(1, l.view - thumb_w);
     const drag = state(c, BarDrag);
-    const thumb = ui.div(c).absolute().offset(l.sx / l.maxScroll() * travel, 2 * k).w(thumb_w).h(6 * k).rounded(3 * k).bg(t.muted.alpha(0.45)).control();
+    const thumb = ui.div(c).absolute().offset(l.sx / l.maxScroll() * travel, 2 * k).w(thumb_w).h(6 * k).rounded(shape_mod.corner(3) * k).bg(t.muted.alpha(0.45)).control();
     defer thumb.end();
     const it = thumb.interaction();
     if (!it.pressed) {

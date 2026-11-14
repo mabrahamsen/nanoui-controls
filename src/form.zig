@@ -24,6 +24,7 @@ const parts = @import("parts.zig");
 const measure = @import("measure.zig");
 const Surface = @import("surface.zig").Surface;
 const sections = @import("form_sections.zig");
+const shape_mod = @import("shape.zig");
 
 /// Where a form's labels or controls sit in their room: at its start,
 /// or at its end.
@@ -233,7 +234,7 @@ pub const Form = struct {
         const it = focus.button(c, r.index, !opts.disabled);
         const live = !opts.disabled;
         if (live and it.hovered) c.cursor_hand = true;
-        if (focus.showRing(c, it.focused)) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
+        if (focus.showRing(c, it.focused)) r = r.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(shape_mod.corner(@max(0, t.radius - 2)) * k);
         ui.access.describe(c, r.index, .{ .role = .button, .label = label, .value = value, .enabled = live });
         _ = f.drawLabel(label, .{ .disabled = opts.disabled });
         {

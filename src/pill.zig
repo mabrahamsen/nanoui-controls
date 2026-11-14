@@ -14,13 +14,16 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const parts = @import("parts.zig");
+const shape_mod = @import("shape.zig");
 
 /// What comes before the label.
 pub const Lead = union(enum) {
     none,
     /// A dot that glows; `dim` draws it faint and without its glow, as the
-    /// off beat of a blink. Its size, null, follows the pill's `size`.
-    dot: struct { size: ?f32 = null, dim: bool = false },
+    /// off beat of a blink. Its size, null, follows the pill's `size`. Its
+    /// glow's opacity, null, is 0.8 in the app's shape (`setShape`); 0
+    /// draws a plain dot.
+    dot: struct { size: ?f32 = null, dim: bool = false, glow: ?f32 = null },
     /// An SF Symbol; its size, null, follows the pill's `size`.
     icon: struct { name: []const u8, size: ?f32 = null },
 };
@@ -108,7 +111,7 @@ pub fn pillOpen(c: *ui.Context, label: []const u8, opts: Options) ui.Div {
     if (opts.max_width) |mw| p = p.maxW(mw * k);
     switch (opts.lead) {
         .none => {},
-        .dot => |d| parts.dot(c, if (d.dim) col.alpha(0.25) else col, l.dot * k, if (d.dim) 0 else 0.8),
+        .dot => |d| parts.dot(c, if (d.dim) col.alpha(0.25) else col, l.dot * k, if (d.dim) 0 else d.glow orelse shape_mod.glow(0.8)),
         .icon => |i| ui.icon(c, i.name, .{ .size = l.icon * k, .color = col }),
     }
     // The label in a box of its own, which a screen reader hears: the pill
@@ -148,7 +151,7 @@ pub fn lengths(opts: Options) Lengths {
         .px = opts.px orelse 9 * f,
         .py = opts.py orelse 4 * f,
         .gap = opts.gap orelse 6 * f,
-        .radius = opts.radius orelse 5 * f,
+        .radius = opts.radius orelse shape_mod.corner(5 * f),
         .dot = switch (opts.lead) {
             .dot => |d| d.size orelse 7 * f,
             else => 7 * f,

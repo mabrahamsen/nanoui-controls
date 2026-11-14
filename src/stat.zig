@@ -19,6 +19,7 @@ const focus = @import("focus.zig");
 const surface = @import("surface.zig");
 const Surface = surface.Surface;
 const trend_mod = @import("trend.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// How it changed ("+8%", "−2 since yesterday"), in a tag beside the
@@ -114,7 +115,7 @@ fn open(c: *ui.Context, opts: Options, clickable: bool) ui.Div {
     }
     var box = ui.div(c).column().gap(@as(f32, if (compact(opts)) 3 else 4) * k);
     c.node(box.index).style.width = surface.scaled(opts.width, k);
-    if (clickable) box = box.p(6 * k).rounded(t.radius * k);
+    if (clickable) box = box.p(6 * k).rounded(shape_mod.corner(t.radius) * k);
     return box;
 }
 

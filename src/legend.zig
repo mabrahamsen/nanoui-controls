@@ -16,6 +16,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// Between the items on a line, in points before `scale`.
@@ -73,7 +74,7 @@ pub const SwatchOptions = struct {
 pub fn swatch(c: *ui.Context, color: ui.Color, opts: SwatchOptions) void {
     const sw = @round(opts.size.text() * 0.72) * opts.scale;
     const d = switch (opts.shape) {
-        .square => ui.div(c).w(sw).h(sw).rounded(sw / 4),
+        .square => ui.div(c).w(sw).h(sw).rounded(shape_mod.corner(sw / 4)),
         .dot => ui.div(c).w(sw).h(sw).roundedFull(),
         .line => ui.div(c).w(swatchWidth(opts)).h(@max(2, @round(sw / 4))).roundedFull(),
     };

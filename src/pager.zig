@@ -19,6 +19,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// How many pages either side of the current one are numbered, besides
@@ -43,7 +44,7 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     // a change, as a click is.
     const before = page.*;
     if (page.* >= pages) page.* = pages - 1;
-    const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(t.radius);
+    const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(shape_mod.corner(t.radius));
     // Not a button: Enter and Space are left for what comes after it.
     const it = c.interact(box.index, .{ .focusable = true, .text = true });
     if (focus.showRing(c, it.focused)) {

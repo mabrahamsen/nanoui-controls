@@ -24,6 +24,7 @@ const kit = nanoui.kit;
 const parts = @import("parts.zig");
 const buttons = @import("buttons.zig");
 const measure = @import("measure.zig");
+const shape_mod = @import("shape.zig");
 
 /// The most toasts kept at once: one more pushes out the oldest.
 pub const max = 6;
@@ -257,7 +258,7 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
         };
         const col = parts.statusColor(t, toast.status, null, .border);
         ui.key(c, c.print("toast-box-{d}", .{toast.id}));
-        const box = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(12 * k).py(10 * k).rounded((t.radius + 2) * k)
+        const box = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(12 * k).py(10 * k).rounded(shape_mod.corner(t.radius + 2) * k)
             .bg(t.popover).border(if (toast.status == .neutral) t.border else col.alpha(0.55))
             .shadow(.{ .color = t.shadow.alpha(0.9), .blur = 24 * k, .y = 8 * k }).motion(f);
         const it = parts.still(c, box);

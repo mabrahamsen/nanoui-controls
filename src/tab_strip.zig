@@ -23,6 +23,7 @@ const kit = nanoui.kit;
 const focus = @import("focus.zig");
 const measure = @import("measure.zig");
 const choices_mod = @import("choices.zig");
+const shape_mod = @import("shape.zig");
 const Choice = choices_mod.Choice;
 
 pub const Options = struct {
@@ -116,7 +117,7 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
         const col = ui.div(c).column();
         defer col.end();
         if (on) chosen = c.rects.get(c.node(col.index).id);
-        var head = ui.div(c).row().itemsCenter().gap(7 * k).px(12 * k).py(7 * k).rounded(7 * k).control();
+        var head = ui.div(c).row().itemsCenter().gap(7 * k).px(12 * k).py(7 * k).rounded(shape_mod.corner(@max(0, t.radius - 1)) * k).control();
         if (!on and !off) head = head.hover(t.surface_hover);
         if (tab.disabled and !opts.disabled) head = head.opacity(focus.dimmed);
         const hit = g.interact(c, head, i);
@@ -128,7 +129,7 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
             ui.text(c, tab.label, .{ .size = size, .weight = if (on) .semibold else .medium, .color = ink });
             if (tab.count != null or tab.loading) choices_mod.badge(c, tab, on, opts.max_count, k);
         }
-        const bar = ui.div(c).wFull().h(2 * k).rounded(1 * k);
+        const bar = ui.div(c).wFull().h(2 * k).rounded(shape_mod.corner(1) * k);
         (if (on) bar.bg(t.primary) else bar).end();
         ui.access.describe(c, head.index, .{ .role = .tab, .label = tab.label, .value = choices_mod.countText(c, tab, opts.loading_text), .selected = on, .enabled = !off });
         g.click(c, i, hit);
@@ -201,7 +202,7 @@ const chevron_w: f32 = 20;
 /// was. Left out for a screen reader, which reaches each tab.
 fn chevron(c: *ui.Context, icon: []const u8, more: bool, size: f32, k: f32) bool {
     const t = kit.tokens(c);
-    var b = ui.div(c).w(chevron_w * k).h(chevron_w * k).center().rounded(5 * k);
+    var b = ui.div(c).w(chevron_w * k).h(chevron_w * k).center().rounded(shape_mod.corner(@max(0, t.radius - 3)) * k);
     defer b.end();
     const was = c.focus;
     const it = c.interact(b.index, .{});

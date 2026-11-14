@@ -20,6 +20,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`callout`](#callout) | An icon and text in a box tinted in a status's color: a warning, a finding, a note. |
 | [`notice`](#notice) | What a pane shows in place of its content when it is empty, stopped or waiting. |
 | [`segmented`](#segmented) | One choice out of a few, as one bordered group, chosen with the mouse or the keys. |
+| [`cardChoice`](#cardchoice) | One choice out of several, as cards whose content is the app's, running on to new rows, chosen with the mouse or the keys. |
 | [`tabStrip`](#tabstrip) | Tabs on a rule, each with a count in a badge, a spinner while it loads, or an alert. |
 | [`toasts`](#toasts) | Short messages that come and go in a corner, with an action such as "Undo". |
 | [`chipInput`](#chipinput) and [`chip`](#chip) | A field of chips to type values into, and an option shown as a chip that is on or off. |
@@ -51,7 +52,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.8.2"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.9.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -83,6 +84,16 @@ controls.setFocusRingShows(.keyboard);
 ```
 
 Then a key shows the ring and the pointer hides it, as nanoui's `c.keyboard_modality` says, and the ring nanoui draws round the controls' own boxes comes off with it. A click on a control that is a button (the stat button, a bar list's row, the form's link rows and folding headings) acts and leaves the keyboard where it was, such as in a text field being typed in; Tab still reaches it. A control with keys of its own (the grid, the sidebar, the swatches, the pager, the charts, the splitter) still takes the keyboard on a click, so its keys work at once, and rings once a key is used.
+
+## The app's shape
+
+The controls take their colors from the app's theme, and their shape from this: how round the corners they choose themselves are, and how strongly what glows in them glows. An app whose theme has square corners or no glows sets it once, or each frame from its theme:
+
+```zig
+controls.setShape(.{ .corner = 0.35, .glow = 1.4 });
+```
+
+`corner` scales every corner a control chooses itself, a fixed one or one taken from the kit's radius (a segmented group, a tab, the sidebar's selected row, a panel, a toast, a bar's ends); `glow` every glow it chooses itself, a pill's dot, a focused `inputBox` and a `gauge`'s ticks. 0 is square, or no glow. A number the app passes (a `Surface`'s `radius` or `glow`, a `glow` option set at the call) draws as given, so an app scales its own presets. Shapes that are round by what they are (a dot, a capsule pill, a count's badge) stay round, and a toast's shadow is not a glow. `controls.shape()` says what is set.
 
 ## grid
 
@@ -297,7 +308,7 @@ controls.pill(c, "P", .{ .shape = .box, .tooltip = "Performance cores" });
 
 - `status` takes the kit's status colors, neutral the accent; `color` goes over it. A status's color is the tint's, the border's and the lead's, and the label takes a shade of it that reads at 4.5:1 on the tint (lighter or darker as the theme is), where the light theme's green, say, reads faint as text; a `color` of the caller's is the label's as it is. Notices' titles, panels' captions, form headings and gauges' figures in a status's color take such a shade too.
 - `max_width` cuts a long label short with "…", whole in a tooltip and to a screen reader.
-- `lead` is a dot that glows (`dim` draws it faint, the off beat of a blink) or an icon. `shape` is `.capsule` or `.box`.
+- `lead` is a dot that glows (`dim` draws it faint, the off beat of a blink; `glow` sets its glow, 0 a plain dot, null 0.8 in the app's shape) or an icon. `shape` is `.capsule` or `.box`.
 - `size` (`.xs`) sets the label a point under the kit's text, and its padding, gap and corners follow it; `text_size`, `px`, `py`, `gap`, `radius` and `height` set them one by one. `pillLengths(opts)` gives them, to measure a pill before drawing it.
 - `mono` writes the label in the monospaced font, so figures line up from pill to pill; `weight`, and `fill` and `edge`, the tint's and border's opacity.
 - `pillOpen` leaves it open after its label, for a button in it; the caller ends it.
@@ -384,7 +395,24 @@ if (controls.segmented(c, &ranges, &range, .{ .label = "Range" })) refilter();
 - It is one stop for Tab. The arrows, Home and End choose, passing disabled options; the keys it moves by are used up even at an end, and are its own when nanoui offers them first as shortcuts. Enter is the app's. A click chooses and gives it the keyboard; its ring shows as `setFocusRingShows` says.
 - A screen reader hears each option as a radio button, with its count or `loading_text` as its value and the group's `label` after it.
 - `segmentedOf` keeps the choice as a value of an enum, an option for each of its values in their order.
-- `size` or `text_size`, `background` and `border`, `px` and `py`, `max_count` (past it, "999+"), `disabled` and `scale`.
+- `size` or `text_size`, `background` and `border`, `px` and `py`, `max_count` (past it, "999+"), `disabled` and `scale`. Its corners follow the kit's radius and the app's shape.
+
+## cardChoice
+
+One choice out of several, as cards of one width that run on to new rows where the width ends, each card's content the app's: a theme's preview, a picture, lines of its own. `segmented` and `tabStrip` choose among labels; this among what the app draws.
+
+```zig
+var cc = controls.cardChoice(c, &names, &theme, .{ .cell_width = 132, .label = "Theme" });
+while (cc.next()) |i| {
+    preview(c, themes[i]);
+    ui.text(c, names[i], .{ .size = 12, .weight = .semibold });
+}
+if (cc.end()) save();
+```
+
+- `index` is a `*usize`, or a `*?usize` for a choice that may be none. `next` opens each card, a column for its content, and returns its index; `end` returns true when a click or a key changed the choice. `isChosen(i)` says whether card `i` is the one.
+- It is one stop for Tab, heard as radio buttons named by `labels`, with the group's `label` after each; the content isn't heard on its own. Left and Right choose the card before and after, Up and Down the one a row up or down, Home and End the first and the last, passing cards in `disabled_cards`; a click chooses a card and gives it the keyboard. The chosen card is tinted in the accent and outlined in it.
+- `cell_width` (160), `fill` to share each row's width, `gap` and `row_gap` (8), `card`, a `Surface` over its own look (the theme's surface and border, 8 points of padding, 6 between), `disabled` and `scale`.
 
 ## tabStrip
 
@@ -484,7 +512,7 @@ if (r.cleared) search.set("");
 _ = controls.inputBox(c, &password, .{ .icon = "lock", .label = "Password", .shown = &show, .paste = true });
 ```
 
-- While the field has the keyboard, the frame and the icon take the accent (`color`) and it glows (`glow`). Each box glows for its own field.
+- While the field has the keyboard, the frame and the icon take the accent (`color`) and it glows (`glow`: null is 0.22 in the app's shape, 0 none). Each box glows for its own field.
 - `shown` makes it a secret, its text dots until the eye shows it; a screen reader isn't told a hidden secret's text.
 - `clearable` (null: while there is text, unless it is a secret) adds a clear button, and `paste` a Paste button; `cleared` and `pasted` say they were pressed. A click on a button gives the field the keyboard back, so typing goes on; Tab reaches each.
 - A screen reader hears the field by its `label`, or its placeholder; each button by its words (`show_text`, `hide_text`, `clear_text`, `paste_text`).
@@ -640,7 +668,7 @@ A ring of ticks from the bottom left round to the bottom right, lit up to a valu
 controls.gauge(c, score, .{ .ramp = &strength, .text = "B", .caption = "62 bits", .label = "Strength" });
 ```
 
-- Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them; unlit ones are the `track`. The figure is in the value's color, in a shade that reads as text.
+- Lit ticks take `color`, or `ramp` by their place, with a `glow` behind them (null is 0.16 in the app's shape, 0 none); unlit ones are the `track`. The figure is in the value's color, in a shade that reads as text.
 - `diameter` is its width across and `ticks` how many; their length, width and glow keep in proportion to the diameter, within its box. `min` and `max` take a value in its own units. `inner_line` draws a thin circle inside them.
 - A screen reader hears its value as a percentage, unless given a `value_text`.
 

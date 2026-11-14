@@ -3,7 +3,8 @@
 //! group picks the range (its counts change with it), a tab strip what
 //! kind of run, chips that turn on and off narrow it, and a field of
 //! chips holds the times of day it runs (type "9:00," or paste several;
-//! one that isn't a time shows in red). The buttons raise toasts in the
+//! one that isn't a time shows in red), and cards choose how long to keep
+//! its snapshots. The buttons raise toasts in the
 //! corner: one with "Undo", one that fails, and the same one twice, which
 //! shows once.
 const std = @import("std");
@@ -28,8 +29,11 @@ pub const History = struct {
     field: ui.TextBuffer = .{},
     toasts: controls.Toasts = .{},
     undone: usize = 0,
+    plan: usize = 1,
 
     const undo_tag = 1;
+    const plans = [_][]const u8{ "A week", "A month", "A year" };
+    const plan_notes = [_][]const u8{ "Every hour, for 7 days", "Every day, for 30 days", "Every week, for 52 weeks" };
 
     pub fn view(h: *History, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -84,6 +88,15 @@ pub const History = struct {
                 h.lens[j] = h.lens[j + 1];
             }
             h.n -= 1;
+        }
+        controls.caption(c, "KEEP SNAPSHOTS FOR", .{});
+        {
+            var cc = controls.cardChoice(c, &plans, &h.plan, .{ .cell_width = 150, .label = "Keep snapshots for" });
+            while (cc.next()) |i| {
+                ui.text(c, plans[i], .{ .size = 13, .weight = .semibold });
+                ui.text(c, plan_notes[i], .{ .size = 11, .color = t.muted });
+            }
+            _ = cc.end();
         }
         {
             const row = ui.div(c).row().gap(8);

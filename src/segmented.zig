@@ -14,6 +14,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
 const choices_mod = @import("choices.zig");
+const shape_mod = @import("shape.zig");
 const Choice = choices_mod.Choice;
 
 pub const Options = struct {
@@ -45,7 +46,7 @@ pub fn segmented(c: *ui.Context, choices: []const Choice, index: *usize, opts: O
     const k = opts.scale;
     const t = kit.tokens(c);
     const size = opts.text_size orelse opts.size.text();
-    var group = ui.div(c).row().itemsCenter().gap(2 * k).p(2 * k).rounded(9 * k).bg(opts.background orelse t.background).border(opts.border orelse t.border);
+    var group = ui.div(c).row().itemsCenter().gap(2 * k).p(2 * k).rounded(shape_mod.corner(t.radius + 1) * k).bg(opts.background orelse t.background).border(opts.border orelse t.border);
     if (opts.disabled) group = group.opacity(focus.dimmed);
     defer group.end();
     var g = choices_mod.Group.take(c, group, index, choices, opts.disabled);
@@ -56,7 +57,7 @@ pub fn segmented(c: *ui.Context, choices: []const Choice, index: *usize, opts: O
         const off = opts.disabled or choice.disabled;
         // Keyed by place: labels may repeat, or be empty.
         ui.keyInt(c, i);
-        var seg = ui.div(c).row().itemsCenter().gap(6 * k).px(opts.px * k).py(opts.py * k).rounded(7 * k).control();
+        var seg = ui.div(c).row().itemsCenter().gap(6 * k).px(opts.px * k).py(opts.py * k).rounded(shape_mod.corner(@max(0, t.radius - 1)) * k).control();
         seg = if (on) seg.bg(t.primary) else if (off) seg else seg.hover(t.surface_hover);
         if (choice.disabled and !opts.disabled) seg = seg.opacity(focus.dimmed);
         const hit = g.interact(c, seg, i);

@@ -1411,3 +1411,75 @@ test "icon tiles, a header and input boxes, light and dark" {
     try expectView("framed", .init(&x, Framed.view), .{ .height = 330 });
     try expectView("framed-dark", .init(&x, Framed.view), .{ .height = 330, .dark = true });
 }
+
+/// Controls in a square shape without glows, as an instrument's panel or
+/// paper would draw them.
+const Squared = struct {
+    range: usize = 1,
+    tab: usize = 0,
+
+    fn view(x: *Squared, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(10).gap(10);
+        defer root.end();
+        _ = controls.segmented(c, &.{ .{ .label = "Day" }, .{ .label = "Week" }, .{ .label = "Month" } }, &x.range, .{ .label = "Range" });
+        _ = controls.tabStrip(c, &.{ .{ .label = "Reviews", .count = 3 }, .{ .label = "Failed", .count = 2, .alert = true } }, &x.tab, .{});
+        {
+            const row = ui.div(c).row().gap(8).itemsCenter();
+            defer row.end();
+            controls.pill(c, "LIVE", .{ .status = .success, .lead = .{ .dot = .{} } });
+            controls.pill(c, "P", .{ .shape = .box });
+            controls.iconTile(c, "cpu", .{ .status = .warning });
+        }
+        const p = controls.panel(c, .{ .title = "LOAD" });
+        _ = controls.barList(c, &.{
+            .{ .label = "CPU", .value = 64, .value_text = "64%" },
+            .{ .label = "GPU", .value = 22, .value_text = "22%" },
+        }, .{ .max = 100, .fixed_max = true, .label_width = 60 });
+        controls.meter(c, 0.6, .{ .segments = 12 });
+        p.end();
+        controls.gauge(c, 0.7, .{ .diameter = 80, .label = "Score" });
+    }
+};
+
+test "controls in a square shape without glows, light and dark" {
+    defer controls.setShape(.{});
+    controls.setShape(.{ .corner = 0.25, .glow = 0 });
+    var x: Squared = .{};
+    try expectView("shape-square", .init(&x, Squared.view), .{ .height = 400 });
+    try expectView("shape-square-dark", .init(&x, Squared.view), .{ .height = 400, .dark = true });
+}
+
+/// Themes to choose as cards, each a preview of its colors over its name,
+/// one chosen and one unavailable.
+const Cards = struct {
+    theme: usize = 1,
+    const names = [_][]const u8{ "Light", "Dusk", "Paper", "Contrast", "Forest" };
+    const colors = [_][2]ui.Color{
+        .{ .hex(0xf5f5f7), .hex(0x0a84ff) },
+        .{ .hex(0x1c1c22), .hex(0xbf5af2) },
+        .{ .hex(0xf4ecd8), .hex(0x8a5a2b) },
+        .{ .hex(0x000000), .hex(0xffd60a) },
+        .{ .hex(0x1f2a24), .hex(0x30d158) },
+    };
+
+    fn view(x: *Cards, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(10);
+        defer root.end();
+        var cc = controls.cardChoice(c, &names, &x.theme, .{ .cell_width = 104, .label = "Theme", .disabled_cards = &.{ false, false, false, true, false } });
+        while (cc.next()) |i| {
+            {
+                const preview = ui.div(c).wFull().h(40).rounded(4).bg(colors[i][0]).border(kit.tokens(c).border).p(8);
+                defer preview.end();
+                ui.div(c).w(28).h(8).roundedFull().bg(colors[i][1]).end();
+            }
+            ui.text(c, names[i], .{ .size = 12, .weight = .semibold });
+        }
+        _ = cc.end();
+    }
+};
+
+test "a choice among cards, one chosen and one unavailable, light and dark" {
+    var x: Cards = .{};
+    try expectView("card-choice", .init(&x, Cards.view), .{ .height = 200 });
+    try expectView("card-choice-dark", .init(&x, Cards.view), .{ .height = 200, .dark = true });
+}

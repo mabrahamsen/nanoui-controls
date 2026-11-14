@@ -20,6 +20,7 @@ const focus = @import("focus.zig");
 const parts = @import("parts.zig");
 const buttons = @import("buttons.zig");
 const surface = @import("surface.zig");
+const shape_mod = @import("shape.zig");
 const Surface = surface.Surface;
 
 pub const Options = struct {
@@ -43,8 +44,9 @@ pub const Options = struct {
     /// The frame's, the icon's and the caret's color while the field has
     /// the keyboard; null takes the theme's accent.
     color: ?ui.Color = null,
-    /// The glow's opacity while the field has the keyboard; 0 for none.
-    glow: f32 = 0.22,
+    /// The glow's opacity while the field has the keyboard, 0 for none;
+    /// null takes 0.22 in the app's shape (`setShape`).
+    glow: ?f32 = null,
     /// The frame: the theme's surface, border and radius, 12 points of
     /// padding across, 8 down and 8 between its parts, as wide as its
     /// parent, unless it says. A width in points is multiplied by `scale`.
@@ -83,7 +85,8 @@ pub fn inputBox(c: *ui.Context, buffer: *ui.TextBuffer, opts: Options) Result {
     const lit = had.on and !opts.disabled;
     var frame = surface.open(c, opts.card, .{ .fill = t.surface, .border = t.border, .px = 12, .py = 8, .gap = 8, .scale = k }).row().itemsCenter();
     if (lit) frame = frame.border(col.alpha(0.7));
-    if (lit and opts.glow > 0) frame = frame.shadow(.{ .color = col.alpha(opts.glow), .blur = 20 * k, .y = 0 });
+    const glow = opts.glow orelse shape_mod.glow(0.22);
+    if (lit and glow > 0) frame = frame.shadow(.{ .color = col.alpha(glow), .blur = 20 * k, .y = 0 });
     if (opts.disabled) frame = frame.opacity(focus.dimmed);
     defer frame.end();
     if (opts.icon.len > 0) ui.icon(c, opts.icon, .{ .size = 14 * k, .color = if (lit) col else t.muted });
