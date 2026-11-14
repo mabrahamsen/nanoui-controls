@@ -9,7 +9,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 |---|---|
 | [`grid`](#grid) | Rows of cells under a header of column titles, with the columns lined up, sorting by a clicked title and building only the rows in view; a selection that follows its rows by key; in groups that fold, as cards, in a card, and sketched while they load. |
 | [`pager`](#pager) | "‹ 1 … 9 10 11 … 20 ›": numbered pages, for an app that shows a page at a time. |
-| [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings, in groups that fold and in branches nested to any depth, chosen by key, with the keyboard. |
+| [`sidebar`](#sidebar) | Rows to pick what a window shows, under headings, in groups that fold and in branches nested to any depth, chosen by a key of the app's type, with the keyboard. |
 | [`splitter`](#splitter) | A handle between two panes that resizes one of them, by dragging or with the keys. |
 | [`form`](#form) | Rows with a label beside a control or a value, the labels in one column, for a settings pane or an inspector. |
 | [`swatches`](#swatches) | A row of round colors to pick one from, with the mouse or the keys. |
@@ -24,7 +24,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | [`toasts`](#toasts) | Short messages that come and go in a corner, with an action such as "Undo". |
 | [`chipInput`](#chipinput) and [`chip`](#chip) | A field of chips to type values into, and an option shown as a chip that is on or off. |
 | [`iconTile`](#icontile) | A symbol in a rounded square tinted in a status's color, lit or off. |
-| [`header`](#header) | What a window or a pane is: a tile, a title and a subtitle, with pills and buttons at its end. |
+| [`header`](#header) | What a window or a pane is: a tile, a title and a subtitle, with pills and buttons at its end; the tile alone, narrowed. |
 | [`inputBox`](#inputbox) | A text field in a frame of its own: an icon, a clear button, Paste, and an eye for a secret. |
 | [`trend`](#trend) | A history drawn as bars, scaled to its peak, the older bars fainter: a CPU's load, a temperature. |
 | [`line`](#line) | Histories drawn as lines, filled under as areas if wanted, which the user can point at or step through. |
@@ -184,6 +184,15 @@ if (sb.end()) |key| selected = key;
 ```
 
 - `end` returns the key chosen this frame, by a click or the keys. Keep it: it must outlive the frame, as the rows' keys usually do.
+- **Keys of the app's type:** `sidebarOf(Key, c, id, selected, opts)` keys rows by `Key` instead of strings: an enum of the app's screens, or a tagged union for a page under a screen, so a key that doesn't exist is a compile error rather than a row that can't be chosen. `item` and `branch` take a `Key`, and `end` and `secondary_clicked` give one back; groups keep their string keys, as nothing selects them. A key is compared and hashed as it is, so it holds no pointers. `sidebar` is `sidebarOf([]const u8, ...)`.
+
+  ```zig
+  const Screen = union(enum) { overview, tool: Tool, page: struct { tool: Tool, page: Page } };
+  var sb = controls.sidebarOf(Screen, c, "nav", screen, .{});
+  sb.item(.overview, "Overview", .{ .icon = "square.grid.2x2" });
+  sb.item(.{ .tool = .git }, "Git", .{});
+  if (sb.end()) |s| screen = s;
+  ```
 - It takes the room left in its parent, and scrolls when its rows need more, keeping the keys' row in view.
 - **Branches:** `branch` is a row with rows under it, as `group` is a heading with rows under it: draw them, then `end` the group it returns. It has an `item`'s options, can be chosen and selected, and has a chevron at its end; its rows are indented a step, so their icons sit under its label, and can be branches, headings or groups in turn. The caller keeps whether it is open. A click on the chevron folds or opens it without choosing it; a click elsewhere on it chooses it and opens it if folded. Folded with the selected row in it, it shows in the selection's tint, so the selection can be found. A disabled branch can't be chosen, but still folds.
 - **Fixed trees:** with `null` for `open`, a branch is fixed: its rows always show, it has no chevron, and it doesn't fold, so there is nothing for the caller to keep. A tree of only fixed branches is a fixed tree, such as a docs site's contents; fixed and folding branches can also be mixed. Right and Left still move into and out of a fixed branch.
@@ -192,7 +201,7 @@ if (sb.end()) |key| selected = key;
 - **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; group headings with whether they are open (`expanded_text`, `collapsed_text`), and branches as rows whose value is their count and whether they are open.
 - `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
 - A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows; in a folded branch, the branch shows it.
-- **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots; a branch's rows aren't indented, and only the keys fold it. With a `splitter`, an app can switch to it when the sidebar is dragged narrow.
+- **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots; a branch's rows aren't indented, and only the keys fold it. With a `splitter`, an app can switch to it when the sidebar is dragged narrow. One id serves both shapes: as it changes, the selection shows on its row at once, rather than sliding across from where the row was. A header over it narrows with it (`header`'s `narrow`).
 - **Rows** can be `disabled`: dimmed, not chosen by a click, passed by the keys, and said as disabled. A label cut short shows whole in a tooltip. A count can be a filled pill in the selection's tint (`count_style = .pill`), for what waits to be seen. A row whose count isn't known yet is `loading`: a spinner where the count goes, so the label doesn't move when it comes and the count never reads as 0, at the icon's corner with `icons_only`; a screen reader hears `loading_text`.
 - **Menus:** a right-click (Control-click on the Mac) on a row sets `secondary_clicked` to its key, for the app to open a menu, such as the kit's; it doesn't choose the row.
 
@@ -460,7 +469,8 @@ h.end();
 ```
 
 - `icon` (empty leaves the tile out) and `tile`, the tile's options, which take the header's `status` or `color` unless they set their own.
-- The title is the kit's text at `size` (`.md`) and two points, or `text_size`; the subtitle three points under it, monospaced with `subtitle_mono`, for a path or a host.
+- The title is the kit's text at `size` (`.md`) and two points, or `text_size`, monospaced with `title_mono`, for an app's or a host's name; the subtitle three points under it, monospaced with `subtitle_mono`, for a path or a host.
+- `narrow` draws the tile alone, centered, for a header over a sidebar narrowed to its icons: the title shows in a tooltip and is still heard as a heading.
 - A screen reader hears the title as a heading, then the subtitle. In a narrow pane both are cut short with an ellipsis, whole in a tooltip, and what is at the end keeps its room.
 
 ## inputBox
@@ -603,8 +613,9 @@ if (controls.barList(c, &folders, .{ .clickable = true })) |i| open(folders[i]);
 
 - `label_width` and `value_width` are the columns either side of the bars, and `bar_height` the bars' height; labels too long are cut short. The bars scale to `max`, rising to the largest item unless `fixed_max`; a null `max` takes the largest.
 - An item's `key` keeps its row's keyboard focus and easing on it as the list re-sorts. A clickable row takes Enter or Space.
-- **Richer rows:** an item can lead with an `icon`, in a slot of its own so labels line up, or a `badge` ("P", "GPU") in a small tinted tag; end with a muted `detail` after its figure ("max 94"), in a `detail_width` column; and color its figure (`value_color`). A screen reader hears the figure and the detail.
-- **Levels:** `min` starts the scale above zero (a temperature from 20); `ramp` colors each bar by its level, `track`, `glow` and `bar_radius` (null rounds the ends) style them, and `style = .meter` draws each row's bar as a meter of `segments`, lit to its level.
+- **Richer rows:** an item can lead with an `icon`, in a slot of its own so labels line up, in its `icon_color`, or a `badge` ("P", "GPU"), a boxed `pill` in `badge_color` or the row's color; end with a muted `detail` after its figure ("max 94"), in a `detail_width` column; and color and weigh its figure (`value_color`, `value_weight`). A screen reader hears the figure and the detail.
+- **Levels:** `min` starts the scale above zero (a temperature from 20); `ramp` colors each bar by its level, `track`, `glow` and `bar_radius` (null rounds the ends of the bar and its level) style them, and `style = .meter` draws each row's bar as a meter of `segments`, lit to its level.
+- **Plain rows,** as a monitor draws its levels: `padded = false` takes the rows' content out to the list's edges, `text_size` sets the labels' size in points (the figures, details, badges and icons follow it), `show_labels = false` shows only the badges in the label column (the label still names its row to a screen reader), and `label_width = 0` leaves the column out.
 
 ## meter
 

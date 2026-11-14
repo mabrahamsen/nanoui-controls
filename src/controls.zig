@@ -91,10 +91,13 @@ pub const StatOptions = stat_mod.Options;
 
 const sidebar_mod = @import("sidebar.zig");
 pub const sidebar = sidebar_mod.sidebar;
+pub const sidebarOf = sidebar_mod.sidebarOf;
 pub const Sidebar = sidebar_mod.Sidebar;
+pub const SidebarOf = sidebar_mod.SidebarOf;
 pub const SidebarOptions = sidebar_mod.Options;
 pub const SidebarItem = sidebar_mod.Item;
 pub const SidebarGroup = sidebar_mod.Group;
+pub const SidebarGroupOf = sidebar_mod.GroupOf;
 
 const splitter_mod = @import("splitter.zig");
 pub const splitter = splitter_mod.splitter;

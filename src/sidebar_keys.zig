@@ -5,7 +5,6 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const focus = @import("focus.zig");
-const Sidebar = @import("sidebar.zig").Sidebar;
 const typing_mod = @import("grid_keys.zig");
 
 /// The text typed to move to a row, kept by a key of its own: use it at
@@ -41,18 +40,18 @@ fn typedTo(list: anytype, from: usize, text: []const u8) ?usize {
 
 /// Where the keys are among the entries drawn: the entry they moved
 /// to, else the selected row, else none.
-pub fn place(sb: *const Sidebar) ?usize {
+pub fn place(sb: anytype) ?usize {
     const list = sb.entries.items;
     if (sb.kept.cursor != 0) for (list, 0..) |e, i| if (e.hash == sb.kept.cursor) return i;
-    const s = sb.selected orelse return null;
-    for (list, 0..) |e, i| if (e.choosable and std.mem.eql(u8, e.key, s)) return i;
+    if (sb.selected == null) return null;
+    for (list, 0..) |e, i| if (e.choosable and sb.isSelected(e.key.?)) return i;
     return null;
 }
 
 /// The keys, while the sidebar has the keyboard: on the rows, branches
 /// and headings drawn this frame. The keys it acts on are its own:
 /// nothing after it sees them.
-pub fn keys(sb: *Sidebar) void {
+pub fn keys(sb: anytype) void {
     const c = sb.c;
     const list = sb.entries.items;
     if (list.len == 0) return;
@@ -98,7 +97,7 @@ pub fn keys(sb: *Sidebar) void {
     if (enter) if (at) |a| {
         const e = list[a];
         if (e.choosable) {
-            if (!sb.isSelected(e.key)) sb.choose(e.key);
+            if (!sb.isSelected(e.key.?)) sb.choose(e.key.?);
         } else if (e.open) |o| {
             o.* = !o.*;
             c.changed = true;
@@ -114,12 +113,12 @@ pub fn keys(sb: *Sidebar) void {
     const next = list[i];
     sb.kept.cursor = next.hash;
     c.changed = true;
-    if (next.choosable and !sb.opts.choose_on_enter and !sb.isSelected(next.key)) sb.choose(next.key);
+    if (next.choosable and !sb.opts.choose_on_enter and !sb.isSelected(next.key.?)) sb.choose(next.key.?);
     reveal(sb, next.index);
 }
 
 /// Scrolls the sidebar so box `index`, as last laid out, is in view.
-pub fn reveal(sb: *Sidebar, index: u32) void {
+pub fn reveal(sb: anytype, index: u32) void {
     const c = sb.c;
     const box_id = c.node(sb.outer.index).id;
     const view = c.rects.get(box_id) orelse return;

@@ -18,6 +18,7 @@ const focus = @import("focus.zig");
 const breakdown_mod = @import("breakdown.zig");
 const meter_mod = @import("meter.zig");
 const chart = @import("chart.zig");
+const pill_mod = @import("pill.zig");
 
 /// One row of the list.
 pub const Item = struct {
@@ -36,8 +37,10 @@ pub const Item = struct {
     /// A symbol before the label, in a slot of its own, so labels line up
     /// whatever the icons.
     icon: ?[]const u8 = null,
-    /// A short text before the label in a small tinted tag ("P", "GPU"),
-    /// in `badge_color`, or the row's color.
+    /// The icon's color; null takes the theme's muted text.
+    icon_color: ?ui.Color = null,
+    /// A short text before the label in a badge, a `pill` boxed ("P",
+    /// "GPU"), in `badge_color`, or the row's color.
     badge: []const u8 = "",
     badge_color: ?ui.Color = null,
     /// A second, muted figure after the first, such as a maximum ("max 94").
@@ -45,6 +48,7 @@ pub const Item = struct {
     /// The figure's color, such as the ramp's for its level; null takes
     /// the theme's muted text.
     value_color: ?ui.Color = null,
+    value_weight: ui.Weight = .regular,
 };
 
 /// How a row's bar is drawn.
@@ -66,8 +70,12 @@ pub const Options = struct {
     /// bar from its start.
     min: f32 = 0,
     /// The labels' column, in points before `scale`, wide enough for most
-    /// labels; longer ones are cut short with an ellipsis.
+    /// labels; longer ones are cut short with an ellipsis. 0 leaves the
+    /// column out, and the gap after it.
     label_width: f32 = 120,
+    /// The labels show in their column; false shows only the badges there.
+    /// A label still names its row to a screen reader.
+    show_labels: bool = true,
     /// The figures' column, at the end, in points before `scale`.
     value_width: f32 = 64,
     bar_height: ui.Length = .{ .px = 6 },
@@ -75,6 +83,12 @@ pub const Options = struct {
     gap: f32 = 2,
     /// The text's size, as the kit's.
     size: kit.Size = .sm,
+    /// The labels' size in points, over `size`'s, as `pill` takes it: the
+    /// figures, details, badges and icons follow it.
+    text_size: ?f32 = null,
+    /// Room round each row's content, as a list of rows to click has; false
+    /// takes the content out to the list's edges.
+    padded: bool = true,
     /// The bars' color; null takes the theme's accent.
     color: ?ui.Color = null,
     /// Colors from an empty bar to a full one: each bar takes the color
@@ -84,8 +98,8 @@ pub const Options = struct {
     track: ?ui.Color = null,
     /// The opacity of a glow around each bar, in its color; 0 draws none.
     glow: f32 = 0,
-    /// The bars' corners, in points before `scale`; null rounds their
-    /// ends.
+    /// The bars' corners, and their levels', in points before `scale`;
+    /// null rounds their ends.
     bar_radius: ?f32 = null,
     style: Style = .bar,
     /// With `.meter`, how many segments a row's meter has.
@@ -122,7 +136,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     const col = ui.div(c).column().wFull().gap(opts.gap * k);
     defer col.end();
     var clicked: ?usize = null;
-    const text = opts.size.text();
+    const text = opts.text_size orelse opts.size.text();
     // Slots and columns only when a row has something for them, so the
     // rest line up.
     var icons = false;
@@ -133,7 +147,8 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     }
     for (items, 0..) |it, i| {
         if (it.key.len > 0) ui.key(c, it.key) else ui.keyInt(c, i);
-        var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(6 * k).py(@round(text * 0.35) * k).rounded(@max(0, t.radius - 2));
+        var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).rounded(@max(0, t.radius - 2));
+        if (opts.padded) row = row.px(6 * k).py(@round(text * 0.35) * k);
         if (opts.clickable) {
             // Each row takes the keyboard, as a button does: Tab moves
             // from row to row, and Enter or Space clicks the one that has
@@ -153,27 +168,39 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
         if (icons) {
             const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
             defer slot.end();
-            if (it.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = t.muted });
+            if (it.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = it.icon_color orelse t.muted });
         }
         // A value that is not a number draws no bar.
         const share = chart.level(it.value, opts.min, max) orelse 0;
         const bar_color = it.color orelse if (opts.ramp.len > 0) chart.rampColor(opts.ramp, share) else opts.color orelse t.primary;
-        {
+        if (opts.label_width > 0) {
             const l = ui.div(c).w(opts.label_width * k).row().itemsCenter().gap(@round(text * 0.4) * k);
             defer l.end();
             if (it.badge.len > 0) {
-                const tint = it.badge_color orelse bar_color;
-                const b = ui.div(c).px(@round(text * 0.35) * k).py(1 * k).rounded(3 * k).bg(tint.alpha(0.15)).border(tint.alpha(0.4));
-                defer b.end();
-                ui.text(c, it.badge, .{ .size = text - 3, .weight = .bold, .mono = true, .color = tint });
+                // Heard as part of the row, not on its own.
+                const b = pill_mod.pillOpen(c, it.badge, .{
+                    .shape = .box,
+                    .color = it.badge_color orelse bar_color,
+                    .text_size = text - 3,
+                    .weight = .bold,
+                    .mono = true,
+                    .fill = 0.14,
+                    .edge = 0.5,
+                    .px = @round(text * 0.35),
+                    .py = 1,
+                    .height = @round(text * 1.3),
+                    .scale = k,
+                });
+                ui.access.hide(c, b.index);
+                b.end();
             }
-            ui.text(c, it.label, .{ .size = text, .color = t.foreground, .truncate = .ellipsis });
+            if (opts.show_labels) ui.text(c, it.label, .{ .size = text, .color = t.foreground, .truncate = .ellipsis });
         }
         switch (opts.style) {
             .bar => breakdown_mod.breakdown(c, &.{.{ .value = share, .color = bar_color }}, .{
                 .height = opts.bar_height,
                 .radius = opts.bar_radius,
-                .part_radius = if (opts.glow > 0) (opts.bar_radius orelse barHalf(opts.bar_height)) else 0,
+                .part_radius = opts.bar_radius orelse barHalf(opts.bar_height),
                 .glow = opts.glow,
                 .track = opts.track,
                 .scale = k,
@@ -192,7 +219,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
         {
             const v = ui.div(c).w(opts.value_width * k).row().justifyEnd();
             defer v.end();
-            ui.text(c, it.value_text, .{ .size = text - 1, .mono = true, .color = it.value_color orelse t.muted });
+            ui.text(c, it.value_text, .{ .size = text - 1, .weight = it.value_weight, .mono = true, .color = it.value_color orelse t.muted });
         }
         if (details) {
             const d = ui.div(c).w(opts.detail_width * k).row().justifyEnd();

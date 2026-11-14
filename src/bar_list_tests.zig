@@ -133,3 +133,100 @@ test "a bar list's rows keyed by item keep the keyboard on their item as the lis
     t.key(.enter);
     try std.testing.expectEqual(@as(?usize, 1), x.clicked);
 }
+
+/// Rows drawn plain: a list of levels as a monitor draws them, its labels
+/// left out or not.
+const Plain = struct {
+    opts: bar_list.Options = .{ .padded = false, .show_labels = false, .label_width = 34, .text_size = 13, .min = 20, .max = 110, .fixed_max = true },
+    items: []const bar_list.Item = &.{
+        .{ .label = "CPU temperature", .value = 65, .value_text = "65 °C", .badge = "CPU", .value_weight = .semibold, .value_color = .hex(0xfb7185) },
+        .{ .label = "Fan", .value = 40, .value_text = "1200 rpm", .icon = "gauge.with.dots.needle.33percent", .icon_color = .hex(0x22d3ee) },
+    },
+
+    fn view(x: *Plain, c: *ui.Context) void {
+        const root = ui.div(c).column().w(400);
+        defer root.end();
+        _ = bar_list.barList(c, x.items, x.opts);
+    }
+};
+
+fn startPlain(x: *Plain, t: *ui.Tester) !void {
+    try t.init(std.testing.allocator, .init(x, Plain.view), .{ .width = 500, .height = 200 });
+    t.settle(1);
+}
+
+/// The style of the first text that reads `s`.
+fn styleOf(t: *ui.Tester, s: []const u8) ?ui.TextStyle {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .text => |tx| if (std.mem.eql(u8, tx.str, s)) return tx.style,
+        else => {},
+    };
+    return null;
+}
+
+test "a bar list without labels shows its badges in their column, and its labels still name the rows" {
+    var x: Plain = .{};
+    var t: ui.Tester = undefined;
+    try startPlain(&x, &t);
+    defer t.deinit();
+    try std.testing.expect(!t.hasText("CPU temperature") and t.hasText("CPU"));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    // One element a row: the badge isn't heard on its own.
+    try std.testing.expectEqual(@as(usize, 2), list.items.len);
+    try std.testing.expectEqualStrings("CPU temperature", list.items[0].label);
+    try std.testing.expectEqualStrings("Fan", list.items[1].label);
+}
+
+test "unpadded, a bar list's rows run to its edges, at the caller's text size, figures in their weight and icons in their color" {
+    var x: Plain = .{};
+    var t: ui.Tester = undefined;
+    try startPlain(&x, &t);
+    defer t.deinit();
+    const fan = t.findText("1200 rpm").?;
+    try std.testing.expectApproxEqAbs(@as(f32, 400), fan.x + fan.w, 0.5);
+    // Figures a point under the text, the first semibold.
+    const hot = styleOf(&t, "65 °C").?;
+    try std.testing.expectEqual(@as(f32, 12), hot.size);
+    try std.testing.expectEqual(ui.Weight.semibold, hot.weight);
+    try std.testing.expectEqual(ui.Weight.regular, styleOf(&t, "1200 rpm").?.weight);
+    var cyan = false;
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .icon => |ic| cyan = cyan or std.meta.eql(ic.color, ui.Color.hex(0x22d3ee)),
+        else => {},
+    };
+    try std.testing.expect(cyan);
+    // The padded rows start their content further in.
+    const plain_x = t.findText("CPU").?.x;
+    x.opts.padded = true;
+    t.settle(1);
+    try std.testing.expect(t.findText("CPU").?.x > plain_x);
+}
+
+test "a label width of 0 leaves the label column and its gap out" {
+    var x: Plain = .{ .items = &.{.{ .label = "Neural Engine", .value = 50, .value_text = "50%" }} };
+    x.opts.label_width = 0;
+    var t: ui.Tester = undefined;
+    try startPlain(&x, &t);
+    defer t.deinit();
+    // Its bar starts at the list's start.
+    var track: ?ui.Rect = null;
+    for (t.ctx.nodes.items) |n| if (n.style.background != null) if (t.ctx.rects.get(n.id)) |r| if (r.h <= 6.5 and track == null) {
+        track = r;
+    };
+    try std.testing.expectApproxEqAbs(@as(f32, 0), track.?.x, 0.5);
+}
+
+test "a bar's level rounds its ends without a glow, as its track does" {
+    var x: Plain = .{};
+    var t: ui.Tester = undefined;
+    try startPlain(&x, &t);
+    defer t.deinit();
+    var rounded: usize = 0;
+    for (t.ctx.nodes.items) |n| if (n.style.background != null and n.style.height == .fill and n.style.radius > 0) {
+        rounded += 1;
+    };
+    try std.testing.expectEqual(@as(usize, 2), rounded);
+}

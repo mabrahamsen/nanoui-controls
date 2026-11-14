@@ -942,6 +942,69 @@ fn richerCharts(_: *u8, c: *ui.Context) void {
     controls.meter(c, 0.5, .{ .segments = 15, .zones = &.{ "<20", "<40", "<60", "<80", "80+" }, .ramp = &heat });
 }
 
+/// Bar lists drawn plain, as a monitor's: temperatures led by badges,
+/// a fan led by its icon, and a bar alone.
+fn plainBarLists(_: *u8, c: *ui.Context) void {
+    const heat = [_]ui.Color{ .hex(0x22d3ee), .hex(0xfbbf24), .hex(0xfb7185) };
+    const root = ui.div(c).column().sizeFull().p(10).gap(10);
+    defer root.end();
+    const plain: controls.BarListOptions = .{ .padded = false, .show_labels = false, .gap = 10, .text_size = 13, .label_width = 34, .value_width = 76, .bar_height = .{ .px = 6 }, .bar_radius = 3 };
+    var temps = plain;
+    temps.min = 20;
+    temps.max = 110;
+    temps.fixed_max = true;
+    temps.ramp = &heat;
+    _ = controls.barList(c, &.{
+        .{ .label = "CPU temperature", .value = 74, .value_text = "74 °C", .badge = "CPU", .value_weight = .semibold, .value_color = controls.rampColor(&heat, 0.6) },
+        .{ .label = "GPU temperature", .value = 41, .value_text = "41 °C", .badge = "GPU", .value_weight = .semibold },
+    }, temps);
+    var fans = plain;
+    fans.label_width = 7;
+    fans.max = 1;
+    fans.fixed_max = true;
+    _ = controls.barList(c, &.{
+        .{ .label = "Fan", .value = 0.45, .value_text = "2,480 rpm", .icon = "gauge.with.dots.needle.33percent", .icon_color = .hex(0x22d3ee), .value_weight = .semibold },
+        .{ .label = "Fan 2", .value = 0, .value_text = "off", .icon = "gauge.with.dots.needle.33percent" },
+    }, fans);
+    var alone = plain;
+    alone.label_width = 0;
+    alone.max = 1;
+    alone.fixed_max = true;
+    _ = controls.barList(c, &.{.{ .label = "Neural Engine", .value = 0.3, .value_text = "30%" }}, alone);
+}
+
+test "bar lists drawn plain, led by badges, an icon or nothing, light and dark" {
+    var x: u8 = 0;
+    try expectView("barlist-plain", .init(&x, plainBarLists), .{ .height = 170 });
+    try expectView("barlist-plain-dark", .init(&x, plainBarLists), .{ .height = 170, .dark = true });
+}
+
+/// A sidebar keyed by an enum under a header with a mono title, wide and
+/// narrowed to its icons.
+fn headedSidebars(_: *u8, c: *ui.Context) void {
+    const Screen = enum { overview, network, disks };
+    const root = ui.div(c).row().sizeFull().p(10).gap(16);
+    defer root.end();
+    for ([_]bool{ false, true }) |narrow| {
+        ui.keyInt(c, @intFromBool(narrow));
+        const col = ui.div(c).column().w(if (narrow) 48 else 200).hFull().gap(10);
+        defer col.end();
+        controls.header(c, .{ .icon = "cpu", .title = "monitor", .title_mono = true, .narrow = narrow, .tile = .{ .size = 28 }, .size = .sm }).end();
+        var sb = controls.sidebarOf(Screen, c, "screens", .network, .{ .icons_only = narrow });
+        sb.heading("Machine");
+        sb.item(.overview, "Overview", .{ .icon = "square.grid.2x2" });
+        sb.item(.network, "Network", .{ .icon = "network", .count = 3 });
+        sb.item(.disks, "Disks", .{ .icon = "internaldrive" });
+        _ = sb.end();
+    }
+}
+
+test "a sidebar keyed by an enum under a header, wide and narrowed, light and dark" {
+    var x: u8 = 0;
+    try expectView("sidebar-headed", .init(&x, headedSidebars), .{ .height = 200 });
+    try expectView("sidebar-headed-dark", .init(&x, headedSidebars), .{ .height = 200, .dark = true });
+}
+
 test "the charts' richer looks, light and dark" {
     var x: u8 = 0;
     try expectView("charts-richer", .init(&x, richerCharts), .{ .height = 470 });
