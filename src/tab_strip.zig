@@ -89,7 +89,9 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
     var g = choices_mod.Group.take(c, strip, index, tabs, opts.disabled);
     g.keys(c);
     const row = ui.div(c).row().wFull().gap(2 * k).itemsCenter();
-    const kept = c.state(Kept, "tab-strip");
+    // A copy, written back once the tabs are drawn: what they draw may add
+    // state, which can move nanoui's store of it.
+    var kept = state(c).*;
     // Whether the frame last laid out had chevrons, which its sizes leave
     // out of the tabs' room.
     if (kept.frame != c.frame) {
@@ -178,7 +180,18 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
         };
         kept.offset = c.scroll_x.get(view_id) orelse 0;
     };
+    state(c).* = kept;
     return .{ .c = c, .strip = strip, .row = row, .group = g };
+}
+
+/// The strip's `Kept`, found by a key of its own in the tabs' line: the
+/// same at its start and after the tabs and chevrons, whatever they drew.
+/// The pointer lasts only until the next state is made: use it at once.
+fn state(c: *ui.Context) *Kept {
+    ui.key(c, "tab-strip-state");
+    // Looking a state up doesn't take the key, as a new box would.
+    defer c.next_key = null;
+    return c.state(Kept, "tab-strip");
 }
 
 /// What a tab strip keeps between frames.
