@@ -16,6 +16,7 @@ const kit = nanoui.kit;
 const parts = @import("parts.zig");
 const buttons = @import("buttons.zig");
 const surface = @import("surface.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// The color and icon, as the kit's statuses; neutral takes the
@@ -88,7 +89,7 @@ pub fn calloutOpen(c: *ui.Context, text: []const u8, opts: Options) ui.Div {
     const said = if (opts.title.len > 0) c.print("{s}. {s}", .{ opts.title, text }) else text;
     if (opts.announce orelse (opts.status == .danger or opts.status == .warning)) parts.announceOnce(c, said);
     var r = ui.div(c).row().gap(opts.gap * k);
-    if (!opts.plain) r = r.px(opts.px * k).py(opts.py * k).rounded((opts.radius orelse t.radius) * k).bg(col.alpha(opts.fill)).border(col.alpha(opts.edge));
+    if (!opts.plain) r = r.px(opts.px * k).py(opts.py * k).rounded((opts.radius orelse shape_mod.corner(t.radius)) * k).bg(col.alpha(opts.fill)).border(col.alpha(opts.edge));
     c.node(r.index).style.width = surface.scaled(opts.width, k);
     // With a title, the icon stays by it, as the kit's alert's does.
     const top = if (opts.icon_align) |a| a == .top else opts.title.len > 0;

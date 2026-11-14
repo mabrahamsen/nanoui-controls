@@ -17,6 +17,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// How many segments.
@@ -80,7 +81,7 @@ pub fn meter(c: *ui.Context, value: f32, opts: Options) void {
     c.node(r.index).style.width = if (zones > 0) .fill else chart.scaled(opts.width, k);
     c.node(r.index).style.height = chart.scaled(opts.height, k);
     const h = chart.linesHeight(c, opts.height, k, r.index);
-    const radius = if (opts.radius) |rad| rad * k else h / 2;
+    const radius = if (opts.radius) |rad| rad * k else shape_mod.corner(h / 2);
     // A strip rounded at its ends only: the segments square, cut by it.
     if (strip) r = r.rounded(radius).clip();
     // A value that isn't a number says nothing, as a gauge's; one without

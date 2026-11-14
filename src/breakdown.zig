@@ -9,6 +9,7 @@ const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const chart = @import("chart.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// The parent's width by default; in a row, the room the rest leaves.
@@ -51,7 +52,7 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     c.node(r.index).style.height = chart.scaled(opts.height, k);
     // Its ends round at half its height, as laid out for one that fills.
     const h = chart.linesHeight(c, opts.height, k, r.index);
-    r = r.rounded(if (opts.radius) |rad| rad * k else h / 2);
+    r = r.rounded(if (opts.radius) |rad| rad * k else shape_mod.corner(h / 2));
     if (opts.glow == 0) r = r.clip();
     // Without gaps, the parts overlap by a point, as a meter's segments.
     r = r.gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);

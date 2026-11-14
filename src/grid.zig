@@ -58,6 +58,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const nanoui = @import("nanoui");
+const shape_mod = @import("shape.zig");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const keys = @import("grid_keys.zig");
@@ -506,8 +507,8 @@ pub const Grid = struct {
         // Its cells are placed by the layout, in the columns' order.
         var r = ui.div(g.c).wFull().h(lay_mod.rowHeight(g.opts) * k);
         if (cards) {
-            r = r.rounded(t.radius).bg(t.surface).border(t.border);
-        } else if (!g.opts.row_lines) r = r.rounded(@max(0, t.radius - 2));
+            r = r.rounded(shape_mod.corner(t.radius)).bg(t.surface).border(t.border);
+        } else if (!g.opts.row_lines) r = r.rounded(shape_mod.corner(@max(0, t.radius - 2)));
         if (item) |it| if (g.fade < 1) if (g.fade_group) |f| {
             const gs = g.opts.groups.?;
             if (gs.within(it.group(), f) and !(is_heading and it.group() == f)) g.c.node(r.index).style.opacity = g.fade;

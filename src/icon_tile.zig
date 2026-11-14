@@ -11,6 +11,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const parts = @import("parts.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// The tint, its border and the icon's color, as the kit's statuses;
@@ -72,7 +73,7 @@ pub fn iconTileOpen(c: *ui.Context, opts: Options) IconTileOpen {
     const t = kit.tokens(c);
     const col = parts.statusColor(t, opts.status, opts.color, .accent);
     const size = opts.size * k;
-    var tile = ui.div(c).w(size).h(size).rounded((opts.radius orelse opts.size * 0.28) * k).center()
+    var tile = ui.div(c).w(size).h(size).rounded((opts.radius orelse shape_mod.corner(opts.size * 0.28)) * k).center()
         .bg(if (opts.lit) col.alpha(opts.fill) else t.surface)
         .border(if (opts.lit) col.alpha(opts.edge) else t.border);
     if (opts.lit and opts.glow > 0) tile = tile.shadow(.{ .color = col.alpha(opts.glow), .blur = opts.glow_blur * k, .y = 0 });

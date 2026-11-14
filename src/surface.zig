@@ -6,6 +6,7 @@
 //!     const p = controls.panel(c, .{ .title = "RETENTION", .card = card });
 //!     defer p.end();
 const nanoui = @import("nanoui");
+const shape_mod = @import("shape.zig");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 
@@ -74,7 +75,7 @@ pub fn open(c: *ui.Context, s: Surface, own: Own) ui.Div {
     const t = kit.tokens(c);
     const k = own.scale;
     var d = ui.div(c).column().px((s.px orelse own.px) * k).py((s.py orelse own.py) * k).gap((s.gap orelse own.gap) * k)
-        .rounded((s.radius orelse own.radius orelse t.radius) * k);
+        .rounded((s.radius orelse shape_mod.corner(own.radius orelse t.radius)) * k);
     if (s.fill orelse own.fill) |f| d = d.bg(f);
     if (s.border orelse own.border) |b| d = d.border(b).borderW(s.border_width orelse own.border_width);
     if (s.glow) |g| {

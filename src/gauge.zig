@@ -12,6 +12,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
 const parts = @import("parts.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// Across, in points before `scale`.
@@ -33,9 +34,9 @@ pub const Options = struct {
     color: ?ui.Color = null,
     /// Unlit ticks; null takes the track of the kit's progress bar.
     track: ?ui.Color = null,
-    /// The opacity of a glow behind each lit tick, in its color; 0 draws
-    /// none.
-    glow: f32 = 0.16,
+    /// The opacity of a glow behind each lit tick, in its color, 0 for
+    /// none; null takes 0.16 in the app's shape (`setShape`).
+    glow: ?f32 = null,
     /// A thin circle inside the ticks, in the theme's border color.
     inner_line: bool = true,
     /// A figure in the middle ("B"), in the value's color on the ramp, and
@@ -78,6 +79,7 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
     const mid: ui.Point = .{ .x = cv.size.w / 2, .y = cv.size.h / 2 };
     const n = @max(opts.ticks, 2);
     const last: f32 = @floatFromInt(n - 1);
+    const glow = opts.glow orelse shape_mod.glow(0.16);
     if (unit > 0) for (0..n) |i| {
         const at = @as(f32, @floatFromInt(i)) / last;
         // From 135° (the bottom left) round 270° to the bottom right.
@@ -87,7 +89,7 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
         const p1: ui.Point = .{ .x = mid.x + dir.x * outer, .y = mid.y + dir.y * outer };
         if (shown > 0 and at <= shown + 0.0001) {
             const col = colorAt(opts, t, at);
-            if (opts.glow > 0) cv.line(p0, p1, .{ .width = 7 * unit, .color = col.alpha(opts.glow) });
+            if (glow > 0) cv.line(p0, p1, .{ .width = 7 * unit, .color = col.alpha(glow) });
             cv.line(p0, p1, .{ .width = 2.5 * unit, .color = col });
         } else cv.line(p0, p1, .{ .width = 2.5 * unit, .color = opts.track orelse chart.track(c) });
     };

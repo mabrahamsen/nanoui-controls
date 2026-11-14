@@ -43,6 +43,7 @@ const parts = @import("parts.zig");
 const measure = @import("measure.zig");
 const keys_mod = @import("sidebar_keys.zig");
 const count_mod = @import("sidebar_count.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// The rows' height and text, as the kit's controls at this size.
@@ -280,7 +281,7 @@ pub fn sidebarOf(comptime Key: type, c: *ui.Context, id: []const u8, selected: ?
 }
 
 fn radius(c: *ui.Context, k: f32) f32 {
-    return @max(0, kit.tokens(c).radius - 2) * k;
+    return shape_mod.corner(@max(0, kit.tokens(c).radius - 2)) * k;
 }
 
 /// A sidebar whose rows are keyed by `Key` (`sidebarOf`).

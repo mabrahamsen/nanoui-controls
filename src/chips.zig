@@ -18,6 +18,7 @@ const measure = @import("measure.zig");
 const parts = @import("parts.zig");
 const pill_mod = @import("pill.zig");
 const surface = @import("surface.zig");
+const shape_mod = @import("shape.zig");
 
 pub const InputOptions = struct {
     /// One flag a chip, kept by the caller: a flagged chip doesn't read,
@@ -78,7 +79,7 @@ pub fn chipInput(c: *ui.Context, chips: []const []const u8, buffer: *ui.TextBuff
     var result: InputResult = .{};
 
     const pad: f32 = 8;
-    var box = ui.div(c).column().px(pad * k).py(6 * k).gap(6 * k).rounded(t.radius * k).bg(t.surface).border(t.border);
+    var box = ui.div(c).column().px(pad * k).py(6 * k).gap(6 * k).rounded(shape_mod.corner(t.radius) * k).bg(t.surface).border(t.border);
     if (opts.disabled) box = box.opacity(focus.dimmed);
     c.node(box.index).style.width = surface.scaled(opts.width, k);
     defer box.end();

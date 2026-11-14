@@ -177,6 +177,11 @@ pub const segmented = segmented_mod.segmented;
 pub const segmentedOf = segmented_mod.segmentedOf;
 pub const SegmentedOptions = segmented_mod.Options;
 
+const card_choice_mod = @import("card_choice.zig");
+pub const cardChoice = card_choice_mod.cardChoice;
+pub const CardChoice = card_choice_mod.CardChoice;
+pub const CardChoiceOptions = card_choice_mod.Options;
+
 const tab_strip_mod = @import("tab_strip.zig");
 pub const tabStrip = tab_strip_mod.tabStrip;
 pub const tabStripOf = tab_strip_mod.tabStripOf;
@@ -224,6 +229,12 @@ const focus_mod = @import("focus.zig");
 /// keyboard (the default), or only while the keyboard is in use.
 pub const FocusRingShows = focus_mod.RingShows;
 pub const setFocusRingShows = focus_mod.setRingShows;
+const shape_mod = @import("shape.zig");
+/// How round the controls' own corners are and how strongly their own
+/// glows glow, set for every control as a theme sets their colors.
+pub const Shape = shape_mod.Shape;
+pub const setShape = shape_mod.setShape;
+pub const shape = shape_mod.shape;
 
 test {
     _ = grid_mod;
@@ -239,6 +250,8 @@ test {
     _ = stat_mod;
     _ = legend_mod;
     _ = sidebar_mod;
+    _ = shape_mod;
+    _ = card_choice_mod;
     _ = splitter_mod;
     _ = form_mod;
     _ = swatches_mod;

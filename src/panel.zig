@@ -17,6 +17,7 @@ const parts = @import("parts.zig");
 const surface = @import("surface.zig");
 const Surface = surface.Surface;
 const caption_mod = @import("caption.zig");
+const shape_mod = @import("shape.zig");
 
 pub const Options = struct {
     /// A caption at its top, drawn as `caption` draws with `caption`'s
@@ -74,7 +75,7 @@ fn foldingHead(c: *ui.Context, title: []const u8, open: *bool, cap: caption_mod.
     const t = kit.tokens(c);
     const k = opts.scale;
     ui.key(c, c.print("panel-head-{s}", .{title}));
-    var h = ui.div(c).row().wFull().itemsCenter().gap(6 * k).rounded(@max(0, t.radius - 2) * k);
+    var h = ui.div(c).row().wFull().itemsCenter().gap(6 * k).rounded(shape_mod.corner(@max(0, t.radius - 2)) * k);
     defer h.end();
     const it = focus.button(c, h.index, true);
     if (it.hovered) c.cursor_hand = true;

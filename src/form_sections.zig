@@ -8,6 +8,7 @@ const focus = @import("focus.zig");
 const parts = @import("parts.zig");
 const surface = @import("surface.zig");
 const form_mod = @import("form.zig");
+const shape_mod = @import("shape.zig");
 const Form = form_mod.Form;
 const HeadingOptions = form_mod.HeadingOptions;
 
@@ -82,7 +83,7 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
         const it = focus.button(c, h.index, true);
         hovered = it.hovered;
         if (it.hovered) c.cursor_hand = true;
-        if (focus.showRing(c, it.focused)) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(@max(0, t.radius - 2) * k);
+        if (focus.showRing(c, it.focused)) h = h.border(focus.ring(c)).borderW(focus.ringWidth(c)).rounded(shape_mod.corner(@max(0, t.radius - 2)) * k);
         if (it.clicked) {
             o.* = !o.*;
             c.changed = true;

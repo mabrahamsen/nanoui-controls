@@ -19,6 +19,7 @@ const breakdown_mod = @import("breakdown.zig");
 const meter_mod = @import("meter.zig");
 const chart = @import("chart.zig");
 const pill_mod = @import("pill.zig");
+const shape_mod = @import("shape.zig");
 
 /// One row of the list.
 pub const Item = struct {
@@ -147,7 +148,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
     }
     for (items, 0..) |it, i| {
         if (it.key.len > 0) ui.key(c, it.key) else ui.keyInt(c, i);
-        var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).rounded(@max(0, t.radius - 2));
+        var row = ui.div(c).row().wFull().itemsCenter().gap(10 * k).rounded(shape_mod.corner(@max(0, t.radius - 2)));
         if (opts.padded) row = row.px(6 * k).py(@round(text * 0.35) * k);
         if (opts.clickable) {
             // Each row takes the keyboard, as a button does: Tab moves
@@ -200,7 +201,7 @@ pub fn barList(c: *ui.Context, items: []const Item, opts: Options) ?usize {
             .bar => breakdown_mod.breakdown(c, &.{.{ .value = share, .color = bar_color }}, .{
                 .height = opts.bar_height,
                 .radius = opts.bar_radius,
-                .part_radius = opts.bar_radius orelse barHalf(opts.bar_height),
+                .part_radius = opts.bar_radius orelse shape_mod.corner(barHalf(opts.bar_height)),
                 .glow = opts.glow,
                 .track = opts.track,
                 .scale = k,
