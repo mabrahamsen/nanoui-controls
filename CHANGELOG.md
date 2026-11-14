@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.9.1
+
+### Fixed
+
+- Tab strip: its state, kept between frames, is written back after the tabs and chevrons are drawn through a pointer taken again, where it wrote through one taken before them. What they drew could add state that moved nanoui's store of it, and the strip then wrote into freed memory: a crash in a debug build, memory corrupted in a release build.
+
 ## 0.9.0
 
 ### Added

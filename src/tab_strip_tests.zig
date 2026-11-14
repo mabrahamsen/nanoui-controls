@@ -190,3 +190,35 @@ test "tabs that fit have no chevrons" {
     for (0..2) |_| t.frame();
     try std.testing.expectEqual(@as(usize, 0), chevrons(&t));
 }
+
+/// Tab strips that each live two frames: in its second, the strip's own
+/// boxes are measured for the first time, adding state while it draws,
+/// as tabs whose content keeps state do. The window keeps more state each
+/// frame, so nanoui's store of it grows now and then, in whatever frame.
+const Churning = struct {
+    index: usize = 0,
+    frames: usize = 0,
+
+    fn view(x: *Churning, c: *ui.Context) void {
+        const root = ui.div(c).column().w(300).p(8);
+        defer root.end();
+        x.frames += 1;
+        ui.key(c, c.print("churn-{d}", .{x.frames}));
+        _ = c.state(struct { n: u8 = 0 }, "churn");
+        c.next_key = null;
+        ui.keyInt(c, x.frames / 2);
+        const strip = ui.div(c).column().wFull();
+        defer strip.end();
+        _ = strip_mod.tabStrip(c, &Tabs.tabs, &x.index, .{});
+    }
+};
+
+test "a tab strip keeps no pointer into nanoui's state while what it draws adds to it" {
+    var x: Churning = .{};
+    var t: ui.Tester = undefined;
+    // Under the testing allocator, a write into the store's freed table
+    // fails the test when the window is freed.
+    try t.init(std.testing.allocator, .init(&x, Churning.view), .{ .width = 400, .height = 100 });
+    defer t.deinit();
+    for (0..600) |_| t.frame();
+}
