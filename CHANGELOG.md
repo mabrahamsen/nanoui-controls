@@ -8,6 +8,11 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 - Tab strips scroll sideways when their tabs don't fit, by the wheel and the trackpad, between chevrons at the ends that page through them; the chosen tab is scrolled into view as it changes.
 - `pill`'s `max_width` cuts a long label short with "…", whole in a tooltip.
+- Grid: `keys`, what each row is, keeps the selection on its rows as they re-sort, filter or refresh, headings included: the grid finds the selected row's key again and writes its index into `selected`. A key whose row is gone leaves nothing selected until it comes back; a group folded over it selects its heading. `selection` follows its rows' keys too.
+- Grid: `card`, a `Surface`, puts the grid in a box as `panel` draws one, the header and rows inside its padding.
+- `GridTwoLines`: the title's `weight` and `mono`, the detail's `detail_size`, and the `gap` between the lines.
+- Form: `card`, a `Surface`, gives a grouped form's cards the app's look; the headings and notes keep in line with the labels by its `px`, and its `border` goes over a danger heading's tint.
+- Form: `propertyOpt` draws a property only when it has a value: null or empty draws no row, no line and takes no room in the labels' column.
 
 ### Changed
 

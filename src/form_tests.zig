@@ -581,6 +581,90 @@ test "grouped, each heading's rows are in a card under it, and rows before any h
     try std.testing.expectApproxEqAbs(label.x + label.w + 12, t.findText("any heading").?.x, 1);
 }
 
+/// The boxes drawn in `fill`, in order.
+fn filled(t: *ui.Tester, fill: ui.Color) [4]ui.Rect {
+    var out: [4]ui.Rect = @splat(.{});
+    var n: usize = 0;
+    for (t.ctx.nodes.items) |node| {
+        const bg = node.style.background orelse continue;
+        if (std.meta.eql(bg, fill) and n < out.len) {
+            out[n] = t.ctx.rects.get(node.id).?;
+            n += 1;
+        }
+    }
+    return out;
+}
+
+test "grouped, the cards take the caller's look, and the headings keep in line with the labels in them" {
+    const fill: ui.Color = .hex(0x203040);
+    var x: Fixture(grouped) = .{ .opts = .{ .grouped = true, .card = .{ .px = 24, .fill = fill } } };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    for (0..2) |_| t.frame();
+    const box = filled(&t, fill);
+    try std.testing.expect(box[2].w > 0 and box[3].w == 0);
+    try std.testing.expect(inside(t.findText("a").?, box[1]));
+    const label = t.findText("A").?;
+    try std.testing.expectApproxEqAbs(box[1].x + 24, label.x, 0.5);
+    try std.testing.expectEqual(label.x, t.findText("One").?.x);
+    // The card's corners, where it leaves them, are the theme's.
+    for (t.ctx.nodes.items) |node| if (node.style.background) |bg| if (std.meta.eql(bg, fill)) {
+        try std.testing.expectEqual(kit.tokens(&t.ctx).radius, node.style.radius);
+    };
+}
+
+fn dangerous(f: *form_mod.Form, _: *ui.Context) void {
+    f.heading("Danger zone", .{ .status = .danger });
+    f.property("Erase", "everything", .{});
+}
+
+test "a danger heading tints its card's border, and the caller's border goes over the tint" {
+    var x: Fixture(dangerous) = .{ .opts = .{ .grouped = true } };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    const tk = kit.tokens(&t.ctx);
+    const tint = kit.statusColor(tk, .danger).alpha(0.5);
+    var found = false;
+    for (t.ctx.nodes.items) |node| if (node.style.border) |b| if (std.meta.eql(b, tint)) {
+        found = true;
+    };
+    try std.testing.expect(found);
+    const mine: ui.Color = .hex(0x00ff00);
+    x.opts.card = .{ .border = mine };
+    t.settle(1);
+    found = false;
+    for (t.ctx.nodes.items) |node| if (node.style.border) |b| {
+        try std.testing.expect(!std.meta.eql(b, tint));
+        if (std.meta.eql(b, mine)) found = true;
+    };
+    try std.testing.expect(found);
+}
+
+fn optional(f: *form_mod.Form, _: *ui.Context) void {
+    f.property("Host", "studio", .{});
+    f.propertyOpt("A much longer label", null, .{});
+    f.propertyOpt("Another long label", "", .{});
+    f.propertyOpt("Kind", "Mac", .{});
+}
+
+test "propertyOpt draws nothing for a value that is null or empty, nor keeps room for its label" {
+    var x: Fixture(optional) = .{ .opts = .{ .row_lines = true } };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expect(!t.hasText("A much longer label") and !t.hasText("Another long label"));
+    try std.testing.expect(t.hasText("Mac"));
+    // The column is as wide as "Host" and "Kind", the values lined up.
+    const value = t.findText("studio").?;
+    try std.testing.expectEqual(value.x, t.findText("Mac").?.x);
+    try std.testing.expect(value.x < t.ctx.text.width("A much longer label", .{ .size = 14 }));
+    // One line, between the two rows drawn.
+    try std.testing.expectEqual(@as(usize, 1), lines(&t));
+}
+
 fn described(f: *form_mod.Form, _: *ui.Context) void {
     f.heading("Backups", .{ .description = "How often, and how many to keep." });
     f.property("Every", "Day", .{});

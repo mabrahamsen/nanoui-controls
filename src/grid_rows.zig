@@ -42,11 +42,17 @@ pub const HeadingRow = struct {
 
 /// A cell's two lines (`Grid.twoLines`).
 pub const TwoLines = struct {
-    /// The title's size; the detail is a point and a half smaller.
+    /// The title's size, weight and font.
     size: f32 = 13,
+    weight: ui.Weight = .regular,
+    mono: bool = false,
+    /// The detail's size; null takes a point and a half under `size`.
+    detail_size: ?f32 = null,
     /// Null takes the theme's muted text.
     detail_color: ?ui.Color = null,
     mono_detail: bool = false,
+    /// Between the lines, in points before the grid's `scale`.
+    gap: f32 = 1,
 };
 
 /// Keeps `selected` on the row it was on when the rows in view changed
@@ -168,10 +174,10 @@ fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
 pub fn twoLines(g: *Grid, title: []const u8, detail: []const u8, opts: TwoLines) void {
     std.debug.assert(g.cell_box != null);
     const c = g.c;
-    const col = ui.div(c).column().wFull().gap(1 * g.opts.scale);
+    const col = ui.div(c).column().wFull().gap(opts.gap * g.opts.scale);
     defer col.end();
-    ui.text(c, title, .{ .size = opts.size, .truncate = .ellipsis });
-    ui.text(c, detail, .{ .size = opts.size - 1.5, .color = opts.detail_color orelse kit.tokens(c).muted, .mono = opts.mono_detail, .truncate = .ellipsis });
+    ui.text(c, title, .{ .size = opts.size, .weight = opts.weight, .mono = opts.mono, .truncate = .ellipsis });
+    ui.text(c, detail, .{ .size = opts.detail_size orelse opts.size - 1.5, .color = opts.detail_color orelse kit.tokens(c).muted, .mono = opts.mono_detail, .truncate = .ellipsis });
 }
 
 /// Folds or opens `group`; its rows fade in as it opens.

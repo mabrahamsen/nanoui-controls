@@ -6,6 +6,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
 const parts = @import("parts.zig");
+const surface = @import("surface.zig");
 const form_mod = @import("form.zig");
 const Form = form_mod.Form;
 const HeadingOptions = form_mod.HeadingOptions;
@@ -106,17 +107,28 @@ fn head(f: *Form, title: []const u8, opts: HeadingOptions, open: ?*bool) void {
     }
 }
 
-/// Room inside a card, either side of its rows.
+/// Room inside a card, either side of its rows, in points.
 pub fn cardPadding(f: *const Form) f32 {
-    return @round(f.opts.size.text() * 0.9) * f.opts.scale;
+    return (f.opts.card.px orelse ownPadding(f)) * f.opts.scale;
+}
+
+/// The card's own room across, as the labels' size says, before `scale`.
+fn ownPadding(f: *const Form) f32 {
+    return @round(f.opts.size.text() * 0.9);
 }
 
 /// Opens a card for the rows to come, if the form is grouped and none is.
 pub fn openCard(f: *Form) void {
     if (!f.opts.grouped or f.card != null) return;
-    const k = f.opts.scale;
     const t = kit.tokens(f.c);
-    f.card = ui.div(f.c).column().wFull().px(cardPadding(f)).py(4 * k).gap(f.opts.row_gap * k).bg(t.surface).border(f.card_border orelse t.border).rounded(t.radius * k);
+    f.card = surface.open(f.c, f.opts.card, .{
+        .fill = t.surface,
+        .border = f.card_border orelse t.border,
+        .px = ownPadding(f),
+        .py = 4,
+        .gap = f.opts.row_gap,
+        .scale = f.opts.scale,
+    });
 }
 
 /// Ends the open card, if any.

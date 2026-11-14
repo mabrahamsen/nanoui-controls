@@ -22,16 +22,18 @@
 //! Enter or a double click opens the row (`Row.opened`). Given `selection`
 //! too, Cmd-click (Ctrl-click off the Mac) adds or takes away a row,
 //! Shift-click and Shift with the keys select a run of rows, and Cmd+A
-//! (Ctrl+A) selects them all.
+//! (Ctrl+A) selects them all. Given `keys`, what each row is, the
+//! selection stays on its rows as they re-sort, filter or refresh.
 //!
 //! Typing while the grid has the keyboard jumps to a row: the grid keeps
 //! the text (`typed`), the caller finds the first row it begins, and
 //! `jump` selects that row and scrolls to it.
 //!
 //! Rows can be grouped under headings that fold (`groups`, with
-//! `GridGroups`), and drawn as cards (`rows = .cards`). While the rows
-//! load, `loading` sketches them, or with rows in, draws a thin progress
-//! line. `back` and `escaped` report Backspace (or Cmd+Up) and Escape.
+//! `GridGroups`), and drawn as cards (`rows = .cards`), and the grid can
+//! be in a card itself (`card`). While the rows load, `loading` sketches
+//! them, or with rows in, draws a thin progress line. `back` and
+//! `escaped` report Backspace (or Cmd+Up) and Escape.
 //!
 //! Given `widths`, dragging the edge after a title resizes its column, a
 //! double click fits it to its contents, and one past the last title fits
@@ -69,6 +71,8 @@ const cells = @import("grid_cells.zig");
 const widths_mod = @import("grid_widths.zig");
 const select = @import("grid_select.zig");
 const parts = @import("parts.zig");
+const surface = @import("surface.zig");
+const Surface = surface.Surface;
 
 pub const Column = struct {
     title: []const u8 = "",
@@ -155,6 +159,17 @@ pub const Options = struct {
     /// select every row from where the selection started, and Cmd+A
     /// (Ctrl+A) selects them all. Null: only `selected` is.
     selection: ?[]bool = null,
+    /// What each row is, one key a row as long as `count`, a heading's
+    /// too: an id, a path, a number printed. The grid remembers the
+    /// selected row's key, and when the rows change under it (re-sorted,
+    /// filtered, refreshed), finds its row again and writes its index into
+    /// `selected`. A key no row has leaves nothing selected and is kept,
+    /// so its row is selected again when it comes back (a filter cleared);
+    /// a group folded over it selects its heading, as without keys.
+    /// `selection` follows its rows' keys too, dropping rows that are gone.
+    /// Setting `selected` replaces the key. Null: the selection stays on
+    /// its index.
+    keys: ?[]const []const u8 = null,
     /// Column widths the caller keeps, one a column, which dragging the
     /// edge after a title or fitting it changes, giving a column without
     /// a `width` the width it has on screen. A 0 is the column's own: its
@@ -214,6 +229,11 @@ pub const Options = struct {
     /// Rows as plain rows, or as cards: the theme's surface, a border and
     /// its corners, with room between them.
     rows: RowLook = .plain,
+    /// The grid in a box of its own, as `panel` draws one: the theme's
+    /// surface, border and corners, 4 points of padding, the header and
+    /// the rows inside it and the columns laid out in the room within.
+    /// Null: no box.
+    card: ?Surface = null,
     /// Multiplies the grid's lengths (widths, heights, gaps), for an app
     /// that zooms its layout along with `c.setZoom`, which zooms text. The
     /// kit sizes its controls with a `kit.Size`, as the pager does, but
@@ -287,6 +307,15 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     lay_mod.check(columns, opts);
     const t = kit.tokens(c);
     const k = opts.scale;
+    var card: ?ui.Div = null;
+    if (opts.card) |s| {
+        var d = surface.open(c, s, .{ .fill = t.surface, .border = t.border, .px = 4, .py = 4, .scale = k });
+        if (opts.max_rows == null) {
+            d = d.grow();
+            c.node(d.index).style.min_height = 0;
+        }
+        card = d;
+    }
     var box = ui.div(c).column().wFull();
     if (opts.max_rows == null) {
         box = box.grow();
@@ -294,7 +323,8 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         // scrolls them.
         c.node(box.index).style.min_height = 0;
     }
-    rows.follow(c, opts);
+    const followed = select.followKeys(c, opts);
+    if (opts.keys == null) rows.follow(c, opts);
     // A selection past the rows shown moves back to the last of them.
     const shown = lay_mod.rowsShown(opts);
     if (opts.selected) |s| if (s.*) |i| if (i >= shown) {
@@ -312,7 +342,8 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     const head: @import("grid_header.zig").Head = if (opts.header) header(c, columns, opts, lay) else .{};
     if (opts.header and opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     if (opts.loading) |l| if (opts.count > 0) loading_mod.line(c, opts, l);
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .titles = head.titles };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .titles = head.titles, .card = card, .lost = followed.lost, .print = followed.print };
+    if (followed.anchor) |a| g.anchor = a;
     rows.fadeFrom(&g, opening);
     const row_gap = lay_mod.rowGap(opts);
     if (g.anchor) |a| if (a >= opts.count) {
@@ -407,6 +438,8 @@ pub const Grid = struct {
     // the methods.
     c: *ui.Context,
     box: ui.Div,
+    /// The box round the grid, with `opts.card`.
+    card: ?ui.Div = null,
     columns: []const Column,
     opts: Options,
     /// The id of the box that takes the keyboard for the grid; 0 without
@@ -452,6 +485,10 @@ pub const Grid = struct {
     fade_group: ?usize = null,
     fade: f32 = 1,
     opened_group: ?usize = null,
+    /// With `opts.keys`: the key of a selected row that is gone, kept
+    /// until it comes back, and the keys' print (`grid_select.zig`).
+    lost: u64 = 0,
+    print: u64 = 0,
 
     /// Opens the next row in view, or null when the view is full.
     pub fn next(g: *Grid) ?Row {
@@ -575,6 +612,7 @@ pub const Grid = struct {
         if (g.opts.scroll_x and g.lay.maxScroll() > 0) lay_mod.sideBar(g.c, g.opts, &g.lay);
         lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx, .loading = g.opts.loading != null };
         lay_mod.state(g.c, Press).* = g.press;
+        select.keepKeys(g);
         if (g.opts.groups) |gs| {
             const sel = if (g.opts.selected) |s| s.* else null;
             lay_mod.state(g.c, rows.Follow).* = if (sel) |i| (if (i < gs.count()) .{ .item = gs.at(i), .at = i } else .{}) else .{};
@@ -587,6 +625,7 @@ pub const Grid = struct {
             c.focus = g.own;
         };
         g.box.end();
+        if (g.card) |d| d.end();
     }
 };
 
@@ -599,4 +638,5 @@ test {
     _ = @import("grid_more_tests.zig");
     _ = @import("grid_heading_tests.zig");
     _ = @import("grid_reorder_tests.zig");
+    _ = @import("grid_follow_tests.zig");
 }
