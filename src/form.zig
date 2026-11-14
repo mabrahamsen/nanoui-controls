@@ -22,6 +22,7 @@ const kit = nanoui.kit;
 const focus = @import("focus.zig");
 const parts = @import("parts.zig");
 const measure = @import("measure.zig");
+const Surface = @import("surface.zig").Surface;
 const sections = @import("form_sections.zig");
 
 /// Where a form's labels or controls sit in their room: at its start,
@@ -58,6 +59,12 @@ pub const Options = struct {
     /// above it, as a settings window groups them: the theme's surface,
     /// border and corners. Rows before the first heading have a card too.
     grouped: bool = false,
+    /// The cards' look, when `grouped`, as `panel` takes one: the theme's
+    /// surface, border (a danger heading's tint) and corners, padding
+    /// across as the labels' size says, 4 points down and `row_gap`
+    /// between rows. Its `border` goes over a heading's tint, and the
+    /// headings and notes keep in line with the labels by its `px`.
+    card: Surface = .{},
     /// Below this width, in points before `scale`, the labels go above
     /// what they name, as the kit's field has them, for a form in a narrow
     /// pane; null keeps them beside it at any width.
@@ -199,6 +206,15 @@ pub const Form = struct {
         var it = parts.still(c, v);
         it.hovered = it.hovered and if (c.rects.get(c.node(v.index).id)) |rect| c.text.width(value, style) > rect.w + 0.5 else false;
         kit.tooltip(c, it, value, .{});
+    }
+
+    /// A property, as `property` draws it, only when it has a value: null
+    /// or empty draws nothing, no row and no line above it, and its label
+    /// takes no room in the labels' column.
+    pub fn propertyOpt(f: *Form, label: []const u8, value: ?[]const u8, opts: PropertyOptions) void {
+        const v = value orelse return;
+        if (v.len == 0) return;
+        f.property(label, v, opts);
     }
 
     /// A row that leads somewhere, such as another pane: its label, its

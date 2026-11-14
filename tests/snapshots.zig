@@ -616,6 +616,7 @@ test "a form's sections in cards, light and dark" {
 /// ends, a note, a folded heading, a row that leads somewhere, and a
 /// danger zone.
 const SettingsPane = struct {
+    card: controls.Surface = .{},
     on: bool = true,
     every: ?usize = 1,
     advanced: bool = false,
@@ -623,7 +624,7 @@ const SettingsPane = struct {
     fn view(x: *SettingsPane, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull().p(12);
         defer root.end();
-        var f = controls.form(c, .{ .size = .sm, .row_lines = true, .grouped = true, .control_align = .end });
+        var f = controls.form(c, .{ .size = .sm, .row_lines = true, .grouped = true, .control_align = .end, .card = x.card });
         f.heading("Backups", .{ .description = "How often, and how many to keep." });
         {
             const r = f.row("Back up", .{});
@@ -654,6 +655,12 @@ test "a settings pane: cards, controls at the end, a note, a fold, a link and a 
     var x: SettingsPane = .{};
     try expectView("form-settings", .init(&x, SettingsPane.view), .{ .height = 560 });
     try expectView("form-settings-dark", .init(&x, SettingsPane.view), .{ .height = 560, .dark = true });
+}
+
+test "a settings pane in cards of the caller's look, light and dark" {
+    var x: SettingsPane = .{ .card = .{ .fill = ui.Color.hex(0x8a8fa0).alpha(0.14), .radius = 12, .px = 16, .py = 6 } };
+    try expectView("form-card", .init(&x, SettingsPane.view), .{ .height = 420 });
+    try expectView("form-card-dark", .init(&x, SettingsPane.view), .{ .height = 420, .dark = true });
 }
 
 /// Gauges at a few values, one in a ramp's colors, and a stat as a
@@ -851,6 +858,34 @@ test "runs as cards and as two-line rows, with statuses, light and dark" {
     var x: u8 = 0;
     try expectView("grid-cards", .init(&x, runGrids), .{ .height = 400 });
     try expectView("grid-cards-dark", .init(&x, runGrids), .{ .height = 400, .dark = true });
+}
+
+/// Runs in a grid in a card, each a semibold title over a smaller mono
+/// detail, one selected.
+fn cardGrid(_: *u8, c: *ui.Context) void {
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Run" },
+        .{ .title = "Took", .width = 56, .alignment = .end },
+    };
+    const names = [_][]const u8{ "Build #412", "Tests #411", "Deploy #410" };
+    const details = [_][]const u8{ "main · 2 min ago", "dev/35 · failed in snapshots", "main · an hour ago" };
+    const root = ui.div(c).column().sizeFull().p(8);
+    defer root.end();
+    var selected: ?usize = 1;
+    var g = controls.grid(c, &columns, .{ .count = 3, .lines = 2, .selected = &selected, .card = .{ .radius = 12, .px = 6, .py = 6 } });
+    while (g.next()) |row| {
+        g.cell();
+        g.twoLines(names[row.index], details[row.index], .{ .size = 12, .weight = .semibold, .detail_size = 10, .mono_detail = true, .gap = 2 });
+        g.cell();
+        ui.text(c, "2m", .{ .size = 12 });
+    }
+    g.end();
+}
+
+test "a grid in a card, its two lines semibold over mono, light and dark" {
+    var x: u8 = 0;
+    try expectView("grid-card", .init(&x, cardGrid), .{ .height = 220 });
+    try expectView("grid-card-dark", .init(&x, cardGrid), .{ .height = 220, .dark = true });
 }
 
 /// The charts' richer looks: bars in units with an axis and a short

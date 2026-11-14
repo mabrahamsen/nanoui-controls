@@ -34,6 +34,7 @@ pub fn check(columns: []const Column, opts: Options) void {
     }
     if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
     if (opts.widths) |w| if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
+    if (opts.keys) |ks| if (ks.len != opts.count) @panic("grid: `keys` needs one key a row");
     if (opts.selection) |m| {
         if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
         if (opts.selected == null) @panic("grid: `selection` needs `selected`");
@@ -82,6 +83,14 @@ pub fn state(c: *ui.Context, comptime T: type) *T {
     // Looking a state up doesn't take the key, as a new box would.
     defer c.next_key = null;
     return c.state(T, @typeName(T));
+}
+
+/// The grid's `n`th `T` between frames, as `state` finds one, for what
+/// takes more room than one.
+pub fn stateAt(c: *ui.Context, comptime T: type, n: usize) *T {
+    ui.key(c, "grid-state");
+    defer c.next_key = null;
+    return c.state(T, c.print("{s}-{d}", .{ @typeName(T), n }));
 }
 
 /// The columns in this frame, in points as drawn (scaled).

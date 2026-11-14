@@ -1,7 +1,7 @@
 //! The grid's tests of groups that fold, headings open for content,
 //! columns that hide by the grid's width, fitting a column that grows,
-//! two-line cells, cards, no titles, Backspace and Escape, and its titles
-//! to a screen reader.
+//! two-line cells, cards, a grid in a card, no titles, Backspace and
+//! Escape, and its titles to a screen reader.
 const std = @import("std");
 const builtin = @import("builtin");
 const nanoui = @import("nanoui");
@@ -12,6 +12,7 @@ const grid = g_mod.grid;
 const Column = g_mod.Column;
 const Groups = @import("grid_groups.zig").Groups;
 const Group = @import("grid_groups.zig").Group;
+const Surface = @import("surface.zig").Surface;
 
 /// Pull requests by repository: three groups, the last of one.
 const Repos = struct {
@@ -337,6 +338,8 @@ test "a grid in a row that grows, beside a pane, takes the room left, and scroll
 const Runs = struct {
     cards: bool = false,
     two: bool = false,
+    two_lines: g_mod.TwoLines = .{},
+    card: ?Surface = null,
     header: bool = true,
     selected: ?usize = 0,
     backs: usize = 0,
@@ -351,14 +354,14 @@ const Runs = struct {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
         if (c.frame == 0) c.focusNext(false);
-        var g = grid(c, &columns, .{ .count = 3, .rows = if (x.cards) .cards else .plain, .lines = if (x.two) 2 else 1, .header = x.header, .selected = &x.selected });
+        var g = grid(c, &columns, .{ .count = 3, .rows = if (x.cards) .cards else .plain, .lines = if (x.two) 2 else 1, .header = x.header, .selected = &x.selected, .card = x.card });
         if (g.back) x.backs += 1;
         if (g.escaped) x.escapes += 1;
         while (g.next()) |row| {
             if (row.index == 1) row.status(.danger);
             g.cell();
             if (x.two) {
-                g.twoLines(c.print("build {d}", .{row.index}), "main · a long branch name that runs on", .{});
+                g.twoLines(c.print("build {d}", .{row.index}), "main · a long branch name that runs on", x.two_lines);
             } else ui.text(c, c.print("build {d}", .{row.index}), .{});
             g.cell();
             ui.text(c, "2m", .{});
@@ -408,6 +411,64 @@ test "two-line cells take taller rows, and show whole in a tooltip when cut off"
     try t.hoverText("build 0");
     t.settle(2);
     try std.testing.expectEqual(@as(usize, 1), containing(&t, "runs on"));
+}
+
+/// The style of the first text that starts with `prefix`.
+fn styleOf(t: *ui.Tester, prefix: []const u8) ?ui.TextStyle {
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .text => |tx| if (std.mem.startsWith(u8, tx.str, prefix)) return tx.style,
+        else => {},
+    };
+    return null;
+}
+
+test "two lines take the caller's weight and font for the title, the detail's size, and the gap" {
+    var x: Runs = .{ .two = true };
+    var t: ui.Tester = undefined;
+    try start(&x, &t, Runs.view);
+    defer t.deinit();
+    // As before: a regular title, the detail a point and a half under it.
+    try std.testing.expectEqual(ui.Weight.regular, styleOf(&t, "build 0").?.weight);
+    try std.testing.expectEqual(@as(f32, 11.5), styleOf(&t, "main").?.size);
+    x.two_lines = .{ .size = 12, .weight = .semibold, .mono = true, .detail_size = 10, .gap = 3 };
+    t.settle(1);
+    const title = styleOf(&t, "build 0").?;
+    try std.testing.expectEqual(ui.Weight.semibold, title.weight);
+    try std.testing.expect(title.mono and title.size == 12);
+    try std.testing.expectEqual(@as(f32, 10), styleOf(&t, "main").?.size);
+    const title_h = t.findText("build 0").?.h;
+    try std.testing.expectApproxEqAbs(title_h + 3, startsWith(&t, "main").?.y - t.findText("build 0").?.y, 0.5);
+}
+
+/// The box round the grid: the theme's surface with its border.
+fn cardRect(t: *ui.Tester) ?ui.Rect {
+    const tk = kit.tokens(&t.ctx);
+    for (t.ctx.nodes.items) |n| if (n.style.background) |bg| if (n.style.border) |b| if (std.meta.eql(bg, tk.surface) and std.meta.eql(b, tk.border)) {
+        return t.ctx.rects.get(n.id);
+    };
+    return null;
+}
+
+test "a grid in a card has its header and rows inside the card's padding" {
+    var x: Runs = .{};
+    var t: ui.Tester = undefined;
+    try start(&x, &t, Runs.view);
+    defer t.deinit();
+    try std.testing.expect(cardRect(&t) == null);
+    const plain = t.findText("Run").?.x;
+    x.card = .{};
+    t.settle(2);
+    const card = cardRect(&t).?;
+    try std.testing.expectApproxEqAbs(plain + 4, t.findText("Run").?.x, 0.5);
+    try std.testing.expect(t.findText("Run").?.y >= card.y + 4);
+    // The rows are in it, and the card fills the room as the grid did.
+    const last = t.findText("build 2").?;
+    try std.testing.expect(last.y + last.h <= card.y + card.h);
+    try std.testing.expectApproxEqAbs(@as(f32, 400), card.h, 1);
+    // The caller's padding, and its fill.
+    x.card = .{ .px = 12, .fill = .hex(0x223344) };
+    t.settle(2);
+    try std.testing.expectApproxEqAbs(plain + 12, t.findText("Run").?.x, 0.5);
 }
 
 /// How many texts hold `part`.
