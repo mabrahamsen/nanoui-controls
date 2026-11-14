@@ -11,6 +11,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
+const parts = @import("parts.zig");
 
 pub const Options = struct {
     /// Across, in points before `scale`.
@@ -94,7 +95,8 @@ pub fn gauge(c: *ui.Context, value: f32, opts: Options) void {
         const r = inner - 7 * unit;
         chart.arc(c, cv, mid, r + 0.5 * k, r - 0.5 * k, 0, std.math.tau, t.border);
     }
-    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.diameter * 0.2), .weight = .semibold, .color = colorAt(opts, t, v) });
+    // The figure in the lit color, in a shade that reads as text.
+    if (opts.text.len > 0) ui.text(c, opts.text, .{ .size = @round(opts.diameter * 0.2), .weight = .semibold, .color = parts.readable(t, colorAt(opts, t, v), 0) });
     if (opts.caption.len > 0) ui.text(c, opts.caption, .{ .size = @round(opts.diameter * 0.09), .color = t.muted });
 }
 

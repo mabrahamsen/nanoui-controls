@@ -2,6 +2,19 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Tab strips scroll sideways when their tabs don't fit, by the wheel and the trackpad, between chevrons at the ends that page through them; the chosen tab is scrolled into view as it changes.
+- `pill`'s `max_width` cuts a long label short with "…", whole in a tooltip.
+
+### Changed
+
+- Text in a status's color reads at 4.5:1: a pill's label, a notice's title, a panel's caption, a form heading and a gauge's figure take a shade of the color, darker in the light theme (its success green was about 2:1), while dots, icons, tints and borders keep it. A `color` the caller gives a pill or a notice is used as given.
+- A chip in `chipInput` is never wider than the field: a longer one is cut short, keeping its ×, and shows whole in a tooltip.
+- Toasts keep within the window's height: one that doesn't fit after the others waits until they go, its time not running and not yet said.
+
 ## 0.8.2
 
 ### Fixed

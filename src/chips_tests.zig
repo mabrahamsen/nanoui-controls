@@ -273,3 +273,51 @@ test "a chip input's width in points follows scale" {
     defer t.deinit();
     try std.testing.expectEqual(@as(f32, 300), t.ctx.rects.get(t.ctx.nodes.items[x.box].id).?.w);
 }
+
+test "a chip longer than its field is cut short within it, keeps its ×, shows whole in a tooltip and is said whole" {
+    const long = "a value far too long to fit in a field this narrow, however it is put";
+    const T = struct {
+        buf: ui.TextBuffer = .{},
+        removed: ?usize = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(200).p(10);
+            defer root.end();
+            const r = chipInput(c, &.{long}, &x.buf, .{});
+            if (r.removed) |i| x.removed = i;
+        }
+    };
+    var x: T = .{};
+    defer x.buf.deinit();
+    var t: ui.Tester = undefined;
+    try start(&x, &t, T.view);
+    defer t.deinit();
+    for (0..2) |_| t.frame();
+    // The chip and its × within the field's 200 points.
+    var close: ?ui.Rect = null;
+    var label: ?ui.Rect = null;
+    for (t.ctx.nodes.items) |n| switch (n.content) {
+        .icon => |i| if (std.mem.eql(u8, i.name, "xmark")) {
+            close = t.ctx.rects.get(n.id);
+        },
+        .text => |tx| if (std.mem.startsWith(u8, tx.str, "a value")) {
+            label = t.ctx.rects.get(n.id);
+        },
+        else => {},
+    };
+    try std.testing.expect(close.?.x + close.?.w <= 210);
+    try std.testing.expect(label.?.w < t.ctx.text.width(long, .{}));
+    // Said whole, its × too.
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var said = false;
+    for (try elements(&t, &arena)) |e| said = said or std.mem.eql(u8, e.label, long);
+    try std.testing.expect(said);
+    // Whole in a tooltip under the pointer.
+    t.moveTo(label.?.x + 4, label.?.y + 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText(long));
+    // Its × still removes it.
+    t.click(close.?.x + close.?.w / 2, close.?.y + close.?.h / 2);
+    t.settle(1);
+    try std.testing.expectEqual(@as(?usize, 0), x.removed);
+}

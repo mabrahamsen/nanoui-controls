@@ -5,6 +5,7 @@ const nanoui = @import("nanoui");
 const ui = nanoui.ui;
 const kit = nanoui.kit;
 const panel = @import("panel.zig").panel;
+const parts = @import("parts.zig");
 const Options = @import("panel.zig").Options;
 
 const Pane = struct {
@@ -76,7 +77,7 @@ test "a status tints the border and the caption, and the card goes over the pane
     try std.testing.expectEqual(@as(f32, 0), n.style.radius);
     try std.testing.expectEqual(ui.Length{ .px = 100 }, n.style.width);
     for (t.ctx.nodes.items) |node| switch (node.content) {
-        .text => |s| if (std.mem.eql(u8, s.str, "DANGER ZONE")) try std.testing.expectEqual(tk.danger, s.style.color.?),
+        .text => |s| if (std.mem.eql(u8, s.str, "DANGER ZONE")) try std.testing.expectEqual(parts.readable(tk, tk.danger, 0), s.style.color.?),
         else => {},
     };
 }

@@ -81,7 +81,7 @@ pub fn noticeOpen(c: *ui.Context, opts: Options) ui.Div {
     } else ui.icon(c, icon, .{ .size = opts.icon_size * k, .color = opts.icon_color orelse col });
     if (opts.title.len > 0) {
         const line = ui.div(c).row();
-        ui.text(c, opts.title, .{ .size = size + 1, .weight = .semibold, .mono = opts.mono, .color = col });
+        ui.text(c, opts.title, .{ .size = size + 1, .weight = .semibold, .mono = opts.mono, .color = if (opts.color == null) parts.readable(t, col, 0) else col });
         line.end();
         ui.access.describe(c, line.index, .{ .role = .static_text, .label = opts.title, .header = true });
     }

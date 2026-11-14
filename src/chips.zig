@@ -88,18 +88,20 @@ pub fn chipInput(c: *ui.Context, chips: []const []const u8, buffer: *ui.TextBuff
     if (!opts.disabled and box.interaction().clicked) buffer.focus();
 
     var rows: Rows = .{ .c = c, .width = width, .gap = 6 * k };
+    // A chip is never wider than the room: a longer one is cut short.
+    const widest = @max(0, width);
     for (opts.inherited, 0..) |v, i| {
-        rows.place(chipWidth(c, v, style, k, false));
+        rows.place(@min(widest, chipWidth(c, v, style, k, false)));
         ui.key(c, c.print("inherited-{d}", .{i}));
-        _ = chip_(c, v, .{ .style = style, .k = k, .color = t.muted, .closes = false, .tooltip = opts.inherited_note });
+        _ = chip_(c, v, .{ .style = style, .k = k, .color = t.muted, .closes = false, .tooltip = opts.inherited_note, .max_width = widest / k });
     }
     for (chips, 0..) |v, i| {
-        rows.place(chipWidth(c, v, style, k, !opts.disabled));
+        rows.place(@min(widest, chipWidth(c, v, style, k, !opts.disabled)));
         const ok = i >= opts.invalid.len or !opts.invalid[i];
         ui.key(c, c.print("chip-{d}", .{i}));
         // Its × goes with the chip: the field takes the keyboard, by a
         // click or by the keys alike.
-        if (chip_(c, v, .{ .style = style, .k = k, .color = if (ok) t.foreground else t.danger, .closes = !opts.disabled, .tooltip = if (ok) "" else opts.invalid_text, .remove_text = opts.remove_text })) {
+        if (chip_(c, v, .{ .style = style, .k = k, .color = if (ok) t.foreground else t.danger, .closes = !opts.disabled, .tooltip = if (ok) "" else opts.invalid_text, .remove_text = opts.remove_text, .max_width = widest / k })) {
             result.removed = i;
             buffer.focus();
         }
@@ -223,6 +225,8 @@ const ChipLook = struct {
     closes: bool,
     tooltip: []const u8,
     remove_text: []const u8 = "",
+    /// The widest it gets, in points before `scale`.
+    max_width: f32,
 };
 
 /// A value as a pill, with a × after it that Tab reaches and Space or
@@ -241,6 +245,7 @@ fn chip_(c: *ui.Context, v: []const u8, s: ChipLook) bool {
         .py = 2,
         .gap = close_gap,
         .tooltip = s.tooltip,
+        .max_width = s.max_width,
         .scale = k,
     });
     defer box.end();

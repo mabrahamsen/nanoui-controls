@@ -36,6 +36,8 @@ pub const Options = struct {
     /// The color, as the kit's statuses; neutral takes the theme's accent.
     status: kit.Status = .neutral,
     /// The label's, the tint's and the border's color, over the status's.
+    /// A status's own color is the tint's and the border's, and the label
+    /// takes a shade of it that reads (`text_contrast`).
     color: ?ui.Color = null,
     lead: Lead = .none,
     shape: Shape = .capsule,
@@ -62,6 +64,10 @@ pub const Options = struct {
     /// A height of its own, which a box is at least as wide as, in points
     /// before `scale`; null takes its content's and padding's.
     height: ?f32 = null,
+    /// The widest it gets, in points before `scale`: a longer label ends
+    /// in "…" and shows whole in a tooltip. A screen reader hears it whole
+    /// either way.
+    max_width: ?f32 = null,
     /// What the pill means, for one too terse to say it ("P" for
     /// "Performance cores"): in a tooltip under the pointer, and said to a
     /// screen reader after the label.
@@ -84,7 +90,11 @@ pub fn pill(c: *ui.Context, label: []const u8, opts: Options) void {
 /// added, as it is.
 pub fn pillOpen(c: *ui.Context, label: []const u8, opts: Options) ui.Div {
     const k = opts.scale;
-    const col = parts.statusColor(kit.tokens(c), opts.status, opts.color, .accent);
+    const t = kit.tokens(c);
+    const col = parts.statusColor(t, opts.status, opts.color, .accent);
+    // The label in a shade that reads on the tint; a color the caller
+    // gives, as it is.
+    const ink = if (opts.color == null) parts.readable(t, col, opts.fill) else col;
     const l = lengths(opts);
     var p = ui.div(c).row().gap(l.gap * k).px(l.px * k).py(l.py * k).bg(col.alpha(opts.fill)).border(col.alpha(opts.edge));
     p = switch (opts.shape) {
@@ -95,7 +105,7 @@ pub fn pillOpen(c: *ui.Context, label: []const u8, opts: Options) ui.Div {
         p = p.h(h * k);
         if (opts.shape == .box) c.node(p.index).style.min_width = h * k;
     }
-    if (opts.tooltip.len > 0) kit.tooltip(c, parts.still(c, p), opts.tooltip, .{});
+    if (opts.max_width) |mw| p = p.maxW(mw * k);
     switch (opts.lead) {
         .none => {},
         .dot => |d| parts.dot(c, if (d.dim) col.alpha(0.25) else col, l.dot * k, if (d.dim) 0 else 0.8),
@@ -104,9 +114,15 @@ pub fn pillOpen(c: *ui.Context, label: []const u8, opts: Options) ui.Div {
     // The label in a box of its own, which a screen reader hears: the pill
     // isn't one element, so a button in it is still reached.
     const text = ui.div(c).row();
-    ui.text(c, label, .{ .size = l.text, .weight = opts.weight, .mono = opts.mono, .color = col });
+    const style: ui.TextStyle = .{ .size = l.text, .weight = opts.weight, .mono = opts.mono, .color = ink, .truncate = if (opts.max_width != null) .ellipsis else .none };
+    ui.text(c, label, style);
     text.end();
     ui.access.describe(c, text.index, .{ .role = .static_text, .label = if (opts.value_text.len > 0) opts.value_text else label, .hint = opts.tooltip });
+    // Cut short as the last frame laid it out, it shows whole in the
+    // tooltip, before what the tooltip says of it.
+    const cut = opts.max_width != null and if (c.rects.get(c.node(text.index).id)) |r| r.w + 0.5 < c.text.width(label, style) else false;
+    const tip = if (cut and opts.tooltip.len > 0) c.print("{s} — {s}", .{ label, opts.tooltip }) else if (cut) label else opts.tooltip;
+    if (tip.len > 0) kit.tooltip(c, parts.still(c, p), tip, .{});
     return p;
 }
 

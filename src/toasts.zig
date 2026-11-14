@@ -3,7 +3,9 @@
 //! "The server didn't answer". Each slides in, goes after a few seconds
 //! (not while the pointer rests on it) or stays until closed, and slides
 //! out, the rest gliding into its place; with reduced motion they come and
-//! go at once. A screen reader hears each as it comes.
+//! go at once. A screen reader hears each as it comes. The stack keeps
+//! within the window's height: a toast that doesn't fit waits, its time
+//! not running, until those before it go.
 //!
 //! The app keeps the toasts (`Toasts`) and draws them once a frame, last,
 //! so they are over what the frame drew:
@@ -21,6 +23,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const parts = @import("parts.zig");
 const buttons = @import("buttons.zig");
+const measure = @import("measure.zig");
 
 /// The most toasts kept at once: one more pushes out the oldest.
 pub const max = 6;
@@ -66,6 +69,8 @@ pub const Toast = struct {
     announced: bool = false,
     /// Closed, and sliding out: gone once it has.
     leaving: bool = false,
+    /// Its height as the last frame laid it out; 0 until it has been.
+    height: f32 = 0,
     title_buf: [max_title]u8 = undefined,
     title_len: u8 = 0,
     text_buf: [max_text]u8 = undefined,
@@ -222,7 +227,25 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
     var hit: ?Hit = null;
     var gone: ?u32 = null;
     var soonest: f32 = std.math.inf(f32);
+    // The room down the window, and what the toasts shown take of it.
+    const room = c.size.h - 2 * m;
+    const gap = 8 * k;
+    var used: f32 = 0;
+    var full = false;
     for (list.list[0..list.n]) |*toast| {
+        // The oldest show first; one that doesn't fit after them waits,
+        // and those after it, its time kept. One after others is measured
+        // as it is first drawn, unseen, and said and timed once it is
+        // shown; the first always fits.
+        if (!full and used > 0 and toast.height > 0 and used + gap + toast.height > room) full = true;
+        if (full) {
+            if (toast.leaving) gone = gone orelse toast.id;
+            if (toast.ends) |e| toast.left = @floatCast(@max(0, e - c.time));
+            toast.ends = null;
+            continue;
+        }
+        const shown = toast.height > 0 or used == 0;
+        if (shown) used += (if (used > 0) gap else 0) + @max(toast.height, 1);
         const f = ui.motion.present(c, c.print("toast-{d}", .{toast.id}), !toast.leaving, .{
             .initial = from,
             .exit = from,
@@ -233,13 +256,19 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
             continue;
         };
         const col = parts.statusColor(t, toast.status, null, .border);
+        ui.key(c, c.print("toast-box-{d}", .{toast.id}));
         const box = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(12 * k).py(10 * k).rounded((t.radius + 2) * k)
             .bg(t.popover).border(if (toast.status == .neutral) t.border else col.alpha(0.55))
             .shadow(.{ .color = t.shadow.alpha(0.9), .blur = 24 * k, .y = 8 * k }).motion(f);
         const it = parts.still(c, box);
         defer box.end();
+        if (measure.lastSize(c, box.index)) |s| toast.height = s.h;
+        if (!shown) {
+            c.node(box.index).style.opacity = 0;
+            ui.access.hide(c, box.index);
+        }
         const said = if (toast.title_len > 0) c.print("{s}. {s}", .{ toast.title(), toast.text() }) else toast.text();
-        if (!toast.announced) {
+        if (shown and !toast.announced) {
             ui.access.announce(c, said);
             toast.announced = true;
         }
@@ -273,7 +302,7 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
         // Its time passes on the clock while neither the pointer nor the
         // keyboard is on it, not by the frames drawn: a window that draws
         // nothing else wakes only when it is up.
-        if (toast.seconds > 0 and !toast.leaving) {
+        if (shown and toast.seconds > 0 and !toast.leaving) {
             if (it.hovered or keyed) {
                 if (toast.ends) |e| toast.left = @floatCast(@max(0, e - c.time));
                 toast.ends = null;

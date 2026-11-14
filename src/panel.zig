@@ -60,7 +60,7 @@ pub fn panel(c: *ui.Context, opts: Options) ui.Div {
         .scale = opts.scale,
     });
     var cap = opts.caption;
-    cap.color = cap.color orelse tint;
+    cap.color = cap.color orelse if (tint) |col| parts.readable(t, col, 0) else null;
     cap.scale = opts.scale;
     if (opts.open) |open| {
         foldingHead(c, opts.title, open, cap, opts);

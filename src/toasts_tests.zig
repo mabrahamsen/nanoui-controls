@@ -304,3 +304,41 @@ test "a toast's time stops while one of its buttons has the keyboard" {
     t.frame();
     try std.testing.expect(x.list.n == 0 or x.list.items()[0].leaving);
 }
+
+test "in a short window, toasts that don't fit wait, their time not running, and show as room is made" {
+    const T = struct {
+        list: Toasts = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            ui.div(c).sizeFull().end();
+            _ = toasts(c, &x.list, .{});
+        }
+    };
+    var x: T = .{};
+    const long = "A message long enough to take two lines in a toast, or more than that";
+    var ids: [4]u32 = undefined;
+    for (&ids, 0..) |*id, i| id.* = x.list.show(long, .{ .title = "Backup", .action = "Show", .seconds = 2, .tag = @intCast(i) });
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 600, .height = 260 });
+    defer t.deinit();
+    t.settle(1);
+    // Those shown are within the window; the rest wait, unseen.
+    var shown: usize = 0;
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    for (list.items) |e| if (std.mem.startsWith(u8, e.label, "Backup.")) {
+        shown += 1;
+        try std.testing.expect(e.rect.y >= 0 and e.rect.y + e.rect.h <= 260);
+    };
+    try std.testing.expect(shown >= 1 and shown < 4);
+    const waiting = x.list.items()[shown];
+    try std.testing.expect(!waiting.announced and waiting.ends == null);
+    // The shown ones' time runs out; the waiting ones' doesn't start until
+    // they show, and then they are said.
+    t.advance(2.5);
+    t.settle(1);
+    try std.testing.expect(x.list.n > 0);
+    try std.testing.expectEqual(ids[shown], x.list.items()[0].id);
+    try std.testing.expect(x.list.items()[0].announced);
+}

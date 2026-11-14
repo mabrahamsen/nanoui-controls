@@ -1,5 +1,5 @@
 //! What the pills, panels, captions, callouts and notices draw with: a
-//! status's color, a glowing dot, a box that listens only for its
+//! status's color and a shade of it that reads as text, a glowing dot, a box that listens only for its
 //! tooltip, a message said once, one line cut short, and a paragraph
 //! centered under a title. Not a control of its own.
 const std = @import("std");
@@ -25,6 +25,45 @@ pub fn statusColor(t: kit.Tokens, status: kit.Status, color: ?ui.Color, neutral:
         .text => t.foreground,
         .border => t.border,
     };
+}
+
+/// The contrast text needs over what is behind it, as WCAG asks of text
+/// at the kit's sizes.
+pub const text_contrast: f32 = 4.5;
+
+/// `col` for text, or a shade of it toward the theme's text, enough to
+/// read at `text_contrast` over the background and over a surface, each
+/// tinted with `col` at `tint`'s opacity: a status's color reads faint as
+/// text in the light theme, a success's green above all. The dot, icon,
+/// tint and border beside it keep `col`.
+pub fn readable(t: kit.Tokens, col: ui.Color, tint: f32) ui.Color {
+    const unders = [_]ui.Color{ t.background.mix(col, tint), t.surface.mix(col, tint) };
+    var ink = col;
+    var step: f32 = 0;
+    while (step < 1) : (step += 0.05) {
+        ink = col.mix(t.foreground, step);
+        var least: f32 = std.math.inf(f32);
+        for (unders) |u| least = @min(least, contrast(ink, u));
+        if (least >= text_contrast) return ink;
+    }
+    return t.foreground;
+}
+
+/// The contrast of two opaque colors, from 1 to 21, as WCAG measures it.
+pub fn contrast(a: ui.Color, b: ui.Color) f32 {
+    const la = luminance(a);
+    const lb = luminance(b);
+    return (@max(la, lb) + 0.05) / (@min(la, lb) + 0.05);
+}
+
+/// A color's relative luminance, its channels taken out of sRGB.
+fn luminance(col: ui.Color) f32 {
+    const ch = struct {
+        fn lin(v: f32) f32 {
+            return if (v <= 0.04045) v / 12.92 else std.math.pow(f32, (v + 0.055) / 1.055, 2.4);
+        }
+    };
+    return 0.2126 * ch.lin(col.r) + 0.7152 * ch.lin(col.g) + 0.0722 * ch.lin(col.b);
 }
 
 /// A status's icon, named as nanoui draws it everywhere: its own icons,
@@ -135,4 +174,31 @@ pub fn centeredText(c: *ui.Context, text: []const u8, style: ui.TextStyle) void 
     const box = ui.div(c).column().w(width);
     defer box.end();
     ui.text(c, text, wrapped);
+}
+
+test "status text reads at 4.5:1 on its tint in the light and dark themes, a success's green darkened in the light" {
+    const T = struct {
+        fn view(_: *@This(), _: *ui.Context) void {}
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 100, .height = 100 });
+    defer t.deinit();
+    for ([_]ui.Theme{ ui.Theme.light, ui.Theme.dark_theme }) |theme| {
+        t.ctx.theme = theme;
+        const tk = kit.tokens(&t.ctx);
+        for ([_]kit.Status{ .neutral, .info, .success, .warning, .danger }) |s| {
+            const col = statusColor(tk, s, null, .accent);
+            const ink = readable(tk, col, 0.08);
+            try std.testing.expect(contrast(ink, tk.background.mix(col, 0.08)) >= text_contrast);
+            try std.testing.expect(contrast(ink, tk.surface.mix(col, 0.08)) >= text_contrast);
+        }
+        // Where it reads already, it is as it is.
+        try std.testing.expectEqual(tk.foreground, readable(tk, tk.foreground, 0));
+    }
+    t.ctx.theme = ui.Theme.light;
+    const tk = kit.tokens(&t.ctx);
+    // About 2:1 on white, as nanoui's light theme has it.
+    try std.testing.expect(contrast(tk.success, tk.surface) < 3);
+    try std.testing.expect(!std.meta.eql(tk.success, readable(tk, tk.success, 0.08)));
 }

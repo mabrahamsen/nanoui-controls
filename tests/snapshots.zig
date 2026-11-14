@@ -1215,6 +1215,51 @@ test "chips to type into and chips on and off, light and dark" {
     try expectView("chips-dark", .init(&x, Chipping.view), .{ .height = 150, .dark = true });
 }
 
+/// Content that doesn't fit its room: a tab strip scrolled to its chosen
+/// tab between chevrons, and a chip cut short within its field.
+const Overflowing = struct {
+    tab: usize = 5,
+    field: ui.TextBuffer = .{},
+
+    fn view(x: *Overflowing, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(10).gap(12);
+        defer root.end();
+        _ = controls.tabStrip(c, &.{
+            .{ .label = "Overview" }, .{ .label = "Reviews", .count = 3 }, .{ .label = "Failed runs", .count = 2, .alert = true }, .{ .label = "Work" },
+            .{ .label = "Archive" },  .{ .label = "Settings" },            .{ .label = "Members" },                                .{ .label = "Billing" },
+        }, &x.tab, .{});
+        _ = controls.chipInput(c, &.{ "9:00", "a rule far too long to fit in this field, however it is put" }, &x.field, .{ .add_placeholder = "add a rule" });
+    }
+};
+
+test "a tab strip that scrolls and a chip cut short, light and dark" {
+    var x: Overflowing = .{};
+    defer x.field.deinit();
+    try expectView("overflowing", .init(&x, Overflowing.view), .{ .height = 140 });
+    x.tab = 5;
+    try expectView("overflowing-dark", .init(&x, Overflowing.view), .{ .height = 140, .dark = true });
+}
+
+/// More toasts than a short window holds: those that don't fit wait.
+const ToastsShort = struct {
+    list: controls.Toasts = .{},
+
+    fn view(x: *ToastsShort, c: *ui.Context) void {
+        if (x.list.n == 0) for (0..4) |i| {
+            _ = x.list.show("The repository is locked by another client, so this backup waits.", .{ .status = .warning, .title = "Backup waiting", .action = "Retry", .seconds = 0, .tag = @intCast(i) });
+        };
+        ui.div(c).sizeFull().end();
+        _ = controls.toasts(c, &x.list, .{ .width = 320, .margin = 12 });
+    }
+};
+
+test "toasts in a short window, light and dark" {
+    var x: ToastsShort = .{};
+    try expectView("toasts-short", .init(&x, ToastsShort.view), .{ .height = 220 });
+    x = .{};
+    try expectView("toasts-short-dark", .init(&x, ToastsShort.view), .{ .height = 220, .dark = true });
+}
+
 /// Icon tiles lit, unlit and glowing; a header with a tile, a subtitle
 /// and pills; and input boxes empty, with text, a secret hidden, and
 /// disabled.
