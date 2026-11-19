@@ -30,6 +30,9 @@ const shape_mod = @import("shape.zig");
 /// or at its end.
 pub const Align = enum { start, end };
 
+/// How a form's labels look: as its text, or as captions.
+pub const LabelStyle = enum { plain, caption };
+
 pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
     /// controls at it, so selects, inputs and toggles keep one rhythm.
@@ -50,6 +53,10 @@ pub const Options = struct {
     control_align: Align = .start,
     /// The labels' color; null takes the theme's muted text.
     label_color: ?ui.Color = null,
+    /// The labels as the form's text, or as captions: small, semibold and
+    /// muted, as `caption` draws its text, for a pane of facts labeled in
+    /// capitals ("LINK", "THUNDERBOLT"). Write them in capitals.
+    label_style: LabelStyle = .plain,
     /// The gap after the labels, and between rows, in points before
     /// `scale`.
     gap: f32 = 12,
@@ -190,7 +197,7 @@ pub const Form = struct {
         defer r.end();
         ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
         const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
-        _ = f.drawLabel(label, .{ .top = f.firstLine(.{ .size = style.size }) });
+        _ = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle()) });
         var v = ui.div(c).wFull().pt(f.firstLine(style));
         if (f.atEnd()) v = v.row().justifyEnd();
         if (opts.selectable) c.node(v.index).style.selectable = true;
@@ -200,13 +207,46 @@ pub const Form = struct {
             s.wrap = true;
             return endText(c, value, s, f.atEnd(), v.index, 0);
         }
-        var s = style;
-        s.truncate = .ellipsis;
-        ui.text(c, value, s);
-        // Whole in a tooltip, when the last frame cut it short.
-        var it = parts.still(c, v);
-        it.hovered = it.hovered and if (c.rects.get(c.node(v.index).id)) |rect| c.text.width(value, style) > rect.w + 0.5 else false;
-        kit.tooltip(c, it, value, .{});
+        cutValue(c, v, value, style);
+    }
+
+    /// A property, as `property` draws it, with its row left open after
+    /// the value for the caller's pills or words ("TUNNELED"): draw them,
+    /// then `end` it. The value takes the room they leave, wrapping in it
+    /// or cut short before them (`wrap = false`), and they follow it.
+    /// Not `propertyOpt`, which draws a property only when it has a value.
+    pub fn propertyOpen(f: *Form, label: []const u8, value: []const u8, opts: PropertyOptions) FormProperty {
+        const c = f.c;
+        const k = f.opts.scale;
+        f.before(label, false, false);
+        const r = f.openRow(false);
+        // Heard as the label and the value, then what the caller adds.
+        ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
+        const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
+        _ = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle()) });
+        // The value and what follows it, centered on each other, in the
+        // room after the label.
+        var rest = ui.div(c).row().itemsCenter().gap(6 * k).wFull();
+        if (f.atEnd()) rest = rest.justifyEnd();
+        if (!f.stacked) c.node(rest.index).style.min_height = f.opts.size.height() * k;
+        if (opts.wrap) {
+            // Wrapping text gives the room back that what follows needs.
+            const v = ui.div(c).column();
+            if (opts.selectable) c.node(v.index).style.selectable = true;
+            var s = style;
+            s.wrap = true;
+            ui.text(c, value, s);
+            v.end();
+        } else {
+            // As wide as the value, or the room left where that is less.
+            const room = ui.div(c).column().w(0).grow().maxW(@ceil(c.text.width(value, style)) + 1);
+            const v = ui.div(c).column().wFull();
+            if (opts.selectable) c.node(v.index).style.selectable = true;
+            cutValue(c, v, value, style);
+            v.end();
+            room.end();
+        }
+        return .{ .row = r, .rest = rest };
     }
 
     /// A property, as `property` draws it, only when it has a value: null
@@ -329,13 +369,22 @@ pub const Form = struct {
         return @max(0, @round((f.opts.size.height() * f.opts.scale - f.c.text.lineHeight(style)) / 2));
     }
 
+    /// The labels' text: the form's, or a caption's.
+    fn labelStyle(f: *const Form) ui.TextStyle {
+        return switch (f.opts.label_style) {
+            .plain => .{ .size = f.opts.size.text() },
+            .caption => .{ .size = kit.Size.xs.text() - 1, .weight = .semibold },
+        };
+    }
+
     /// `text` in the labels' column, or across the row when stacked, with
     /// its required mark and its ⓘ; returns its box.
     fn drawLabel(f: *const Form, text: []const u8, l: Label) u32 {
         const c = f.c;
         const k = f.opts.scale;
         const t = kit.tokens(c);
-        const size = f.opts.size.text();
+        var style = f.labelStyle();
+        const size = style.size;
         var col = ui.div(c).row().itemsCenter().gap(2 * k).clip().pt(l.top);
         col = if (f.stacked) col.wFull() else col.w(f.columnWidth());
         if (f.opts.label_align == .end and !f.stacked) col = col.justifyEnd();
@@ -351,7 +400,9 @@ pub const Form = struct {
             } else ui.access.hide(c, col.index);
         }
         // A label too long for the column ends in "…".
-        ui.text(c, text, .{ .size = size, .color = f.opts.label_color orelse t.muted, .truncate = .ellipsis });
+        style.color = f.opts.label_color orelse t.muted;
+        style.truncate = .ellipsis;
+        ui.text(c, text, style);
         if (l.required) ui.text(c, "*", .{ .size = size, .color = t.danger });
         if (l.info.len > 0) {
             const i = ui.div(c).pl(2 * k).w(infoWidth(size, k)).center();
@@ -368,8 +419,9 @@ pub const Form = struct {
         const c = f.c;
         const k = f.opts.scale;
         if (f.opts.label_width == null) {
-            const size = f.opts.size.text();
-            var w = @ceil(c.text.width(label_text, .{ .size = size }));
+            const style = f.labelStyle();
+            const size = style.size;
+            var w = @ceil(c.text.width(label_text, style));
             if (required) w += @ceil(c.text.width("*", .{ .size = size })) + 2 * k;
             // The ⓘ's box, and the gap before it.
             if (info) w += infoWidth(size, k) + 2 * k;
@@ -394,6 +446,31 @@ fn endText(c: *ui.Context, text: []const u8, style: ui.TextStyle, at_end: bool, 
     defer box.end();
     ui.text(c, text, style);
 }
+
+/// `value` in `style` in the open box `v`, cut short with "…" where its
+/// room ends, and whole in a tooltip when the last frame cut it short.
+fn cutValue(c: *ui.Context, v: ui.Div, value: []const u8, style: ui.TextStyle) void {
+    var s = style;
+    s.truncate = .ellipsis;
+    ui.text(c, value, s);
+    var it = parts.still(c, v);
+    it.hovered = it.hovered and if (c.rects.get(c.node(v.index).id)) |rect| c.text.width(value, style) > rect.w + 0.5 else false;
+    kit.tooltip(c, it, value, .{});
+}
+
+/// A property left open after its value, for the caller's pills: draw
+/// them, then `end` it.
+pub const FormProperty = struct {
+    row: ui.Div,
+    /// The value and what follows it.
+    rest: ui.Div,
+
+    /// Closes the property's row.
+    pub fn end(p: FormProperty) void {
+        p.rest.end();
+        p.row.end();
+    }
+};
 
 /// The ⓘ's box beside a label of `size`: the icon, a point under the
 /// text, is drawn a point wider either side, after a gap of 2.
@@ -460,4 +537,5 @@ fn nameControl(c: *ui.Context, label_box: u32) void {
 test {
     _ = @import("form_tests.zig");
     _ = @import("form_sections_tests.zig");
+    _ = @import("form_facts_tests.zig");
 }
