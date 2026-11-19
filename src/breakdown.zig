@@ -55,13 +55,22 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
     r = r.rounded(if (opts.radius) |rad| rad * k else shape_mod.corner(h / 2));
     if (opts.glow == 0) r = r.clip();
     // Without gaps, the parts overlap by a point, as a meter's segments.
-    r = r.gap(if (opts.gap) |g| (if (g > 0) g * k else -1) else 1);
+    const gap: f32 = if (opts.gap) |g| (if (g > 0) g * k else -1) else 1;
     chart.describe(c, r.index, opts.label, opts.value_text, false, "");
     defer r.end();
     // Every part eases first, while the keys they ease under are the same
     // each frame: the boxes after skip parts that are nothing.
     var eased: [chart.max_eased]f32 = undefined;
     const used = chart.easeParts(c, parts, &eased);
+    // Short of full, the parts are in a box of their share of the bar, the
+    // gaps between them inside it, so a level ends at its value and the
+    // rest of the track costs no gap.
+    const rest = !opts.whole and used < 1;
+    const lit = if (rest) chart.weighted(ui.div(c).row().w(0).hFull().gap(gap), used) else r.gap(gap);
+    defer if (rest) {
+        lit.end();
+        chart.weighted(ui.div(c).hFull(), 1 - used).end();
+    };
     for (parts, 0..) |p, i| {
         const v = chart.eased(parts, &eased, i);
         if (!(v > 0)) continue;
@@ -71,7 +80,6 @@ pub fn breakdown(c: *ui.Context, parts: []const chart.Part, opts: Options) void 
         if (opts.glow > 0) d = d.shadow(.{ .color = p.color.alpha(opts.glow), .blur = 6 * k, .y = 0 });
         chart.weighted(d, v).end();
     }
-    if (!opts.whole and used < 1) chart.weighted(ui.div(c).hFull(), 1 - used).end();
 }
 
 const Color = ui.Color;
@@ -108,10 +116,18 @@ fn widths(parts: []const chart.Part, opts: Options) ![3]f32 {
 }
 
 test "a breakdown's parts take their share of the bar, and leave the rest" {
-    // Two parts and a hairline between each: 198 points to share.
+    // Two parts in their 150 points of the bar, a hairline between them:
+    // 149 points to share.
     const w = try widths(&.{ .{ .value = 0.5, .color = cyan }, .{ .value = 0.25, .color = violet } }, .{});
-    try std.testing.expectApproxEqAbs(@as(f32, 99), w[0], 0.5);
-    try std.testing.expectApproxEqAbs(@as(f32, 49.5), w[1], 0.5);
+    try std.testing.expectApproxEqAbs(@as(f32, 149.0 * 2.0 / 3.0), w[0], 0.01);
+    try std.testing.expectApproxEqAbs(@as(f32, 149.0 / 3.0), w[1], 0.01);
+}
+
+test "a level short of full ends at its value, whatever the gap" {
+    for ([_]?f32{ null, 0, 2 }) |gap| {
+        const w = try widths(&.{.{ .value = 0.3, .color = cyan }}, .{ .gap = gap });
+        try std.testing.expectApproxEqAbs(@as(f32, 60), w[0], 0.01);
+    }
 }
 
 test "a whole breakdown shares the bar by the parts' sum" {
@@ -123,9 +139,9 @@ test "a whole breakdown shares the bar by the parts' sum" {
 
 test "a breakdown counts bad parts as nothing, and squeezes parts over the bar" {
     const nan = std.math.nan(f32);
-    // Parts that are nothing take no room, and no gap: one gap is left.
+    // Parts that are nothing take no room, and no gap.
     const bad = try widths(&.{ .{ .value = nan, .color = cyan }, .{ .value = -1, .color = violet }, .{ .value = 0.5, .color = cyan } }, .{ .gap = 2 });
-    try std.testing.expectEqualSlices(f32, &.{ 99, 0, 0 }, &bad);
+    try std.testing.expectEqualSlices(f32, &.{ 100, 0, 0 }, &bad);
     const over = try widths(&.{ .{ .value = 0.9, .color = cyan }, .{ .value = 0.9, .color = violet } }, .{ .gap = 2 });
     try std.testing.expectApproxEqAbs(@as(f32, 99), over[0], 0.01);
     try std.testing.expectApproxEqAbs(@as(f32, 99), over[1], 0.01);
@@ -178,7 +194,7 @@ test "a breakdown's parts ease to new values" {
             return 0;
         }
     };
-    // 0.2 of 198 points (two gaps of 2 from 202... the track is 200 wide).
+    // 0.2 of the bar's 200 points, then 0.8.
     const before = part.width(&t);
     x.v = 0.8;
     t.advance(0.1);
@@ -186,5 +202,5 @@ test "a breakdown's parts ease to new values" {
     t.settle(1);
     const after = part.width(&t);
     try std.testing.expect(moving > before and moving < after);
-    try std.testing.expectApproxEqAbs(after, before * 4, 0.5);
+    try std.testing.expectApproxEqAbs(after, before * 4, 0.01);
 }

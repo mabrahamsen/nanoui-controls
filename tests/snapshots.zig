@@ -1483,3 +1483,46 @@ test "a choice among cards, one chosen and one unavailable, light and dark" {
     try expectView("card-choice", .init(&x, Cards.view), .{ .height = 200 });
     try expectView("card-choice-dark", .init(&x, Cards.view), .{ .height = 200, .dark = true });
 }
+
+/// A sidebar of places whose icons say how they stand, beside a pane of
+/// facts: compact readings, one in a status's color at a set size, and a
+/// form with caption labels and a pill after a value.
+const Facts = struct {
+    fn view(_: *Facts, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).row().sizeFull().p(10).gap(12);
+        defer root.end();
+        {
+            const side = ui.div(c).column().w(120).hFull();
+            defer side.end();
+            var sb = controls.sidebar(c, "places", "nas", .{});
+            sb.item("studio", "Studio", .{ .icon = "checkmark.circle.fill", .icon_color = t.success, .value_text = "OK" });
+            sb.item("nas", "NAS", .{ .icon = "pause.fill", .icon_color = t.warning, .value_text = "paused" });
+            sb.item("cloud", "Cloud", .{ .icon = "exclamationmark.triangle", .icon_color = t.danger, .value_text = "failing", .count = 3 });
+            _ = sb.end();
+        }
+        const pane = ui.div(c).column().w(0).grow().gap(10);
+        defer pane.end();
+        {
+            var f = controls.flow(c, 90, .{ .gap = 12 });
+            f.stat("STATE", "DEGRADED", .{ .size = .xs, .card = null, .mono = true, .value_status = .warning });
+            f.stat("FILES", "312", .{ .size = .xs, .card = null, .mono = true, .text_size = 18 });
+            f.end();
+        }
+        var f = controls.form(c, .{ .label_style = .caption, .size = .sm });
+        f.property("LINK", "USB 3.2", .{ .mono = true });
+        {
+            const p = f.propertyOpen("SPEED", "40 Gb/s", .{ .mono = true });
+            controls.pill(c, "TUNNELED", .{ .status = .info, .shape = .box });
+            p.end();
+        }
+        f.property("PATH", "/Volumes/Backups/Studio/2026", .{ .mono = true, .wrap = false });
+        f.end();
+    }
+};
+
+test "a sidebar whose icons say how places stand, and a pane of facts, light and dark" {
+    var x: Facts = .{};
+    try expectView("facts", .init(&x, Facts.view), .{ .height = 200 });
+    try expectView("facts-dark", .init(&x, Facts.view), .{ .height = 200, .dark = true });
+}

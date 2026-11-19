@@ -10,6 +10,7 @@ const heights = shared.heights;
 const red = shared.red;
 const blue = shared.blue;
 const stat_mod = @import("stat.zig");
+const parts = @import("parts.zig");
 
 /// Stats: with a unit and a detail, loading, and one to click.
 const Stats = struct {
@@ -156,4 +157,90 @@ test "a stat's width in points follows scale, and its loading spinner fits its l
             try std.testing.expect(r.y + r.h <= box.y + box.h + 0.5);
         }
     }
+}
+
+/// The color and size of the text `str`, the first drawn.
+fn textStyle(t: *ui.Tester, str: []const u8) ui.TextStyle {
+    for (t.ctx.nodes.items) |node| switch (node.content) {
+        .text => |tx| if (std.mem.eql(u8, tx.str, str)) return tx.style,
+        else => {},
+    };
+    unreachable;
+}
+
+test "a stat's figure takes a status in the shade that reads, value_color over it, and text_size" {
+    const T = struct {
+        color: ?ui.Color = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            stat_mod.stat(c, "Thermal", "Degraded", .{ .card = null, .size = .xs, .value_status = .success, .value_color = x.color, .text_size = 22 });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 120 });
+    defer t.deinit();
+    t.ctx.theme = ui.Theme.light;
+    t.settle(1);
+    const tk = kit.tokens(&t.ctx);
+    const style = textStyle(&t, "Degraded");
+    try std.testing.expectEqual(@as(f32, 22), style.size);
+    // The light theme's green, darkened to read as text.
+    try std.testing.expect(!std.meta.eql(tk.success, style.color.?));
+    try std.testing.expect(parts.contrast(style.color.?, tk.background) >= parts.text_contrast);
+    // The label keeps its size.
+    try std.testing.expectEqual(kit.Size.xs.text() - 1, textStyle(&t, "Thermal").size);
+    x.color = tk.success;
+    t.settle(1);
+    try std.testing.expectEqual(tk.success, textStyle(&t, "Degraded").color.?);
+}
+
+test "a stat's label and detail cut short show whole in a tooltip, and wrap with wrap, beside a key too" {
+    const label = "Requests served by every replica";
+    const detail = "over the last hour, across all regions";
+    const T = struct {
+        wrap: bool = false,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(140);
+            defer root.end();
+            stat_mod.stat(c, label, "42", .{ .detail = detail, .wrap = x.wrap, .key = red });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    const fig = t.findText("42").?;
+    try std.testing.expect(!t.hasText(label) and !t.hasText(detail));
+    t.moveTo(fig.x + 4, fig.y + fig.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText(label ++ " — " ++ detail));
+    // Wrapped, they are drawn whole, over more than a line, and need no
+    // tooltip.
+    t.moveTo(290, 290);
+    x.wrap = true;
+    t.settle(3);
+    try std.testing.expect(t.hasText(label) and t.hasText(detail));
+    try std.testing.expect(t.findText(label).?.h > fig.h * 0.5);
+    try std.testing.expect(t.findText(label).?.w <= 140);
+}
+
+test "a stat button's cut label shows in a tooltip, and the button still lights under the pointer" {
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(120);
+            defer root.end();
+            _ = stat_mod.statButton(c, "Alerts raised since midnight", "3", .{ .card = null });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(1);
+    const fig = t.findText("3").?;
+    t.moveTo(fig.x + 2, fig.y + fig.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText("Alerts raised since midnight"));
+    try std.testing.expect(t.ctx.cursor_hand);
 }
