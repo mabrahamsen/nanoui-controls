@@ -17,6 +17,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const chart = @import("chart.zig");
 const shape_mod = @import("shape.zig");
+const parts = @import("parts.zig");
 
 pub const Options = struct {
     /// Between the items on a line, in points before `scale`.
@@ -116,12 +117,24 @@ pub const Legend = struct {
         const inner = @round(style.size * 0.55) * k;
         var w = sw + inner + @ceil(c.text.width(label, style));
         if (detail.len > 0) w += inner + @ceil(c.text.width(detail, detail_style));
-        l.place(w);
-        const it = ui.div(c).row().itemsCenter().gap(inner);
+        // Wider than the legend, it has a line of its own, its label cut
+        // short to keep the detail, and shows whole in a tooltip.
+        const room = @max(0, l.width - 1);
+        const cut = w > room;
+        l.place(@min(w, room));
+        var it = ui.div(c).row().itemsCenter().gap(inner);
+        if (cut) it = it.w(room);
         defer it.end();
         swatch(c, color, .{ .size = l.opts.size, .shape = l.opts.shape, .scale = k });
-        ui.text(c, label, style);
+        if (cut) {
+            _ = parts.oneLine(c, label, style);
+        } else ui.text(c, label, style);
         if (detail.len > 0) ui.text(c, detail, detail_style);
+        if (cut) {
+            // Said whole too, not as it is cut.
+            ui.access.describe(c, it.index, .{ .role = .static_text, .label = label, .value = detail });
+            kit.tooltip(c, parts.still(c, it), if (detail.len > 0) c.print("{s} {s}", .{ label, detail }) else label, .{});
+        }
     }
 
     /// `text` at the end of the last line, or of a line of its own when

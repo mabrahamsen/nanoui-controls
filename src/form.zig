@@ -416,7 +416,7 @@ pub const Row = struct {
 
     /// Ends the row, then puts its hint or error under the control.
     pub fn end(r: Row) void {
-        nameControl(r.c, r.label_box);
+        nameControl(r.c, r.label_box, r.opts.err);
         r.row.end();
         const msg = if (r.opts.err.len > 0) r.opts.err else r.opts.hint;
         if (msg.len == 0) return;
@@ -433,31 +433,49 @@ pub const Row = struct {
 /// name of its own the label's description ("Notify, required", and the
 /// ⓘ's text as its hint), and leaves the label out, so it isn't read
 /// twice. nanoui would name it from the label only while the label is
-/// just before it on its line, and without the hint.
-fn nameControl(c: *ui.Context, label_box: u32) void {
+/// just before it on its line, and without the hint. The row's `err`
+/// goes first in the control's hint, whether it names itself or not, and
+/// is said once as it appears or changes while the control has the
+/// keyboard.
+fn nameControl(c: *ui.Context, label_box: u32, err: []const u8) void {
     const items = c.a11y_items.items;
     const from = for (items, 0..) |it, i| {
         if (it.node_index == label_box) break i;
     } else return;
     const label = &items[from];
-    if (label.hidden or label.label.len == 0) return;
+    const names = !label.hidden and label.label.len > 0;
     for (items[from + 1 ..]) |*it| {
         if (it.hidden) continue;
         switch (it.role) {
             .static_text, .group, .list, .row, .image, .popover => continue,
             else => {},
         }
-        if (it.label.len > 0) return;
-        const text = ui.access.textOf(c, c.alloc(), it.node_index) catch return;
-        if (text.len > 0) return;
-        it.label = label.label;
-        if (it.hint.len == 0) it.hint = label.hint;
-        label.hidden = true;
+        const text = if (it.label.len > 0) it.label else ui.access.textOf(c, c.alloc(), it.node_index) catch return;
+        if (names and text.len == 0) {
+            it.label = label.label;
+            if (it.hint.len == 0) it.hint = label.hint;
+            label.hidden = true;
+        }
+        if (err.len > 0) it.hint = if (it.hint.len > 0) c.print("{s}, {s}", .{ err, it.hint }) else err;
+        sayError(c, err, c.focus == it.id);
         return;
     }
+}
+
+/// Says a row's `err` once, as it appears or changes, if its control
+/// `focused`: one not being typed in is told by its hint when it is
+/// reached. Called each frame in the row, so an error gone and back is
+/// said again.
+fn sayError(c: *ui.Context, err: []const u8, focused: bool) void {
+    const said = c.state(struct { hash: u64 = 0 }, "form-error");
+    const h = if (err.len > 0) std.hash.Wyhash.hash(0, err) else 0;
+    if (said.hash == h) return;
+    said.hash = h;
+    if (h != 0 and focused) ui.access.announce(c, err);
 }
 
 test {
     _ = @import("form_tests.zig");
     _ = @import("form_sections_tests.zig");
+    _ = @import("form_errors_tests.zig");
 }

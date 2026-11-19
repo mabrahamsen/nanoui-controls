@@ -21,7 +21,8 @@ pub const Options = struct {
     icon: ?[]const u8 = null,
     /// A spinner in place of the icon, for a pane waiting on something.
     loading: bool = false,
-    /// A short title, heard as a heading.
+    /// A short title, heard as a heading; a long one wraps, centered, as
+    /// the description does.
     title: []const u8 = "",
     /// The title in the monospaced font, for one in capitals.
     mono: bool = false,
@@ -80,8 +81,9 @@ pub fn noticeOpen(c: *ui.Context, opts: Options) ui.Div {
         kit.spinner(c, .{ .size = @round(opts.icon_size * 0.8 * k), .color = opts.icon_color orelse col });
     } else ui.icon(c, icon, .{ .size = opts.icon_size * k, .color = opts.icon_color orelse col });
     if (opts.title.len > 0) {
-        const line = ui.div(c).row();
-        ui.text(c, opts.title, .{ .size = size + 1, .weight = .semibold, .mono = opts.mono, .color = if (opts.color == null) parts.readable(t, col, 0) else col });
+        // Wrapping as the description does, centered, when it is long.
+        const line = ui.div(c).column().wFull();
+        parts.centeredText(c, opts.title, .{ .size = size + 1, .weight = .semibold, .mono = opts.mono, .color = if (opts.color == null) parts.readable(t, col, 0) else col });
         line.end();
         ui.access.describe(c, line.index, .{ .role = .static_text, .label = opts.title, .header = true });
     }
