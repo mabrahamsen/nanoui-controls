@@ -2,6 +2,22 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Stat: `value_status`, the figure in a status's shade that reads as text, `value_color` going over it; `text_size`, the figure's size in points; and `wrap`, the label and the detail wrapping where they were cut short.
+- Form: `label_style = .caption` draws the labels as captions, for a pane of facts; `propertyOpen` leaves a property's row open after its value for pills (`FormProperty`, `FormLabelStyle`).
+- Sidebar: an item's `icon_color`, used as given, selected or not, and `value_text`, how its place stands in words, said after its label and in the narrowed row's tooltip.
+
+### Changed
+
+- A stat's label and detail cut short show whole in a tooltip.
+
+### Fixed
+
+- A breakdown short of full, and so a bar list's bar, ended short of its value by its share of the gap before the rest of the track (a level at 30% of 200 points was 59.7 long). The gaps are now only between parts, and a level ends at its value.
+
 ## 0.9.2
 
 ### Changed

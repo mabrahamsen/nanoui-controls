@@ -20,6 +20,8 @@ const surface = @import("surface.zig");
 const Surface = surface.Surface;
 const trend_mod = @import("trend.zig");
 const shape_mod = @import("shape.zig");
+const parts = @import("parts.zig");
+const measure = @import("measure.zig");
 
 pub const Options = struct {
     /// How it changed ("+8%", "−2 since yesterday"), in a tag beside the
@@ -43,14 +45,24 @@ pub const Options = struct {
     history_fixed_max: bool = false,
     /// The trend's colors by height, as a trend's `ramp`; over `color`.
     history_ramp: []const ui.Color = &.{},
-    /// The figure's color, for one that says how something stands
-    /// ("Nominal" in the success color); null takes the theme's text.
+    /// The figure in a status's color, for one that says how something
+    /// stands ("Degraded" in the warning color), in the shade of it that
+    /// reads as text, as a pill's label is.
+    value_status: kit.Status = .neutral,
+    /// The figure's color, over `value_status`'s, used as given; null
+    /// takes the status's, or the theme's text.
     value_color: ?ui.Color = null,
     /// The figure's size, as the kit's: `.md` draws it at twice the kit's
     /// text at that size. At `.xs` without a `card`, it is a compact
     /// reading: the label a caption, and the figure a point over the kit's
     /// text, for readings packed in rows ("FILES 312 · SIZE 4.2 GB").
     size: kit.Size = .md,
+    /// The figure's size in points, over `size`'s; the label and the
+    /// detail keep theirs.
+    text_size: ?f32 = null,
+    /// The label and the detail wrap within the stat's width; otherwise
+    /// they are cut short with "…", and show whole in a tooltip.
+    wrap: bool = false,
     /// The figure in the monospaced font, so figures line up.
     mono: bool = false,
     /// The parent's width by default; in a row, a share of the room the
@@ -80,7 +92,8 @@ pub const Options = struct {
 pub fn stat(c: *ui.Context, label: []const u8, value: []const u8, opts: Options) void {
     const box = open(c, opts, false);
     defer box.end();
-    draw(c, box, label, value, opts, false);
+    const cut = draw(c, box, label, value, opts, false);
+    if (cut.len > 0) kit.tooltip(c, parts.still(c, box), cut, .{});
 }
 
 /// Draws the stat `label` reading `value` as something to click, which
@@ -99,7 +112,10 @@ pub fn statButton(c: *ui.Context, label: []const u8, value: []const u8, opts: Op
     // Enter or Space clicks it while it has the keyboard, as nanoui
     // clicks any focusable box.
     if (focus.showRing(c, it.focused)) box = box.border(focus.ring(c)).borderW(focus.ringWidth(c));
-    draw(c, box, label, value, opts, true);
+    const cut = draw(c, box, label, value, opts, true);
+    var tip = it;
+    tip.hovered = it.hovered and cut.len > 0;
+    kit.tooltip(c, tip, cut, .{});
     return it;
 }
 
@@ -124,7 +140,9 @@ fn compact(opts: Options) bool {
     return opts.size == .xs and opts.card == null;
 }
 
-fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts: Options, clickable: bool) void {
+/// Draws the stat in `box`, and returns its label and detail where they
+/// were cut short, to show whole in a tooltip; empty when neither was.
+fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts: Options, clickable: bool) []const u8 {
     const t = kit.tokens(c);
     const figure = if (opts.loading) opts.loading_text else if (opts.unit.len > 0) c.print("{s} {s}", .{ value, opts.unit }) else value;
     ui.access.describe(c, box.index, .{
@@ -137,17 +155,23 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
     // Compact, the label is a caption, as `caption` draws one.
     const small = compact(opts);
     const label_style: ui.TextStyle = if (small)
-        .{ .size = opts.size.text() - 1, .weight = .semibold, .color = t.muted, .truncate = .ellipsis }
+        .{ .size = opts.size.text() - 1, .weight = .semibold, .color = t.muted }
     else
-        .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis };
+        .{ .size = opts.size.text() - 1.5, .color = t.muted };
+    var label_cut = false;
     if (opts.key) |color| {
-        const head = ui.div(c).row().itemsCenter().gap(6 * opts.scale);
+        const head = ui.div(c).row().wFull().itemsCenter().gap(6 * opts.scale);
         defer head.end();
         ui.div(c).w(6 * opts.scale).h(6 * opts.scale).roundedFull().bg(color).end();
-        ui.text(c, label, label_style);
-    } else ui.text(c, label, label_style);
+        // The label takes the room the dot leaves; wrapping text gives
+        // back what it doesn't need.
+        const room = if (opts.wrap) ui.div(c).column() else ui.div(c).column().w(0).grow();
+        defer room.end();
+        label_cut = line(c, label, label_style, opts.wrap);
+    } else label_cut = line(c, label, label_style, opts.wrap);
+    const value_color = opts.value_color orelse parts.readable(t, parts.statusColor(t, opts.value_status, null, .text), 0);
     {
-        const size = if (small) opts.size.text() + 1 else opts.size.text() * 2;
+        const size = opts.text_size orelse if (small) opts.size.text() + 1 else opts.size.text() * 2;
         const row = ui.div(c).row().itemsCenter().gap(8 * opts.scale);
         defer row.end();
         if (opts.loading) {
@@ -160,14 +184,14 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
             // The unit on the figure's line, at its foot.
             const fig = ui.div(c).row().itemsEnd().gap(3 * opts.scale);
             defer fig.end();
-            ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = opts.value_color orelse t.foreground });
+            ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = value_color });
             const u = ui.div(c).pb(@round(size * 0.12));
             defer u.end();
             ui.text(c, opts.unit, .{ .size = @round(size * 0.55), .weight = .medium, .color = t.muted });
-        } else ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = opts.value_color orelse t.foreground });
+        } else ui.text(c, value, .{ .size = size, .weight = .semibold, .mono = opts.mono, .color = value_color });
         if (opts.change.len > 0 and !opts.loading) kit.tag(c, opts.change, .{ .status = opts.status, .size = .xs, .pill = true });
     }
-    if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = opts.size.text() - 1.5, .color = t.muted, .truncate = .ellipsis });
+    const detail_cut = opts.detail.len > 0 and line(c, opts.detail, .{ .size = opts.size.text() - 1.5, .color = t.muted }, opts.wrap);
     if (opts.history.len > 0) {
         ui.div(c).h(2 * opts.scale).end();
         trend_mod.trend(c, opts.history, .{
@@ -182,6 +206,25 @@ fn draw(c: *ui.Context, box: ui.Div, label: []const u8, value: []const u8, opts:
             .scale = opts.scale,
         });
     }
+    if (label_cut and detail_cut) return c.print("{s} — {s}", .{ label, opts.detail });
+    return if (label_cut) label else if (detail_cut) opts.detail else "";
+}
+
+/// `text` in `style` on its own line in the room it has: wrapped with
+/// `wrap`, else cut short with "…" where the room ends. Returns whether
+/// it was cut short where the last frame laid it out.
+fn line(c: *ui.Context, text: []const u8, style: ui.TextStyle, wrap: bool) bool {
+    var s = style;
+    if (wrap) {
+        s.wrap = true;
+        ui.text(c, text, s);
+        return false;
+    }
+    s.truncate = .ellipsis;
+    const room = ui.div(c).row().wFull();
+    defer room.end();
+    ui.text(c, text, s);
+    return measure.cutOff(c, text, style);
 }
 
 test "a stat says its label, figure and change, and a screen reader hears them as one" {

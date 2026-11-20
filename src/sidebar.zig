@@ -80,6 +80,14 @@ pub const Item = struct {
     /// A symbol before the label, in a slot of its own, so labels line up
     /// whatever the icons' widths.
     icon: ?[]const u8 = null,
+    /// The icon's color, selected or not, for a place whose icon says how
+    /// it stands (a source that is failing), used as given; null takes
+    /// the row's.
+    icon_color: ?ui.Color = null,
+    /// What a screen reader says of the row after its label ("failing"),
+    /// for what its icon shows; narrowed to its icons, the tooltip says it
+    /// after the label too.
+    value_text: []const u8 = "",
     /// A number at the end: how many there are.
     count: ?usize = null,
     /// The count's color; null takes the theme's muted text, or with
@@ -421,11 +429,11 @@ pub fn SidebarOf(comptime Key: type) type {
             {
                 const slot = ui.div(c).w(@round(text * 1.3) * k).h(text * k).center();
                 defer slot.end();
-                if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = if (on or holds) tint else t.muted.mix(t.foreground, wash * 0.5) });
+                if (opts.icon) |name| ui.icon(c, name, .{ .size = text - 0.5, .color = opts.icon_color orelse if (on or holds) tint else t.muted.mix(t.foreground, wash * 0.5) });
                 if (narrow) count_mod.badge(c, opts, text, k, count_col);
             }
             if (narrow) {
-                kit.tooltip(c, it, label, .{ .placement = .right });
+                kit.tooltip(c, it, if (opts.value_text.len > 0) c.print("{s} — {s}", .{ label, opts.value_text }) else label, .{ .placement = .right });
             } else {
                 const style: ui.TextStyle = .{
                     .size = text,
@@ -458,7 +466,8 @@ pub fn SidebarOf(comptime Key: type) type {
                     }
                 }
             }
-            const said = count_mod.said(c, opts, sb.opts.loading_text);
+            const count_said = count_mod.said(c, opts, sb.opts.loading_text);
+            const said = if (opts.value_text.len == 0) count_said else if (count_said.len == 0) opts.value_text else c.print("{s}, {s}", .{ opts.value_text, count_said });
             const value = if (open) |o| blk: {
                 const state_text = if (o.*) sb.opts.expanded_text else sb.opts.collapsed_text;
                 break :blk if (said.len > 0) c.print("{s}, {s}", .{ said, state_text }) else state_text;

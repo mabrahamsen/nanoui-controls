@@ -1,6 +1,6 @@
-//! The sidebar's tests of counts that are loading: a spinner in the
+//! The sidebar's tests of counts that are loading (a spinner in the
 //! count's place, at the icon's corner when narrowed, and what a screen
-//! reader hears.
+//! reader hears), and of icons that say how a place stands.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -100,4 +100,64 @@ test "icons only, a loading row shows a small spinner at its icon's corner in pl
     // Over the icon's right, inside the row.
     try std.testing.expect(right > row.x + row.w / 2 and right <= row.x + row.w);
     try std.testing.expectEqualStrings("loading", try Loading.value(&t, arena.allocator(), "Inbox"));
+}
+
+/// Places whose icons say how they stand: one failing, chosen or not.
+const Health = struct {
+    selected: []const u8 = "home",
+    icons_only: bool = false,
+
+    fn view(x: *Health, c: *ui.Context) void {
+        const root = ui.div(c).column().w(if (x.icons_only) 48 else 220).h(300);
+        defer root.end();
+        var sb = sidebar(c, "health", x.selected, .{ .icons_only = x.icons_only });
+        sb.item("home", "Home", .{ .icon = "house" });
+        sb.item("nas", "NAS", .{ .icon = "exclamationmark.triangle", .icon_color = red, .value_text = "failing", .count = 3 });
+        _ = sb.end();
+    }
+
+    /// The color of the icon named `name`.
+    fn iconColor(t: *ui.Tester, name: []const u8) ui.Color {
+        for (t.ctx.nodes.items) |node| switch (node.content) {
+            .icon => |ic| if (std.mem.eql(u8, ic.name, name)) return ic.color,
+            else => {},
+        };
+        unreachable;
+    }
+
+    /// Where the icon named `name` is.
+    fn iconAt(t: *ui.Tester, name: []const u8) ui.Rect {
+        for (t.ctx.nodes.items) |node| switch (node.content) {
+            .icon => |ic| if (std.mem.eql(u8, ic.name, name)) return node.rect,
+            else => {},
+        };
+        unreachable;
+    }
+};
+
+const red: ui.Color = .hex(0xef4444);
+
+test "a row's icon takes its color, chosen or not and narrowed, and a screen reader hears how it stands" {
+    var x: Health = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Health.view), .{ .width = 300, .height = 320 });
+    defer t.deinit();
+    t.settle(1);
+    try std.testing.expectEqual(red, Health.iconColor(&t, "exclamationmark.triangle"));
+    // The other row's icon keeps the row's color.
+    try std.testing.expect(!std.meta.eql(red, Health.iconColor(&t, "house")));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectEqualStrings("failing, 3", try Loading.value(&t, arena.allocator(), "NAS"));
+    x.selected = "nas";
+    t.settle(2);
+    try std.testing.expectEqual(red, Health.iconColor(&t, "exclamationmark.triangle"));
+    // Narrowed, the icon is the row, and its tooltip says how it stands.
+    x.icons_only = true;
+    t.settle(2);
+    try std.testing.expectEqual(red, Health.iconColor(&t, "exclamationmark.triangle"));
+    const icon = Health.iconAt(&t, "exclamationmark.triangle");
+    t.moveTo(icon.x + icon.w / 2, icon.y + icon.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText("NAS — failing"));
 }
