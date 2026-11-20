@@ -170,3 +170,31 @@ test "a callout closed and shown again at once is said again" {
     t.frame();
     try std.testing.expectEqualStrings("The disk is full.", announced(&t));
 }
+
+test "a long title wraps within the callout, as its text does, and is said whole" {
+    const title = "The backup couldn't reach the server on the other side of the building";
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(220);
+            defer root.end();
+            _ = callout(c, "Try again later.", .{ .title = title, .status = .warning });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 300 });
+    defer t.deinit();
+    t.settle(2);
+    const r = t.findText(title).?;
+    const text = t.findText("Try again later.").?;
+    try std.testing.expect(r.x + r.w <= 220.5);
+    try std.testing.expect(r.h > text.h * 1.5);
+    try std.testing.expect(text.y >= r.y + r.h - 0.5);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var said = false;
+    for (list.items) |e| said = said or std.mem.eql(u8, e.label, title ++ ". Try again later.");
+    try std.testing.expect(said);
+}

@@ -26,7 +26,8 @@ pub const Options = struct {
     color: ?ui.Color = null,
     /// An SF Symbol, over the status's.
     icon: ?[]const u8 = null,
-    /// A line above the text, in its weight.
+    /// A line above the text, semibold, wrapping as the text does when it
+    /// is long.
     title: []const u8 = "",
     /// A close button at its end; `callout` returns true when it is
     /// clicked. `calloutOpen` draws none: its caller draws one after its
@@ -98,7 +99,7 @@ pub fn calloutOpen(c: *ui.Context, text: []const u8, opts: Options) ui.Div {
     // Growing, so the text takes the room and wraps within it. One element
     // to a screen reader: the title and the text.
     const body = ui.div(c).column().grow().gap(2 * k);
-    if (opts.title.len > 0) ui.text(c, opts.title, .{ .size = size, .weight = .semibold, .color = t.foreground });
+    if (opts.title.len > 0) ui.text(c, opts.title, .{ .size = size, .weight = .semibold, .wrap = true, .color = t.foreground });
     ui.text(c, text, .{ .size = size, .wrap = true, .color = opts.text_color orelse t.foreground });
     body.end();
     ui.access.describe(c, body.index, .{ .role = .static_text, .label = said });

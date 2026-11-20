@@ -129,3 +129,32 @@ test "a notice without a title is said by its description alone" {
     defer t.deinit();
     try std.testing.expectEqualStrings("Nothing to show yet.", t.ctx.access.announcement[0..t.ctx.access.announcement_len]);
 }
+
+test "a long title wraps within the notice, centered, and is heard whole as a heading" {
+    const title = "The server stopped while the backup of the photo library was running";
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(240);
+            defer root.end();
+            notice_mod.notice(c, .{ .title = title, .description = "Start it again.", .status = .warning });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 400 });
+    defer t.deinit();
+    t.settle(3);
+    const r = t.findText(title).?;
+    const text = t.findText("Start it again.").?;
+    try std.testing.expect(r.x >= -0.5 and r.x + r.w <= 240.5);
+    try std.testing.expect(r.h > text.h * 1.5);
+    // Centered in the notice.
+    try std.testing.expectApproxEqAbs(@as(f32, 120), r.x + r.w / 2, 2);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var heard = false;
+    for (list.items) |e| heard = heard or (std.mem.eql(u8, e.label, title) and e.header);
+    try std.testing.expect(heard);
+}

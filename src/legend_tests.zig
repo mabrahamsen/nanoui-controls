@@ -79,3 +79,38 @@ test "a legend's items can be lines, for a line chart's series" {
         try std.testing.expect(r.w > r.h * 2);
     };
 }
+
+test "a label longer than the legend is cut short on a line of its own, keeps its detail, shows whole in a tooltip and is said whole" {
+    const long = "Compressed memory held for apps that are asleep";
+    const T = struct {
+        fn view(_: *@This(), c: *ui.Context) void {
+            const root = ui.div(c).column().w(160);
+            defer root.end();
+            var l = legend_mod.legend(c, .{});
+            l.item(blue, "App");
+            l.itemDetail(red, long, "▲4.2");
+            l.end();
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 200 });
+    defer t.deinit();
+    t.settle(2);
+    try std.testing.expect(!t.hasText(long));
+    // On the line after "App", its detail kept, all within the legend.
+    const app = t.findText("App").?;
+    const detail = t.findText("▲4.2").?;
+    try std.testing.expect(detail.y > app.y + app.h - 0.5);
+    try std.testing.expect(detail.x + detail.w <= 160.5);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var list: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    var said = false;
+    for (list.items) |e| said = said or (std.mem.eql(u8, e.label, long) and std.mem.eql(u8, e.value, "▲4.2"));
+    try std.testing.expect(said);
+    t.moveTo(detail.x - 20, detail.y + detail.h / 2);
+    t.settle(2);
+    try std.testing.expect(t.hasText(long ++ " ▲4.2"));
+}

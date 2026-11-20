@@ -255,6 +255,7 @@ f.end();
 
 - `row` puts its label in the column and leaves the row open for a control. A `hint` sits under the control, muted, or an `err` in its place in the theme's danger color, and `required` marks the label with "*", as the kit's field has them. `info` adds an ⓘ after the label that says more in a tooltip; `disabled` dims the label and hint beside a control the caller disables; `label_top` puts the label at the top, beside a control taller than a line. An empty label leaves just the control column, for a checkbox with its own title or buttons under the controls.
 - A row's label names its control to a screen reader, whole even when it is cut short, beside it or stacked above it, with the ⓘ's text as its hint. A required row's name says so ("Name, required"; `required_text`), as the "*" isn't said. A control with a name of its own keeps it, the label read before it.
+- A row's `err` is heard with its control, first in its hint, before the ⓘ's text, whether the label names the control or the control names itself. When an error appears or changes on the control that has the keyboard, it is said once.
 - `property` shows a label and a value that wraps within the room left, the label beside its first line; a screen reader hears them as one ("Hostname, studio.local"). With `selectable`, the value can be selected and copied; with `wrap = false`, it keeps to a line, ends in "…" and shows whole in a tooltip. `propertyOpt` takes a `?[]const u8` and draws nothing for null or an empty value: no row, no line above it, and no room for its label in the column. `propertyOpen` leaves the row open after the value for the caller's pills or words ("TUNNELED"), which follow it; the value takes the room they leave, wrapping in it or cut short before them, and `end` closes the row.
 - `heading` titles the rows after it, with a muted `description` under the title if wanted, and a `status` (danger for what can't be undone) that colors its title and its card. With `grouped`, each heading's rows are in a card of their own under it, in the theme's surface, as a settings window groups them; `card`, a `Surface`, gives the cards the app's look, its `border` over a danger heading's tint, and the headings and notes keep in line with the labels by its `px`. `row_lines` draws a line between rows.
 - `foldingHeading` folds the rows after it and opens them again, eased, on a click or Enter or Space; the caller keeps whether it is open and draws its rows while it returns true. A screen reader hears it as a button that says whether it is expanded (`expanded_text`, `collapsed_text`).
@@ -276,6 +277,7 @@ if (controls.swatches(c, &colors, &chosen, .{})) apply(colors[chosen.?].color);
 - A click chooses one, and so do Left, Right (or Up and Down, as a radio group's keys), Home and End once the row has the keyboard, which it takes as the grid does: from a click, from Tab, or from `c.focusNext`. While it has the keyboard, the ring is the accent, or the app's `focus_ring` when it sets one.
 - Each is named in a tooltip and to a screen reader, as a radio button, the chosen one selected, with the row's `label` ("Accent color") said after it.
 - `disabled` dims them: no clicks or keys, and said as disabled. Swatches with no colors don't take Tab.
+- The row is as wide as its colors and runs past a narrower parent. `wrap` makes it as wide as its parent instead, the swatches wrapping onto as many rows as they need, `gap` apart across and down; the keys still go through them in order.
 - `size` is a `kit.Size`, in step with the kit's controls; `border` and `selected_border` color the edges.
 
 ## flow
@@ -359,7 +361,7 @@ controls.callout(c, "That folder doesn't exist.", .{ .status = .warning });
 if (controls.callout(c, "The disk is full.", .{ .status = .danger, .closable = true })) dismissed = true;
 ```
 
-- `status` sets the icon and tint (neutral: the accent and an info icon); `color` and `icon` go over them, and `title` is a line above the text.
+- `status` sets the icon and tint (neutral: the accent and an info icon); `color` and `icon` go over them, and `title` is above the text, wrapping as it does.
 - `closable` adds a ✕ at its end, named `close_text` to a screen reader and reached by Tab; `callout` returns true when it is clicked.
 - `calloutOpen` leaves it open after its text for a button ("Retry"); the caller ends it, and draws its own ✕ if it wants one.
 - A screen reader hears its title and text as one. `announce` says them when it appears or changes, once; by default a danger or a warning callout is said, and others aren't.
@@ -378,7 +380,7 @@ n.end();
 ```
 
 - `status` colors the icon and title; `color` and `icon_color` go over it. `loading` puts a spinner where the icon goes, without moving the title.
-- A short description sits on one line; a long one wraps into lines of about one length, centered.
+- A short description sits on one line; a long one wraps into lines of about one length, centered. A long title wraps within the notice's width, centered too.
 - A screen reader hears the title as a heading, then the description; `announce` says them once when it appears or changes.
 - `card` goes over the panel's look, with 32 points of room above and below by default; `mono`, `size` or `text_size`, `icon_size` and `scale`.
 
@@ -395,6 +397,7 @@ if (controls.segmented(c, &ranges, &range, .{ .label = "Range" })) refilter();
 - It is one stop for Tab. The arrows, Home and End choose, passing disabled options; the keys it moves by are used up even at an end, and are its own when nanoui offers them first as shortcuts. Enter is the app's. A click chooses and gives it the keyboard; its ring shows as `setFocusRingShows` says.
 - A screen reader hears each option as a radio button, with its count or `loading_text` as its value and the group's `label` after it.
 - `segmentedOf` keeps the choice as a value of an enum, an option for each of its values in their order.
+- It is one row as wide as its options, for a few short ones: it doesn't shrink or wrap, and in a narrower parent it runs past its edge. For more options, or long ones, a `tabStrip` scrolls.
 - `size` or `text_size`, `background` and `border`, `px` and `py`, `max_count` (past it, "999+"), `disabled` and `scale`. Its corners follow the kit's radius and the app's shape.
 
 ## cardChoice
@@ -703,6 +706,7 @@ l.end();
 ```
 
 - `itemDetail` adds a smaller, fainter detail after the label, such as a peak.
+- An item wider than the legend has a line to itself, its label cut short with "…" to fit and its detail kept; it shows whole in a tooltip, and a screen reader hears it whole.
 - `trailing` puts text at the end of the last line, such as what the items leave.
 - `size` (`.xs` by default) sizes the labels and swatches, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
 - `shape` draws its items' swatches as squares, dots or lines, for a line chart's series.

@@ -1526,3 +1526,40 @@ test "a sidebar whose icons say how places stand, and a pane of facts, light and
     try expectView("facts", .init(&x, Facts.view), .{ .height = 200 });
     try expectView("facts-dark", .init(&x, Facts.view), .{ .height = 200, .dark = true });
 }
+
+const Narrow = struct {
+    chosen: ?usize = 2,
+    fn view(x: *Narrow, c: *ui.Context) void {
+        const t = kit.tokens(c);
+        const root = ui.div(c).row().sizeFull().p(10).gap(12);
+        defer root.end();
+        {
+            const col = ui.div(c).column().w(160).gap(12);
+            defer col.end();
+            _ = controls.callout(c, "Run it again once the disk is back.", .{ .status = .warning, .title = "The last backup didn't finish" });
+            var l = controls.legend(c, .{});
+            l.item(t.primary, "App 9.6 GB");
+            l.itemDetail(t.warning, "Wired and compressed 2.7 GB", "▲4.2");
+            l.end();
+        }
+        const col = ui.div(c).column().w(0).grow().gap(12);
+        defer col.end();
+        controls.notice(c, .{ .icon = "folder", .title = "No snapshots on this disk yet", .card = .{ .py = 12 } });
+        const colors = [_]controls.Swatch{
+            .{ .color = t.primary, .label = "Blue" },
+            .{ .color = t.success, .label = "Green" },
+            .{ .color = t.warning, .label = "Amber" },
+            .{ .color = t.danger, .label = "Red" },
+            .{ .color = t.muted, .label = "Gray" },
+            .{ .color = t.foreground, .label = "Ink" },
+            .{ .color = t.border, .label = "Mist" },
+        };
+        _ = controls.swatches(c, &colors, &x.chosen, .{ .wrap = true, .label = "Accent color" });
+    }
+};
+
+test "a legend, a callout, a notice and swatches in a narrow parent, light and dark" {
+    var x: Narrow = .{};
+    try expectView("narrow", .init(&x, Narrow.view), .{ .height = 180 });
+    try expectView("narrow-dark", .init(&x, Narrow.view), .{ .height = 180, .dark = true });
+}

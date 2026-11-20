@@ -1,5 +1,7 @@
 //! Swatches: a row of round colors to pick one from, each named in a
-//! tooltip and to a screen reader. The chosen one, kept by the caller as
+//! tooltip and to a screen reader. The row is as wide as its colors and
+//! runs past a narrower parent; with `wrap`, it takes its parent's width
+//! and wraps onto more rows instead. The chosen one, kept by the caller as
 //! the kit's radio group keeps its option, is ringed. A click chooses one;
 //! so do Left, Right, Home and End while the row has the keyboard, which
 //! it takes as the grid does: from a click, from Tab, or from
@@ -13,6 +15,7 @@ const ui = nanoui.ui;
 const kit = nanoui.kit;
 const focus = @import("focus.zig");
 const parts = @import("parts.zig");
+const flow_mod = @import("flow.zig");
 
 pub const Swatch = struct {
     color: ui.Color,
@@ -25,6 +28,10 @@ pub const Options = struct {
     size: kit.Size = .md,
     /// Between the swatches, in points before `scale`.
     gap: f32 = 6,
+    /// As wide as the parent, the swatches wrapping onto as many rows as
+    /// they need, with `gap` between the rows too. The keys still go
+    /// through them in order.
+    wrap: bool = false,
     /// Each swatch's edge; null takes the theme's border.
     border: ?ui.Color = null,
     /// The chosen one's ring; null takes the theme's text color, which
@@ -50,10 +57,12 @@ pub const Options = struct {
 pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts: Options) bool {
     const k = opts.scale;
     const t = kit.tokens(c);
+    const d = @round(opts.size.height() * 0.65) * k;
     // Unkeyed, so `c.focusNext` just before names it.
-    var row = ui.div(c).row().gap(opts.gap * k).itemsCenter();
+    var rows: ?flow_mod.Flow = if (opts.wrap) flow_mod.flow(c, d / k, .{ .gap = opts.gap, .row_gap = opts.gap, .scale = k }) else null;
+    var row = if (rows) |f| f.box else ui.div(c).row().gap(opts.gap * k).itemsCenter();
     if (opts.disabled) row = row.opacity(focus.dimmed);
-    defer row.end();
+    defer if (rows) |*f| f.end() else row.end();
     // Without colors, or disabled, it doesn't take Tab.
     const own = focus.takeIf(c, row, !opts.disabled and colors.len > 0);
     const before = selected.*;
@@ -76,7 +85,6 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
             else => {},
         }
     };
-    const d = @round(opts.size.height() * 0.65) * k;
     // None chosen, as the keys left it: nothing, or an index past the
     // colors.
     const none = if (selected.*) |i| i >= colors.len else true;
@@ -86,6 +94,8 @@ pub fn swatches(c: *ui.Context, colors: []const Swatch, selected: *?usize, opts:
         // keys start.
         const keyed = focus.showRing(c, own.focused);
         const ringed = chosen or (keyed and none and i == 0);
+        const cell = if (rows) |*f| f.cell() else null;
+        defer if (cell) |box| box.end();
         const edge = if (ringed and keyed) focus.ringIn(c, t.primary) else if (chosen) opts.selected_border orelse t.foreground else opts.border orelse t.border;
         var dot = ui.div(c).w(d).h(d).roundedFull().bg(sw.color).border(edge);
         if (ringed) dot = dot.borderW(2 * k);
@@ -331,4 +341,35 @@ test "Up and Down move as Left and Right, and the row's label is said with each 
     var list: std.ArrayList(ui.access.Element) = .empty;
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
     try std.testing.expectEqualStrings("Accent color", list.items[0].hint);
+}
+
+test "with wrap, swatches wrap onto rows in a narrow parent, keeping their gap, and the keys go through them in order" {
+    const T = struct {
+        chosen: ?usize = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            const box = ui.div(c).column().w(70);
+            defer box.end();
+            if (c.frame == 0) c.focusNext(false);
+            _ = swatches(c, &palette, &x.chosen, .{ .wrap = true });
+        }
+    };
+    var x: T = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 300, .height = 100 });
+    defer t.deinit();
+    t.settle(2);
+    var dots: [palette.len]ui.Rect = undefined;
+    for (t.ctx.nodes.items) |node| if (node.style.background) |bg| for (palette, 0..) |sw, i| {
+        if (std.meta.eql(bg, sw.color)) dots[i] = t.ctx.rects.get(node.id).?;
+    };
+    // (70 + 6) / (22 + 6): two to a row, 6 apart across and down.
+    try std.testing.expectEqual(dots[0].y, dots[1].y);
+    try std.testing.expectApproxEqAbs(@as(f32, 6), dots[1].x - dots[0].x - dots[0].w, 0.5);
+    try std.testing.expectEqual(dots[0].x, dots[2].x);
+    try std.testing.expectApproxEqAbs(@as(f32, 6), dots[2].y - dots[0].y - dots[0].h, 0.5);
+    try std.testing.expectEqual(dots[2].y, dots[3].y);
+    for (0..palette.len) |i| {
+        t.key(.right);
+        try std.testing.expectEqual(@as(?usize, i), x.chosen);
+    }
 }
