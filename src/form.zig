@@ -554,6 +554,6 @@ fn sayError(c: *ui.Context, err: []const u8, focused: bool) void {
 test {
     _ = @import("form_tests.zig");
     _ = @import("form_sections_tests.zig");
-    _ = @import("form_errors_tests.zig");
     _ = @import("form_facts_tests.zig");
+    _ = @import("form_errors_tests.zig");
 }

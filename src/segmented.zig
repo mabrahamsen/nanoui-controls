@@ -3,6 +3,10 @@
 //! with the keyboard (one stop for Tab, the arrows choosing), counts,
 //! icons, options disabled on their own, and `scale`.
 //!
+//! It is one row as wide as its options, for a few short ones: it doesn't
+//! shrink or wrap, and in a narrower parent it runs past its edge. For
+//! more options, or long ones, a `tabStrip` scrolls.
+//!
 //!     const ranges = [_]controls.Choice{ .{ .label = "Today" }, .{ .label = "Week", .count = 12 } };
 //!     if (controls.segmented(c, &ranges, &s.range, .{ .label = "Range" })) s.refilter();
 //!

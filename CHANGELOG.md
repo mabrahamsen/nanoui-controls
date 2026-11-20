@@ -9,14 +9,19 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - Stat: `value_status`, the figure in a status's shade that reads as text, `value_color` going over it; `text_size`, the figure's size in points; and `wrap`, the label and the detail wrapping where they were cut short.
 - Form: `label_style = .caption` draws the labels as captions, for a pane of facts; `propertyOpen` leaves a property's row open after its value for pills (`FormProperty`, `FormLabelStyle`).
 - Sidebar: an item's `icon_color`, used as given, selected or not, and `value_text`, how its place stands in words, said after its label and in the narrowed row's tooltip.
+- Swatches: `wrap`, as wide as the parent, the swatches wrapping onto more rows.
 
 ### Changed
 
 - A stat's label and detail cut short show whole in a tooltip.
+- Form: a row's `err` is heard with its control, first in its hint, and said once when it appears or changes on the control that has the keyboard.
+- Callout and notice titles wrap within their width, a notice's centered, where they ran past its edge on one line.
+- Segmented controls and swatches say in their docs that they don't shrink, and run past a parent narrower than they are.
 
 ### Fixed
 
 - A breakdown short of full, and so a bar list's bar, ended short of its value by its share of the gap before the rest of the track (a level at 30% of 200 points was 59.7 long). The gaps are now only between parts, and a level ends at its value.
+- Legend: an item wider than the legend ran past its edge. It now has a line to itself, its label cut short with "…" and its detail kept, whole in a tooltip and to a screen reader.
 
 ## 0.9.2
 
