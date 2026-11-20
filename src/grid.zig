@@ -394,7 +394,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, given: Options) Grid {
         // row is scrolled to again in the next frame, once it is.
         if (by.moved or kept.jump_to != null) if (want) |i| if (c.rects.get(id) == null) {
             g.jump_to = i;
-            c.animationFrame();
+            c.frameIn(0);
         };
         if (opts.selected) |s| if (s.* != before) if (s.*) |i| {
             want = i;

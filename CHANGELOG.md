@@ -2,7 +2,7 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
-## Unreleased
+## 0.10.0
 
 ### Added
 
@@ -14,6 +14,7 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ### Changed
 
+- Built on nanoui 0.14.8, which an app using these controls must pin too. Its text fields keep a password's text from screen readers themselves, and an input box now only gives its field its label as a name.
 - A stat's label and detail cut short show whole in a tooltip.
 - Form: a row's `err` is heard with its control, first in its hint, and said once when it appears or changes on the control that has the keyboard.
 - Callout and notice titles wrap within their width, a notice's centered, where they ran past its edge on one line.
