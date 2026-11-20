@@ -237,10 +237,12 @@ test "a legend follows its width as the window changes" {
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 1), m.lines);
     t.resize(260, 200);
+    // The frame that sees the width change asks for another at once, to
+    // lay the items out by it.
+    t.frame();
+    try std.testing.expect(t.ctx.frame_in != null);
     t.settle(1);
     try std.testing.expect(m.lines > 1);
-    // The frame that saw the width change asked for another with it.
-    try std.testing.expect(t.ctx.frame_in != null);
     t.resize(700, 200);
     t.settle(1);
     try std.testing.expectEqual(@as(usize, 1), m.lines);

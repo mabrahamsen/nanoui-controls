@@ -104,8 +104,8 @@ pub fn inputBox(c: *ui.Context, buffer: *ui.TextBuffer, opts: Options) Result {
     // The field is the next box: its index, to name it.
     const at: u32 = @intCast(c.nodes.items.len);
     const field = ui.textField(c, buffer, .{ .placeholder = opts.placeholder, .width = .fill, .size = size, .mono = opts.mono, .password = hidden, .bare = true, .caret_color = col });
-    // nanoui names a field by its placeholder and tells a password's text.
-    if (at < c.nodes.items.len and (opts.label.len > 0 or hidden)) parts.redescribe(c, at, opts.label, if (hidden) "" else buffer.text());
+    // nanoui names a field by its placeholder.
+    if (at < c.nodes.items.len and opts.label.len > 0) parts.rename(c, at, opts.label);
     if (field.focused != had.on) {
         had.on = field.focused;
         c.frameIn(0);
