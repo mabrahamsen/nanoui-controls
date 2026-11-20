@@ -1,7 +1,8 @@
 //! The grid's selection: a row picked alone, added, or a run of rows
 //! from where the selection started, by clicks and the keys; jumping to
-//! a row; a row held and moved to drag the selection out; and the
-//! selection kept on its rows' keys as the rows change.
+//! a row; a row held and moved to drag the selection out; the selection
+//! kept on its rows' keys as the rows change; and the selection kept by
+//! the caller as a key.
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -140,7 +141,9 @@ pub fn followKeys(c: *ui.Context, opts: Options) Followed {
     const ks = opts.keys orelse return .{};
     const s = opts.selected orelse return .{};
     const was = lay_mod.state(c, KeyFollow).*;
-    if (opts.selection) |m| return followMarked(c, ks, s, m, was);
+    if (opts.selection) |m| return followMarked(c, ks, s, m, was, opts.selected_key == null);
+    // With `selected_key`, the caller's key says where the selection is.
+    if (opts.selected_key != null) return .{};
     if (s.* != was.at or was.key == 0) return .{};
     if (s.*) |i| if (i < ks.len and keyHash(ks[i]) == was.key) return .{};
     if (find(ks, was.key)) |j| {
@@ -170,8 +173,9 @@ fn foldedAway(gs: groups_mod.Groups, item: groups_mod.Item) bool {
 
 /// Follows `selection` and `selected` by key, when the rows changed: each
 /// row selected before is selected again where it is now, and one that is
-/// gone is dropped.
-fn followMarked(c: *ui.Context, ks: []const []const u8, s: *?usize, m: []bool, was: KeyFollow) Followed {
+/// gone is dropped. `selected` is left as it is without `own`, when the
+/// caller keeps it as a key.
+fn followMarked(c: *ui.Context, ks: []const []const u8, s: *?usize, m: []bool, was: KeyFollow, own: bool) Followed {
     const print = keysPrint(ks);
     if (was.print == 0 or print == was.print) return .{ .print = print };
     var at: std.AutoHashMapUnmanaged(u64, usize) = .empty;
@@ -184,7 +188,7 @@ fn followMarked(c: *ui.Context, ks: []const []const u8, s: *?usize, m: []bool, w
         const chunk = lay_mod.stateAt(c, Marked, n / per_marked).*;
         if (at.get(chunk.keys[n % per_marked])) |i| m[i] = true;
     }
-    if (s.* == was.at) s.* = if (was.key != 0) at.get(was.key) else null;
+    if (own and s.* == was.at) s.* = if (was.key != 0) at.get(was.key) else null;
     c.changed = true;
     return .{ .print = print, .anchor = if (was.anchor != 0) at.get(was.anchor) else null };
 }
@@ -212,4 +216,46 @@ pub fn keepKeys(g: *Grid) void {
         kept.marked = @intCast(n);
     }
     lay_mod.state(c, KeyFollow).* = kept;
+}
+
+/// What selecting by the caller's key (`Options.selected_key`) found at
+/// the start of the grid.
+pub const ByKey = struct {
+    /// The row whose key it is; null when no row has it.
+    at: ?usize = null,
+    /// The caller set another key than the grid last chose, or the grid
+    /// is new: its row is scrolled into view, and Shift selects from it.
+    moved: bool = false,
+    /// The key, when no row is selected, kept for the next frame.
+    lost: u64 = 0,
+};
+
+/// With `Options.selected_key`, points `opts.selected` at a row index
+/// kept for this frame, its key's row, so clicks, the keys, typing and
+/// folding move it as they move `selected`; `Grid.end` says in `chosen`
+/// where it went. A group folded over the key's row selects its heading.
+pub fn byKey(c: *ui.Context, opts: *Options) ByKey {
+    const sk = opts.selected_key orelse return .{};
+    const ks = opts.keys.?;
+    const slot = c.alloc().create(?usize) catch @panic("grid: out of memory");
+    opts.selected = slot;
+    const key = sk.*;
+    const at: ?usize = if (key) |want| for (ks, 0..) |x, i| {
+        if (std.mem.eql(u8, x, want)) break i;
+    } else null else null;
+    slot.* = at;
+    if (at == null and key != null) if (opts.groups) |gs| if (lay_mod.state(c, Follow).item) |item| if (foldedAway(gs, item)) {
+        slot.* = gs.locate(item);
+    };
+    const h: u64 = if (key) |want| keyHash(want) else 0;
+    return .{ .at = at, .moved = h != lay_mod.state(c, KeyFollow).key, .lost = if (slot.* == null) h else 0 };
+}
+
+/// With `Options.selected_key`: the key of the row the grid selected
+/// this frame, in `Grid.end`; null when the selection didn't move.
+pub fn chosen(g: *const Grid) ?[]const u8 {
+    if (g.opts.selected_key == null) return null;
+    const i = g.opts.selected.?.* orelse return null;
+    if (g.key_at == i) return null;
+    return g.opts.keys.?[i];
 }

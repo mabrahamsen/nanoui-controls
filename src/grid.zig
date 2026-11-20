@@ -23,7 +23,9 @@
 //! too, Cmd-click (Ctrl-click off the Mac) adds or takes away a row,
 //! Shift-click and Shift with the keys select a run of rows, and Cmd+A
 //! (Ctrl+A) selects them all. Given `keys`, what each row is, the
-//! selection stays on its rows as they re-sort, filter or refresh.
+//! selection stays on its rows as they re-sort, filter or refresh; with
+//! `selected_key` in place of `selected`, the caller keeps it as a key,
+//! set from anywhere, and copies in `chosen` after `end`.
 //!
 //! Typing while the grid has the keyboard jumps to a row: the grid keeps
 //! the text (`typed`), the caller finds the first row it begins, and
@@ -150,15 +152,16 @@ pub const Options = struct {
     hidden: ?[]const bool = null,
     /// The selected row, kept by the caller, which clicks and keys
     /// change; a row past `count` moves back to the last. It is a row's
-    /// index, so a caller that sorts finds its row again. Null: rows
-    /// don't select.
+    /// index, so a caller that sorts finds its row again. Null, without
+    /// `selected_key`: rows don't select.
     selected: ?*?usize = null,
     /// Rows selected together, one flag a row as long as `count`, kept by
-    /// the caller; `selected` is then the row the keys move, and is needed
-    /// too. A click selects its row alone, Cmd-click (Ctrl-click off the
-    /// Mac) adds or takes it away, Shift-click and Shift with the keys
-    /// select every row from where the selection started, and Cmd+A
-    /// (Ctrl+A) selects them all. Null: only `selected` is.
+    /// the caller; `selected` (or `selected_key`) is then the row the keys
+    /// move, and is needed too. A click selects its row alone, Cmd-click
+    /// (Ctrl-click off the Mac) adds or takes it away, Shift-click and
+    /// Shift with the keys select every row from where the selection
+    /// started, and Cmd+A (Ctrl+A) selects them all. Null: only the one
+    /// row is.
     selection: ?[]bool = null,
     /// What each row is, one key a row as long as `count`, a heading's
     /// too: an id, a path, a number printed. The grid remembers the
@@ -171,6 +174,16 @@ pub const Options = struct {
     /// Setting `selected` replaces the key. Null: the selection stays on
     /// its index.
     keys: ?[]const []const u8 = null,
+    /// The selected row's key, kept by the caller, in place of `selected`
+    /// and with `keys`: for a selection kept as an id and set from
+    /// anywhere (a link, a search, Escape). Each frame the grid finds the
+    /// row whose key it is and keeps nothing of it; clicks, the keys,
+    /// typing, `jump` and folding move the selection as they move
+    /// `selected`, and `Grid.chosen` says where to after `end`. A key no
+    /// row has selects nothing until its row comes back; a heading's
+    /// selects the heading. Another key than the grid last chose scrolls
+    /// its row into view. A null key: no row is selected.
+    selected_key: ?*const ?[]const u8 = null,
     /// Column widths the caller keeps, one a column, which dragging the
     /// edge after a title or fitting it changes, giving a column without
     /// a `width` the width it has on screen. A 0 is the column's own: its
@@ -304,8 +317,10 @@ pub const Row = struct {
 
 /// Opens the grid's box, which takes the room left in its parent, and
 /// draws the header: build the rows with `next` and `cell`, then `end`.
-pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
-    lay_mod.check(columns, opts);
+pub fn grid(c: *ui.Context, columns: []const Column, given: Options) Grid {
+    lay_mod.check(columns, given);
+    // With `selected_key`, `selected` points at its row for this frame.
+    var opts = given;
     const t = kit.tokens(c);
     const k = opts.scale;
     var card: ?ui.Div = null;
@@ -324,6 +339,7 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         // scrolls them.
         c.node(box.index).style.min_height = 0;
     }
+    const by = select.byKey(c, &opts);
     const followed = select.followKeys(c, opts);
     if (opts.keys == null) rows.follow(c, opts);
     // A selection past the rows shown moves back to the last of them.
@@ -343,8 +359,9 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
     const head: @import("grid_header.zig").Head = if (opts.header) header(c, columns, opts, lay) else .{};
     if (opts.header and opts.header_line) ui.div(c).wFull().h(1).bg(t.border).end();
     if (opts.loading) |l| if (opts.count > 0) loading_mod.line(c, opts, l);
-    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .titles = head.titles, .card = card, .lost = followed.lost, .print = followed.print };
+    var g: Grid = .{ .c = c, .box = box, .columns = columns, .opts = opts, .lay = lay, .anchor = kept.anchor, .press = press, .sorted = head.sorted, .focused = own.focused, .own = own.id, .fit = head.fit, .titles = head.titles, .card = card, .lost = followed.lost | by.lost, .print = followed.print, .key_at = by.at };
     if (followed.anchor) |a| g.anchor = a;
+    if (by.moved) g.anchor = by.at;
     rows.fadeFrom(&g, opening);
     const row_gap = lay_mod.rowGap(opts);
     if (g.anchor) |a| if (a >= opts.count) {
@@ -370,6 +387,15 @@ pub fn grid(c: *ui.Context, columns: []const Column, opts: Options) Grid {
         select.useKeys(&g, before, keys.useKeys(c, own.focused, opts.selected, opts.count, @max(1, @as(usize, @intFromFloat(view_h / pitch)))));
         var want = opts.scroll_to;
         if (kept.jump_to) |i| want = i;
+        if (by.moved) if (by.at) |i| {
+            want = i;
+        };
+        // Until the view is laid out, its height is a guess: the selected
+        // row is scrolled to again in the next frame, once it is.
+        if (by.moved or kept.jump_to != null) if (want) |i| if (c.rects.get(id) == null) {
+            g.jump_to = i;
+            c.animationFrame();
+        };
         if (opts.selected) |s| if (s.* != before) if (s.*) |i| {
             want = i;
         };
@@ -434,6 +460,12 @@ pub const Grid = struct {
     /// Escape was pressed while the grid has the keyboard, for an app that
     /// clears a search or closes a pane on it.
     escaped: bool = false,
+    /// With `selected_key`, after `end`: the key of the row the grid
+    /// selected this frame, by a click, the keys, typing, `jump` or a
+    /// fold, which the caller copies into its own state, as it does what
+    /// `sidebar`'s `end` returns. It points into `keys`. Null when the
+    /// selection didn't move.
+    chosen: ?[]const u8 = null,
 
     // The rest is the grid's own: callers read the fields above, and use
     // the methods.
@@ -490,6 +522,8 @@ pub const Grid = struct {
     /// until it comes back, and the keys' print (`grid_select.zig`).
     lost: u64 = 0,
     print: u64 = 0,
+    /// With `opts.selected_key`: the row of the caller's key.
+    key_at: ?usize = null,
 
     /// Opens the next row in view, or null when the view is full.
     pub fn next(g: *Grid) ?Row {
@@ -614,6 +648,7 @@ pub const Grid = struct {
         lay_mod.state(g.c, Kept).* = .{ .anchor = g.anchor, .jump_to = g.jump_to, .sx = g.lay.sx, .loading = g.opts.loading != null };
         lay_mod.state(g.c, Press).* = g.press;
         select.keepKeys(g);
+        g.chosen = select.chosen(g);
         if (g.opts.groups) |gs| {
             const sel = if (g.opts.selected) |s| s.* else null;
             lay_mod.state(g.c, rows.Follow).* = if (sel) |i| (if (i < gs.count()) .{ .item = gs.at(i), .at = i } else .{}) else .{};
@@ -640,4 +675,5 @@ test {
     _ = @import("grid_heading_tests.zig");
     _ = @import("grid_reorder_tests.zig");
     _ = @import("grid_follow_tests.zig");
+    _ = @import("grid_key_tests.zig");
 }
