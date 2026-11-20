@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.10.1
+
+### Added
+
+- Form: `min_row_height`, a row's least height in points in place of the kit's controls' height at `size`, 0 letting a row be as tall as what it holds, for a pane of facts; a label sits on the middle of its value's line, and of an open property's value beside a pill taller than the row. And `label_mono`, the labels in the monospaced font, plain or as captions, as `caption`'s `mono`.
+
 ## 0.10.0
 
 ### Added

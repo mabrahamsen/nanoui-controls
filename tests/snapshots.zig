@@ -1485,8 +1485,9 @@ test "a choice among cards, one chosen and one unavailable, light and dark" {
 }
 
 /// A sidebar of places whose icons say how they stand, beside a pane of
-/// facts: compact readings, one in a status's color at a set size, and a
-/// form with caption labels and a pill after a value.
+/// facts: compact readings, one in a status's color at a set size, a
+/// form with caption labels and a pill after a value, and a denser one
+/// as tall as its text, its labels monospaced.
 const Facts = struct {
     fn view(_: *Facts, c: *ui.Context) void {
         const t = kit.tokens(c);
@@ -1518,13 +1519,25 @@ const Facts = struct {
         }
         f.property("PATH", "/Volumes/Backups/Studio/2026", .{ .mono = true, .wrap = false });
         f.end();
+        // A denser pane: rows as tall as their text, under a monospaced
+        // caption and labeled in its font.
+        controls.caption(c, "MOUNTED", .{ .mono = true });
+        var d = controls.form(c, .{ .label_style = .caption, .label_mono = true, .size = .sm, .min_row_height = 0 });
+        d.property("FS", "APFS", .{ .mono = true });
+        {
+            const p = d.propertyOpen("FREE", "1.2 TB", .{ .mono = true });
+            controls.pill(c, "LOW", .{ .status = .warning, .shape = .box });
+            p.end();
+        }
+        d.property("UUID", "4F1A-77C2-9B0E", .{ .mono = true });
+        d.end();
     }
 };
 
-test "a sidebar whose icons say how places stand, and a pane of facts, light and dark" {
+test "a sidebar whose icons say how places stand, and panes of facts, light and dark" {
     var x: Facts = .{};
-    try expectView("facts", .init(&x, Facts.view), .{ .height = 200 });
-    try expectView("facts-dark", .init(&x, Facts.view), .{ .height = 200, .dark = true });
+    try expectView("facts", .init(&x, Facts.view), .{ .height = 250 });
+    try expectView("facts-dark", .init(&x, Facts.view), .{ .height = 250, .dark = true });
 }
 
 const Narrow = struct {

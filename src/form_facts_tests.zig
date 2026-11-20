@@ -117,3 +117,106 @@ fn startingWith(t: *ui.Tester, s: []const u8) ?ui.Rect {
     };
     return null;
 }
+
+/// A pane of facts with `opts`: two properties, one left open for a pill,
+/// and a row holding a box `box` points high.
+const Dense = struct {
+    opts: form_mod.Options = .{ .label_style = .caption, .size = .sm, .min_row_height = 0 },
+    box: f32 = 0,
+    fn view(x: *Dense, c: *ui.Context) void {
+        const root = ui.div(c).column().w(400);
+        defer root.end();
+        var f = form(c, x.opts);
+        f.property("LINK", "USB 3.2", .{ .mono = true });
+        f.property("PATH", "/Volumes/Backups", .{ .mono = true });
+        {
+            // A pill taller than the value's line.
+            const p = f.propertyOpen("SPEED", "40 Gb/s", .{ .mono = true });
+            const pill = ui.div(c).h(24).center();
+            ui.text(c, "TUNNELED", .{ .size = 9 });
+            pill.end();
+            p.end();
+        }
+        if (x.box > 0) {
+            const r = f.row("BOX", .{});
+            ui.div(c).w(20).h(x.box).end();
+            r.end();
+        }
+        f.end();
+    }
+};
+
+/// The middle of the text `s`, down.
+fn middle(t: *ui.Tester, s: []const u8) f32 {
+    const r = t.findText(s).?;
+    return r.y + r.h / 2;
+}
+
+test "a form's rows are as tall as their text with no least height, or as tall as it says" {
+    var x: Dense = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Dense.view), .{ .width = 420, .height = 200 });
+    defer t.deinit();
+    t.settle(2);
+    const value: ui.TextStyle = .{ .size = kit.Size.sm.text(), .mono = true };
+    const line = t.ctx.text.lineHeight(value);
+    const step = t.findText("/Volumes/Backups").?.y - t.findText("USB 3.2").?.y;
+    try std.testing.expectApproxEqAbs(line + 4, step, 0.5);
+    // Each label sits on the middle of its value's line.
+    try std.testing.expectApproxEqAbs(middle(&t, "USB 3.2"), middle(&t, "LINK"), 0.5);
+    try std.testing.expectApproxEqAbs(middle(&t, "40 Gb/s"), middle(&t, "SPEED"), 0.5);
+    try std.testing.expectApproxEqAbs(middle(&t, "40 Gb/s"), middle(&t, "TUNNELED"), 0.5);
+    // A height of its own is kept, the labels still on their values.
+    x.opts.min_row_height = 20;
+    t.settle(2);
+    const kept = t.findText("/Volumes/Backups").?.y - t.findText("USB 3.2").?.y;
+    try std.testing.expectApproxEqAbs(20 + 4, kept, 0.5);
+    try std.testing.expectApproxEqAbs(middle(&t, "USB 3.2"), middle(&t, "LINK"), 0.5);
+    try std.testing.expectApproxEqAbs(middle(&t, "40 Gb/s"), middle(&t, "SPEED"), 0.5);
+    // Null keeps the kit's height at the form's size.
+    x.opts.min_row_height = null;
+    t.settle(2);
+    const kit_step = t.findText("/Volumes/Backups").?.y - t.findText("USB 3.2").?.y;
+    try std.testing.expectApproxEqAbs(kit.Size.sm.height() + 4, kit_step, 0.5);
+}
+
+test "a row with no least height grows to what it holds" {
+    var x: Dense = .{ .box = 36 };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Dense.view), .{ .width = 420, .height = 200 });
+    defer t.deinit();
+    t.settle(2);
+    // The row is as tall as its box, and the label centered on it.
+    const box = for (t.ctx.nodes.items) |n| {
+        if (n.rect.w == 20 and n.rect.h == 36) break n.rect;
+    } else return error.TestExpectedEqual;
+    try std.testing.expectApproxEqAbs(box.y + box.h / 2, middle(&t, "BOX"), 0.5);
+}
+
+test "a form's labels can be monospaced, plain or as captions, and its column fits them" {
+    var x: Facts = .{};
+    var t: ui.Tester = undefined;
+    const Mono = struct {
+        fn view(f: *Facts, c: *ui.Context) void {
+            const root = ui.div(c).column().w(f.width);
+            defer root.end();
+            var fm = form(c, .{ .label_style = f.label_style, .label_mono = true });
+            fm.property("LINK", "USB 3.2", .{});
+            fm.property("THUNDERBOLT", "40 Gb/s", .{});
+            fm.end();
+        }
+    };
+    try t.init(std.testing.allocator, .init(&x, Mono.view), .{ .width = 420, .height = 200 });
+    defer t.deinit();
+    t.settle(2);
+    try std.testing.expect(styleOf(&t, "LINK").mono);
+    try std.testing.expectEqual(ui.Weight.semibold, styleOf(&t, "LINK").weight);
+    const widest = t.findText("THUNDERBOLT").?;
+    const usb = t.findText("USB 3.2").?;
+    try std.testing.expect(usb.x >= widest.x + widest.w);
+    try std.testing.expect(usb.x < widest.x + widest.w + 20);
+    x.label_style = .plain;
+    t.settle(2);
+    try std.testing.expect(styleOf(&t, "LINK").mono);
+    try std.testing.expectEqual(kit.Size.md.text(), styleOf(&t, "LINK").size);
+}

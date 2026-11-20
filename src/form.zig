@@ -37,6 +37,11 @@ pub const Options = struct {
     /// The labels' size, and every row at least the height of the kit's
     /// controls at it, so selects, inputs and toggles keep one rhythm.
     size: kit.Size = .md,
+    /// The least height of a row beside its label, in points before
+    /// `scale`; null takes the kit's controls' height at `size`. 0 lets a
+    /// row be as tall as what it holds, for a pane of facts with no
+    /// controls to keep in rhythm.
+    min_row_height: ?f32 = null,
     /// What a screen reader says of a row marked `required`, after its
     /// label, which names its control ("Name, required"): the "*" isn't
     /// said.
@@ -57,6 +62,9 @@ pub const Options = struct {
     /// muted, as `caption` draws its text, for a pane of facts labeled in
     /// capitals ("LINK", "THUNDERBOLT"). Write them in capitals.
     label_style: LabelStyle = .plain,
+    /// The labels in the monospaced font, as `caption`'s `mono`, plain or
+    /// as captions.
+    label_mono: bool = false,
     /// The gap after the labels, and between rows, in points before
     /// `scale`.
     gap: f32 = 12,
@@ -197,8 +205,8 @@ pub const Form = struct {
         defer r.end();
         ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
         const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
-        _ = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle()) });
-        var v = ui.div(c).wFull().pt(f.firstLine(style));
+        _ = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle(), style) });
+        var v = ui.div(c).wFull().pt(f.firstLine(style, style));
         if (f.atEnd()) v = v.row().justifyEnd();
         if (opts.selectable) c.node(v.index).style.selectable = true;
         defer v.end();
@@ -223,13 +231,13 @@ pub const Form = struct {
         // Heard as the label and the value, then what the caller adds.
         ui.access.describe(c, r.index, .{ .role = .static_text, .label = label, .value = value });
         const style: ui.TextStyle = .{ .size = f.opts.size.text(), .mono = opts.mono, .color = kit.tokens(c).foreground };
-        _ = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle()) });
+        const label_box = f.drawLabel(label, .{ .top = f.firstLine(f.labelStyle(), style) });
         // The value and what follows it, centered on each other, in the
         // room after the label.
         var rest = ui.div(c).row().itemsCenter().gap(6 * k).wFull();
         if (f.atEnd()) rest = rest.justifyEnd();
-        if (!f.stacked) c.node(rest.index).style.min_height = f.opts.size.height() * k;
-        if (opts.wrap) {
+        if (!f.stacked) c.node(rest.index).style.min_height = f.rowHeight();
+        const value_box = if (opts.wrap) wrapped: {
             // Wrapping text gives the room back that what follows needs.
             const v = ui.div(c).column();
             if (opts.selectable) c.node(v.index).style.selectable = true;
@@ -237,7 +245,8 @@ pub const Form = struct {
             s.wrap = true;
             ui.text(c, value, s);
             v.end();
-        } else {
+            break :wrapped v.index;
+        } else cut: {
             // As wide as the value, or the room left where that is less.
             const room = ui.div(c).column().w(0).grow().maxW(@ceil(c.text.width(value, style)) + 1);
             const v = ui.div(c).column().wFull();
@@ -245,7 +254,9 @@ pub const Form = struct {
             cutValue(c, v, value, style);
             v.end();
             room.end();
-        }
+            break :cut v.index;
+        };
+        if (!f.stacked) f.followValue(label_box, rest.index, value_box, style);
         return .{ .row = r, .rest = rest };
     }
 
@@ -340,15 +351,20 @@ pub const Form = struct {
         return if (f.measured > 0) @min(f.measured, max) else max / 2;
     }
 
-    /// Opens a row: the label beside what it names, at least the kit's
-    /// height and `centered` on it, or stacked above it.
+    /// A row's least height beside its label, in points.
+    fn rowHeight(f: *const Form) f32 {
+        return (f.opts.min_row_height orelse f.opts.size.height()) * f.opts.scale;
+    }
+
+    /// Opens a row: the label beside what it names, at least
+    /// `rowHeight` and `centered` on it, or stacked above it.
     fn openRow(f: *const Form, centered: bool) ui.Div {
         const c = f.c;
         const k = f.opts.scale;
         if (f.stacked) return ui.div(c).column().wFull().gap(4 * k);
         var r = ui.div(c).row().wFull().gap(f.opts.gap * k);
         if (centered) r = r.itemsCenter();
-        c.node(r.index).style.min_height = f.opts.size.height() * k;
+        c.node(r.index).style.min_height = f.rowHeight();
         return r;
     }
 
@@ -363,17 +379,34 @@ pub const Form = struct {
     };
 
     /// Room above a line of text in `style`, so it sits in the middle of a
-    /// row of the kit's height; none when stacked.
-    fn firstLine(f: *const Form, style: ui.TextStyle) f32 {
+    /// row's first line: `rowHeight`, or a line of the value in `value`
+    /// where that is taller. None when stacked.
+    fn firstLine(f: *const Form, style: ui.TextStyle, value: ui.TextStyle) f32 {
         if (f.stacked) return 0;
-        return @max(0, @round((f.opts.size.height() * f.opts.scale - f.c.text.lineHeight(style)) / 2));
+        const room = @max(f.rowHeight(), f.c.text.lineHeight(value));
+        return @max(0, @round((room - f.c.text.lineHeight(style)) / 2));
+    }
+
+    /// Moves the label in box `label_box` down to the middle of the value
+    /// in box `value`, when what follows it in box `rest` (a pill) made
+    /// the row taller than `firstLine` reckoned and centered the value
+    /// lower, as the last frame laid them out. Only while the value is on
+    /// one line: a wrapped one keeps its label by its first line.
+    fn followValue(f: *const Form, label_box: u32, rest: u32, value: u32, style: ui.TextStyle) void {
+        const c = f.c;
+        const line = c.text.lineHeight(style);
+        const v = c.rects.get(c.node(value).id) orelse return;
+        if (v.h > line * 1.5) return;
+        const h = (measure.lastSize(c, rest) orelse return).h;
+        if (h <= @max(f.rowHeight(), line)) return;
+        c.node(label_box).style.padding.top = @round((h - c.text.lineHeight(f.labelStyle())) / 2);
     }
 
     /// The labels' text: the form's, or a caption's.
     fn labelStyle(f: *const Form) ui.TextStyle {
         return switch (f.opts.label_style) {
-            .plain => .{ .size = f.opts.size.text() },
-            .caption => .{ .size = kit.Size.xs.text() - 1, .weight = .semibold },
+            .plain => .{ .size = f.opts.size.text(), .mono = f.opts.label_mono },
+            .caption => .{ .size = kit.Size.xs.text() - 1, .weight = .semibold, .mono = f.opts.label_mono },
         };
     }
 

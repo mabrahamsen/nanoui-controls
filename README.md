@@ -52,7 +52,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.10.0"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.10.1"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -270,8 +270,8 @@ f.end();
 - `link` is a row that leads somewhere, such as another pane: its label, its value and a chevron at its end, clicked as a whole or with Enter or Space; it returns true when it is. A value cut short shows whole in a tooltip, and a row appearing above it doesn't take its keyboard.
 - `note` puts muted text under the rows before it, under their card when grouped.
 - `control_align = .end` puts controls, values and hints at the rows' ends, as a settings window's cards have them.
-- The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls (both alignments are a `FormAlign`). `label_style = .caption` draws the labels as captions, small, semibold and muted, for a pane of facts labeled in capitals.
-- Every row is at least the height of the kit's controls at its `size`, so selects, inputs and toggles keep one rhythm; `gap` is the room after the labels and `row_gap` between rows.
+- The column is as wide as the widest label, up to `max_label_width`, and labels longer than that are cut short; `label_width` sets it instead, so forms side by side line up. `label_align = .end` puts the labels by their controls (both alignments are a `FormAlign`). `label_style = .caption` draws the labels as captions, small, semibold and muted, for a pane of facts labeled in capitals. `label_mono` draws the labels in the monospaced font, plain or as captions, as `caption`'s `mono`.
+- Every row is at least the height of the kit's controls at its `size`, so selects, inputs and toggles keep one rhythm; `min_row_height` sets that height in points instead, and 0 lets each row be as tall as what it holds, for a pane of facts with no controls to keep in rhythm. A label sits on the middle of its value's line, and of its row beside a control. `gap` is the room after the labels and `row_gap` between rows.
 - With `stack_below`, a form narrower than that puts its labels above what they name, as the kit's field has them, for a narrow pane; `stacked` says it did.
 
 ## swatches
