@@ -36,9 +36,13 @@ pub fn check(columns: []const Column, opts: Options) void {
     if (opts.hidden) |h| if (h.len != columns.len) @panic("grid: `hidden` needs one flag a column");
     if (opts.widths) |w| if (w.len != columns.len) @panic("grid: `widths` needs one width a column");
     if (opts.keys) |ks| if (ks.len != opts.count) @panic("grid: `keys` needs one key a row");
+    if (opts.selected_key != null) {
+        if (opts.keys == null) @panic("grid: `selected_key` needs `keys`");
+        if (opts.selected != null) @panic("grid: `selected_key` goes in place of `selected`, not with it");
+    }
     if (opts.selection) |m| {
         if (m.len != opts.count) @panic("grid: `selection` needs one flag a row");
-        if (opts.selected == null) @panic("grid: `selection` needs `selected`");
+        if (opts.selected == null and opts.selected_key == null) @panic("grid: `selection` needs `selected` or `selected_key`");
     }
     if (opts.order) |o| {
         if (o.len != columns.len) @panic("grid: `order` needs one column a place");

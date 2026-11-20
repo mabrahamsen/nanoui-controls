@@ -10,6 +10,7 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - Form: `label_style = .caption` draws the labels as captions, for a pane of facts; `propertyOpen` leaves a property's row open after its value for pills (`FormProperty`, `FormLabelStyle`).
 - Sidebar: an item's `icon_color`, used as given, selected or not, and `value_text`, how its place stands in words, said after its label and in the narrowed row's tooltip.
 - Swatches: `wrap`, as wide as the parent, the swatches wrapping onto more rows.
+- Grid: `selected_key`, the selection kept by the app as a row's key in place of `selected`, set from anywhere and found again each frame; after `end`, `chosen` is the key of the row the grid selected, null when it didn't move. Another key than the grid last chose scrolls its row into view.
 
 ### Changed
 
