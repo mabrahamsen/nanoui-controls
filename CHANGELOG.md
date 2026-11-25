@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.11.1
+
+### Fixed
+
+- Grid: a cell's text in a box that takes the room left beside a box of a fixed width (`w(0).grow()`, as beside a checkbox or an icon) is measured by its text. Fitting the column to its contents made it `min_width` wide and cut the text to nothing, and the text cut short showed no tooltip with the whole of it.
+
 ## 0.11.0
 
 ### Added

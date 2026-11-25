@@ -248,7 +248,10 @@ fn columnWidth(columns: []const Column, opts: Options, i: usize, unit: f32) f32 
 /// How wide box `index`'s contents would be, uncut: its texts' widths as
 /// set, its icons' sizes, its boxes' fixed widths or theirs in turn, and
 /// the gaps and padding between them; in a column, the widest of them.
-/// A box placed absolutely takes no room among them.
+/// A box that grows along a row (`w(0).grow()`, text taking the room a
+/// fixed box beside it leaves) is as wide as what it holds, or its own
+/// width where that is more. A box placed absolutely takes no room among
+/// them.
 pub fn natural(c: *ui.Context, index: u32) f32 {
     const n = c.node(index);
     const across = n.style.direction == .row;
@@ -269,7 +272,7 @@ pub fn natural(c: *ui.Context, index: u32) f32 {
                 else => if (c.text.atlas.symbol(ic.name, ic.size, @backingInt(ic.weight))) |sp| sp.w + 2 * sp.x else ic.size,
             },
             else => switch (ch.style.width) {
-                .px => |px| px,
+                .px => |px| if (across and ch.style.grow > 0) @max(px, natural(c, child)) else px,
                 else => natural(c, child),
             },
         };
