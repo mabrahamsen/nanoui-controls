@@ -1,11 +1,13 @@
 //! Figures as people read them: sizes, rates, counts, a duration on a
-//! clock, spans of time and how long ago, and paths in the home folder.
+//! clock, spans of time, how long ago and how long until, days and times
+//! of day, and paths in the home folder.
 //! Each comes two ways: for the frame (`size`), in its arena as `c.print`
 //! is, and into the caller's buffer (`sizeBuf`), for use outside a frame.
 //! A buffer too small for the text gives "?".
 //!
 //!     ui.text(c, controls.format.size(c, file.size), .{});        // "145.7 MB"
 //!     ui.text(c, controls.format.ago(c, now - modified, .{}), .{}); // "12 min ago"
+//!     ui.text(c, controls.format.dayTime(c, run.at, now, zone, .{}), .{}); // "Today 21:05"
 const std = @import("std");
 const nanoui = @import("nanoui");
 const ui = nanoui.ui;
@@ -83,8 +85,8 @@ pub fn clock(c: *ui.Context, secs: i64) []const u8 {
 }
 
 /// The words for spans of time: the units, and how a span reads in the
-/// past, `{}` standing for the span ("{} ago"), as word order differs
-/// between languages. `.{}` is English.
+/// past and to come, `{}` standing for the span ("{} ago", "in {}"), as
+/// word order differs between languages. `.{}` is English.
 pub const TimeWords = struct {
     seconds: []const u8 = "s",
     minutes: []const u8 = "min",
@@ -97,6 +99,9 @@ pub const TimeWords = struct {
     ago: []const u8 = "{} ago",
     /// Under a minute ago.
     just_now: []const u8 = "just now",
+    in: []const u8 = "in {}",
+    /// Under a minute to come.
+    soon: []const u8 = "in a moment",
 };
 
 /// "45 s", "12 min", "36 h", "20 days", "5 months", "3 years": a span in
@@ -127,15 +132,117 @@ pub fn span(c: *ui.Context, secs: i64, words: TimeWords) []const u8 {
 /// `words.ago`; under a minute, or in the future, `words.just_now`.
 pub fn agoBuf(buf: []u8, secs: i64, words: TimeWords) []const u8 {
     if (secs < 60) return std.fmt.bufPrint(buf, "{s}", .{words.just_now}) catch "?";
-    var tmp: [64]u8 = undefined;
-    const sp = spanBuf(&tmp, secs, words);
-    const at = std.mem.indexOf(u8, words.ago, "{}") orelse return std.fmt.bufPrint(buf, "{s} {s}", .{ sp, words.ago }) catch "?";
-    return std.fmt.bufPrint(buf, "{s}{s}{s}", .{ words.ago[0..at], sp, words.ago[at + 2 ..] }) catch "?";
+    return phrase(buf, words.ago, secs, words, true);
 }
 
 pub fn ago(c: *ui.Context, secs: i64, words: TimeWords) []const u8 {
     var buf: [128]u8 = undefined;
     return c.print("{s}", .{agoBuf(&buf, secs, words)});
+}
+
+/// "in 12 min", "in 20 days": `secs` from now, in `words.in`; under a
+/// minute, or in the past, `words.soon`. For what is due, or runs next.
+pub fn inBuf(buf: []u8, secs: i64, words: TimeWords) []const u8 {
+    if (secs < 60) return std.fmt.bufPrint(buf, "{s}", .{words.soon}) catch "?";
+    return phrase(buf, words.in, secs, words, false);
+}
+
+pub fn in(c: *ui.Context, secs: i64, words: TimeWords) []const u8 {
+    var buf: [128]u8 = undefined;
+    return c.print("{s}", .{inBuf(&buf, secs, words)});
+}
+
+/// The span of `secs` put where `pattern` has `{}`; a pattern without one
+/// goes after the span (`span_first`, "12 min ago") or before it ("in 12
+/// min").
+fn phrase(buf: []u8, pattern: []const u8, secs: i64, words: TimeWords, span_first: bool) []const u8 {
+    var tmp: [64]u8 = undefined;
+    const sp = spanBuf(&tmp, secs, words);
+    const at = std.mem.indexOf(u8, pattern, "{}") orelse {
+        const parts = if (span_first) .{ sp, pattern } else .{ pattern, sp };
+        return std.fmt.bufPrint(buf, "{s} {s}", parts) catch "?";
+    };
+    return std.fmt.bufPrint(buf, "{s}{s}{s}", .{ pattern[0..at], sp, pattern[at + 2 ..] }) catch "?";
+}
+
+/// The words for days: the ones near today, and the weekdays' and
+/// months' short names. `.{}` is English.
+pub const DayWords = struct {
+    today: []const u8 = "Today",
+    yesterday: []const u8 = "Yesterday",
+    tomorrow: []const u8 = "Tomorrow",
+    /// From Sunday.
+    weekdays: [7][]const u8 = .{ "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" },
+    months: [12][]const u8 = .{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" },
+};
+
+/// "Today", "Yesterday", "Tomorrow", or "2026-03-01": the day `unix`
+/// falls on, seen from `now`, both in seconds since 1970 (UTC), read in
+/// a zone `offset` seconds east of UTC (3600 in Oslo in winter, -18000 in
+/// New York); for a list's day headings. The app gives the offset, from
+/// its system, as nanoui doesn't say it; near a change to or from summer
+/// time a time on the other side of it reads an hour off.
+pub fn dayBuf(buf: []u8, unix: i64, now: i64, offset: i32, words: DayWords) []const u8 {
+    const at = civil(unix, offset);
+    if (near(at.day, civil(now, offset).day, words)) |w| return std.fmt.bufPrint(buf, "{s}", .{w}) catch "?";
+    return std.fmt.bufPrint(buf, "{d}-{d:0>2}-{d:0>2}", .{ at.year, at.month, at.date }) catch "?";
+}
+
+pub fn day(c: *ui.Context, unix: i64, now: i64, offset: i32, words: DayWords) []const u8 {
+    var buf: [64]u8 = undefined;
+    return c.print("{s}", .{dayBuf(&buf, unix, now, offset, words)});
+}
+
+/// "Today 21:05", "Yesterday 23:40", "Mon 9 Nov 14:02", "9 Nov 2025
+/// 14:02": `unix` as `day` sees it, with its time on a 24-hour clock; a
+/// weekday and a date past the days near today, and the year when it
+/// isn't `now`'s. For a list of times in the last weeks.
+pub fn dayTimeBuf(buf: []u8, unix: i64, now: i64, offset: i32, words: DayWords) []const u8 {
+    const at = civil(unix, offset);
+    const today = civil(now, offset);
+    if (near(at.day, today.day, words)) |w| return std.fmt.bufPrint(buf, "{s} {d:0>2}:{d:0>2}", .{ w, at.hour, at.minute }) catch "?";
+    const month = words.months[at.month - 1];
+    if (at.year == today.year) return std.fmt.bufPrint(buf, "{s} {d} {s} {d:0>2}:{d:0>2}", .{ words.weekdays[at.weekday], at.date, month, at.hour, at.minute }) catch "?";
+    return std.fmt.bufPrint(buf, "{d} {s} {d} {d:0>2}:{d:0>2}", .{ at.date, month, at.year, at.hour, at.minute }) catch "?";
+}
+
+pub fn dayTime(c: *ui.Context, unix: i64, now: i64, offset: i32, words: DayWords) []const u8 {
+    var buf: [64]u8 = undefined;
+    return c.print("{s}", .{dayTimeBuf(&buf, unix, now, offset, words)});
+}
+
+/// A moment as a calendar and a clock read it: its day since 1970, the
+/// date, the weekday (0 is Sunday) and the time of day.
+const Civil = struct { day: i64, year: u16, month: u8, date: u8, weekday: u3, hour: u8, minute: u8 };
+
+/// `unix` read `offset` seconds east of UTC; a moment before 1970 there
+/// reads as its first second.
+fn civil(unix: i64, offset: i32) Civil {
+    const local: u64 = @intCast(@max(0, unix +| offset));
+    const secs: std.time.epoch.EpochSeconds = .{ .secs = local };
+    const d = secs.getEpochDay();
+    const yd = d.calculateYearDay();
+    const md = yd.calculateMonthDay();
+    const ds = secs.getDaySeconds();
+    return .{
+        .day = @intCast(d.day),
+        .year = yd.year,
+        .month = md.month.numeric(),
+        .date = @as(u8, md.day_index) + 1,
+        // 1 January 1970 was a Thursday.
+        .weekday = @intCast((d.day + 4) % 7),
+        .hour = ds.getHoursIntoDay(),
+        .minute = ds.getMinutesIntoHour(),
+    };
+}
+
+/// The word for day `d` seen from `today`, when it is one of the days
+/// near it.
+fn near(d: i64, today: i64, words: DayWords) ?[]const u8 {
+    if (d == today) return words.today;
+    if (d == today - 1) return words.yesterday;
+    if (d == today + 1) return words.tomorrow;
+    return null;
 }
 
 /// "~/Documents": `path` with the home folder `home` as ~ (given with a
@@ -211,6 +318,51 @@ test "the words for time can be another language's, the span where it puts it" {
     try std.testing.expectEqualStrings("nå nettopp", agoBuf(&b, 5, norsk));
 }
 
+test "how long until, and under a minute or past, soon" {
+    var b: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("in 12 min", inBuf(&b, 12 * 60 + 5, .{}));
+    try std.testing.expectEqualStrings("in 20 days", inBuf(&b, 20 * 86400, .{}));
+    try std.testing.expectEqualStrings("in a moment", inBuf(&b, 59, .{}));
+    try std.testing.expectEqualStrings("in a moment", inBuf(&b, -400, .{}));
+    const norsk: TimeWords = .{ .hours = "t", .in = "om {}", .soon = "straks" };
+    try std.testing.expectEqualStrings("om 3 t", inBuf(&b, 3 * 3600, norsk));
+    try std.testing.expectEqualStrings("straks", inBuf(&b, 5, norsk));
+    // Without {}, before the span, as "ago" goes after it.
+    try std.testing.expectEqualStrings("om 3 t", inBuf(&b, 3 * 3600, .{ .hours = "t", .in = "om" }));
+    try std.testing.expectEqualStrings("3 h ago", agoBuf(&b, 3 * 3600, .{ .ago = "ago" }));
+}
+
+test "days near today in words, and others as dates, in the zone given" {
+    var b: [64]u8 = undefined;
+    // Wednesday 25 November 2026, 21:05 UTC.
+    const now: i64 = 1795640700;
+    try std.testing.expectEqualStrings("Today", dayBuf(&b, now - 3600, now, 0, .{}));
+    try std.testing.expectEqualStrings("Yesterday", dayBuf(&b, now - 86400, now, 0, .{}));
+    try std.testing.expectEqualStrings("Tomorrow", dayBuf(&b, now + 86400, now, 0, .{}));
+    try std.testing.expectEqualStrings("2026-11-22", dayBuf(&b, now - 3 * 86400, now, 0, .{}));
+    // Three hours east of UTC, now is 00:05 on Thursday: an hour before
+    // is Wednesday there, and the next evening is today's.
+    try std.testing.expectEqualStrings("Yesterday", dayBuf(&b, now - 3600, now, 3 * 3600, .{}));
+    try std.testing.expectEqualStrings("Today", dayBuf(&b, now + 20 * 3600, now, 3 * 3600, .{}));
+    try std.testing.expectEqualStrings("I dag", dayBuf(&b, now, now, 0, .{ .today = "I dag" }));
+    try std.testing.expectEqualStrings("1970-01-01", dayBuf(&b, -86400 * 10, now, 0, .{}));
+    try std.testing.expectEqualStrings("?", dayBuf(b[0..4], now - 3 * 86400, now, 0, .{}));
+}
+
+test "times of day with their day, a weekday and date further back, and a year when it differs" {
+    var b: [64]u8 = undefined;
+    const now: i64 = 1795640700; // Wednesday 25 November 2026, 21:05 UTC
+    try std.testing.expectEqualStrings("Today 21:05", dayTimeBuf(&b, now, now, 0, .{}));
+    try std.testing.expectEqualStrings("Today 22:05", dayTimeBuf(&b, now, now, 3600, .{}));
+    try std.testing.expectEqualStrings("Yesterday 23:40", dayTimeBuf(&b, now - 21 * 3600 - 25 * 60, now, 0, .{}));
+    try std.testing.expectEqualStrings("Tomorrow 07:00", dayTimeBuf(&b, now + 9 * 3600 + 55 * 60, now, 0, .{}));
+    try std.testing.expectEqualStrings("Mon 9 Nov 14:02", dayTimeBuf(&b, now - 16 * 86400 - 7 * 3600 - 3 * 60, now, 0, .{}));
+    try std.testing.expectEqualStrings("31 Dec 2025 23:59", dayTimeBuf(&b, 1767225540, now, 0, .{}));
+    try std.testing.expectEqualStrings("16:05", dayTimeBuf(&b, now, now, -5 * 3600, .{})[6..]);
+    const norsk: DayWords = .{ .weekdays = .{ "søn", "man", "tir", "ons", "tor", "fre", "lør" }, .months = .{ "jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des" } };
+    try std.testing.expectEqualStrings("man 9 nov 14:02", dayTimeBuf(&b, now - 16 * 86400 - 7 * 3600 - 3 * 60, now, 0, norsk));
+}
+
 test "paths in the home folder start with ~, and others are as they are" {
     var b: [64]u8 = undefined;
     try std.testing.expectEqualStrings("~/Documents", tildeBuf(&b, "/Users/ann/Documents", "/Users/ann/"));
@@ -235,6 +387,9 @@ test "each also writes into the frame's memory" {
             ui.text(c, clock(c, 123), .{});
             ui.text(c, span(c, 45, .{}), .{});
             ui.text(c, tilde(c, "/Users/ann/Documents", "/Users/ann"), .{});
+            ui.text(c, in(c, 12 * 60, .{}), .{});
+            ui.text(c, day(c, 1795640700, 1795640700, 0, .{}), .{});
+            ui.text(c, dayTime(c, 1795640700, 1795640700, 0, .{}), .{});
         }
     };
     var x: T = .{};
@@ -244,4 +399,5 @@ test "each also writes into the frame's memory" {
     t.frame();
     try std.testing.expect(t.hasText("145.7 MB") and t.hasText("12 min ago") and t.hasText("1,234"));
     try std.testing.expect(t.hasText("12.3 MB/s") and t.hasText("2:03") and t.hasText("45 s") and t.hasText("~/Documents"));
+    try std.testing.expect(t.hasText("in 12 min") and t.hasText("Today") and t.hasText("Today 21:05"));
 }
