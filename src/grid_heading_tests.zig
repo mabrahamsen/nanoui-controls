@@ -148,3 +148,84 @@ test "without fade_in, a group's rows show at once as it opens" {
     try std.testing.expect(x.open[1]);
     for (t.ctx.nodes.items) |n| try std.testing.expectEqual(@as(f32, 1), n.style.opacity);
 }
+
+/// Headings across the columns with a total under Size, for a title too
+/// long for the first column.
+const After = struct {
+    open: [2]bool = .{ true, true },
+    chevron: g_mod.HeadingChevron = .plain,
+
+    const columns = [_]Column{
+        .{ .title = "Name" },
+        .{ .title = "Kind", .width = 90, .min_window_width = 560 },
+        .{ .title = "Size", .width = 70, .alignment = .end },
+        .{ .title = "Changed", .width = 80, .alignment = .end },
+    };
+    const names = [_][]const u8{ "Archives and disk images", "Photos" };
+    const groups = [_]Group{ .{ .size = 2 }, .{ .size = 1 } };
+
+    fn view(x: *After, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull();
+        defer root.end();
+        const gs = Groups.init(c, &groups, &x.open, .{});
+        var g = grid(c, &columns, .{ .count = gs.count(), .groups = gs });
+        while (g.next()) |row| switch (gs.at(row.index)) {
+            .heading => |h| {
+                g.heading(.{ .title = names[h.group], .cells_after = 2, .chevron = x.chevron });
+                if (g.cellAt(2)) ui.text(c, if (h.group == 0) "12 GB" else "3 GB", .{});
+            },
+            .row => |r| {
+                g.cell();
+                ui.text(c, c.print("file {d}", .{r.index}), .{});
+                if (g.cellAt(1)) ui.text(c, "Disk image", .{});
+                if (g.cellAt(2)) ui.text(c, "1 GB", .{});
+                if (g.cellAt(3)) ui.text(c, "2d", .{});
+            },
+        };
+        g.end();
+    }
+};
+
+test "a heading across the columns gives its title the room up to the caller's cells, under their columns" {
+    var x: After = .{};
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, After.view), .{ .width = 700, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    for ([_]f32{ 700, 500 }) |width| {
+        t.resize(width, 300);
+        t.settle(1);
+        // Kind shows in the wide window and hides in the narrow one: the
+        // total stays under Size, its right edge on the rows' figures'.
+        try std.testing.expectEqual(width > 560, t.hasText("Kind"));
+        const total = t.findText("12 GB").?;
+        const figure = t.findText("1 GB").?;
+        try std.testing.expectApproxEqAbs(figure.x + figure.w, total.x + total.w, 0.5);
+        // The title whole, ending before Size's column starts.
+        const title = t.findText(After.names[0]).?;
+        const size = t.findText("Size").?;
+        try std.testing.expect(title.x + title.w <= size.x + size.w - 70 + 0.5);
+    }
+    // A click on the title still folds its group.
+    const title = t.findText(After.names[0]).?;
+    t.click(title.x + 4, title.y + title.h / 2);
+    t.settle(1);
+    try std.testing.expect(!x.open[0]);
+}
+
+test "a heading's chevron can sit in a round well" {
+    for ([_]g_mod.HeadingChevron{ .plain, .well }) |look| {
+        var x: After = .{ .chevron = look };
+        var t: ui.Tester = undefined;
+        try t.init(std.testing.allocator, .init(&x, After.view), .{ .width = 700, .height = 300 });
+        defer t.deinit();
+        t.settle(1);
+        const hover = nanoui.kit.tokens(&t.ctx).surface_hover;
+        var wells: usize = 0;
+        for (t.ctx.nodes.items) |n| if (n.style.background) |b| if (std.meta.eql(b, hover) and n.style.width == .px and n.style.width.px == 16) {
+            wells += 1;
+        };
+        // One for each heading, and none drawn bare.
+        try std.testing.expectEqual(@as(usize, if (look == .well) 2 else 0), wells);
+    }
+}

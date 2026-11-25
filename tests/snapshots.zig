@@ -1059,6 +1059,53 @@ test "a grid's headings open for tags, a column sized by hand, light and dark" {
     try expectView("grid-headings-open-dark", .init(&x, Tagged.view), .{ .height = 150, .dark = true });
 }
 
+/// Files by folder, each folder's long path across the columns and its
+/// total under Size, its chevron in a well; one folded.
+const Totals = struct {
+    open: [2]bool = .{ true, false },
+
+    const columns = [_]controls.GridColumn{
+        .{ .title = "Name" },
+        .{ .title = "Kind", .width = 70 },
+        .{ .title = "Size", .width = 64, .alignment = .end },
+    };
+    const groups = [_]controls.GridGroup{ .{ .size = 2 }, .{ .size = 1 } };
+    const folders = [_][]const u8{ "~/Documents/Old archives", "~/Downloads" };
+    const totals = [_][]const u8{ "14.2 GB", "820 MB" };
+    const files = [_][]const u8{ "backup-2026-11.dmg", "photos.zip", "installer.pkg" };
+    const sizes = [_][]const u8{ "12.0 GB", "2.2 GB", "820 MB" };
+
+    fn view(x: *Totals, c: *ui.Context) void {
+        const root = ui.div(c).column().sizeFull().p(8);
+        defer root.end();
+        const gs = controls.GridGroups.init(c, &groups, &x.open, .{});
+        var g = controls.grid(c, &columns, .{ .count = gs.count(), .groups = gs });
+        while (g.next()) |row| switch (gs.at(row.index)) {
+            .heading => |h| {
+                g.heading(.{ .title = folders[h.group], .cells_after = 2, .chevron = .well });
+                if (g.cellAt(2)) ui.text(c, totals[h.group], .{ .size = 13, .weight = .semibold });
+            },
+            .row => |r| {
+                const i = r.group * 2 + r.index;
+                g.cell();
+                ui.text(c, files[i], .{ .size = 13, .truncate = .ellipsis });
+                g.cell();
+                ui.text(c, if (i == 2) "Installer" else "Archive", .{ .size = 13, .color = kit.tokens(c).muted });
+                g.cell();
+                ui.text(c, sizes[i], .{ .size = 13 });
+            },
+        };
+        g.end();
+    }
+};
+
+test "a grid's headings across the columns with totals under one, their chevrons in wells, light and dark" {
+    var x: Totals = .{};
+    try expectView("grid-heading-totals", .init(&x, Totals.view), .{ .height = 170 });
+    x = .{};
+    try expectView("grid-heading-totals-dark", .init(&x, Totals.view), .{ .height = 170, .dark = true });
+}
+
 /// Sidebars whose counts are loading, narrowed to their icons and wide:
 /// a plain count, a pill, a branch, and a count that has come.
 fn loadingSidebars(_: *u8, c: *ui.Context) void {
@@ -1211,7 +1258,7 @@ test "panels and notices, light and dark" {
 }
 
 /// Callouts in each status, with a title, plain, closable, and open with
-/// a button.
+/// a button; one whose icon has a color of its own and a larger title.
 fn callouts(_: *u8, c: *ui.Context) void {
     const root = ui.div(c).column().sizeFull().p(10).gap(8);
     defer root.end();
@@ -1225,12 +1272,14 @@ fn callouts(_: *u8, c: *ui.Context) void {
         _ = kit.button(c, "Retry", .{ .size = .xs });
     }
     _ = controls.callout(c, "Everything is up to date.", .{ .plain = true, .status = .success, .announce = false });
+    // The icon's own color on the accent's tint, and a larger title.
+    _ = controls.callout(c, "The app can read every folder it backs up.", .{ .icon = "checkmark.circle.fill", .icon_color = kit.tokens(c).success, .title = "Full access is on", .title_size = 15, .announce = false });
 }
 
 test "callouts, light and dark" {
     var x: u8 = 0;
-    try expectView("callouts", .init(&x, callouts), .{ .height = 330 });
-    try expectView("callouts-dark", .init(&x, callouts), .{ .height = 330, .dark = true });
+    try expectView("callouts", .init(&x, callouts), .{ .height = 345 });
+    try expectView("callouts-dark", .init(&x, callouts), .{ .height = 345, .dark = true });
 }
 
 /// Segmented groups and tab strips: counts, a count loading, an alert, a
