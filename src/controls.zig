@@ -20,6 +20,7 @@ pub const GridTitleStyle = grid_mod.TitleStyle;
 pub const GridLoading = grid_mod.Loading;
 pub const GridHeading = grid_mod.Heading;
 pub const GridHeadingRow = grid_mod.HeadingRow;
+pub const GridHeadingChevron = grid_mod.HeadingChevron;
 pub const GridTwoLines = grid_mod.TwoLines;
 pub const GridRowLook = grid_mod.RowLook;
 pub const GridGroups = @import("grid_groups.zig").Groups;

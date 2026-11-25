@@ -22,17 +22,31 @@ pub const Heading = struct {
     /// The title in the first column's cell, leaving the others for the
     /// caller's `cellAt`, for a group's totals; false spans the columns.
     cells: bool = false,
+    /// Across the columns, as without `cells`, the title given the room up
+    /// to where column `cells_after` starts; the caller's `cellAt` fills
+    /// that column and those after it, a total under its column, where the
+    /// grid lays them out. For a title too long for the first column. Over
+    /// `cells`; the heading's box is ended before the first `cellAt`.
+    cells_after: ?usize = null,
+    /// The chevron's look: bare, or in a round well of the theme's
+    /// `surface_hover`, as a disclosure drawn elsewhere in a view may be.
+    /// Not drawn by `headingRow`, whose caller draws its own.
+    chevron: Chevron = .plain,
     /// What a screen reader hears of the heading, for one whose content
     /// (`headingOpen`) says more ("Inbox, 3 unread, 1 flagged"); empty
     /// takes the title and the detail.
     label: []const u8 = "",
 };
 
+/// A heading's chevron: bare and muted, or in a round well.
+pub const Chevron = enum { plain, well };
+
 /// A heading's row the caller draws in (`Grid.headingRow`).
 pub const HeadingRow = struct {
     /// The row's box, open for the caller's chevron, title and the rest:
-    /// across the columns stepped in by `depth`, or with `cells` the
-    /// first column's cell. The caller ends it.
+    /// across the columns stepped in by `depth` (up to `cells_after`'s
+    /// column, with it), or with `cells` the first column's cell. The
+    /// caller ends it.
     box: ui.Div,
     /// The group is open, after this frame's click or key.
     open: bool,
@@ -79,6 +93,10 @@ pub const Follow = struct { item: ?groups_mod.Item = null, at: usize = 0 };
 
 /// The group opened last, and when, whose rows fade in.
 pub const Opening = struct { group: ?usize = null, at: f64 = 0 };
+
+/// A chevron's well across, in points before the grid's `scale`: the
+/// title's 13-point line.
+const well = 16;
 
 /// How long a group's rows take to fade in as it opens, in seconds.
 const fade_time = 0.2;
@@ -135,12 +153,34 @@ fn place(g: *Grid, opts: Heading) Place {
         .selected = g.isSelected(g.row_index),
     });
     // In the first column's cell, unless that column is hidden.
-    const in_cell = opts.cells and g.cellAt(0);
+    const in_cell = opts.cells_after == null and opts.cells and g.cellAt(0);
     const box = if (in_cell) g.cell_box.? else blk: {
         const x = (g.opts.padding + @as(f32, @floatFromInt(item.heading.depth)) * g.opts.indent_step) * k;
-        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, g.lay.view - x - g.opts.padding * k)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(g.opts.column_gap * k / 2);
+        var end = g.lay.view - g.opts.padding * k;
+        // Short of the caller's cells, a gap between, as between columns.
+        if (opts.cells_after) |n| if (cellsStart(g, n)) |s| {
+            end = @min(end, s - g.opts.column_gap * k);
+        };
+        break :blk ui.div(c).absolute().offset(x, 0).w(@max(0, end - x)).h(lay_mod.rowHeight(g.opts) * k).row().itemsCenter().gap(g.opts.column_gap * k / 2);
     };
     return .{ .box = box, .in_cell = in_cell, .open = open, .depth = item.heading.depth };
+}
+
+/// Where the first shown column from `n` on starts in the row as shown:
+/// in the columns' order, scrolled, and no further left than where the
+/// frozen column cuts the others off. Null when they are all hidden.
+fn cellsStart(g: *Grid, n: usize) ?f32 {
+    const l = g.lay;
+    var start: ?f32 = null;
+    for (n..g.columns.len) |j| {
+        if (!g.isShown(j)) continue;
+        var s = l.at(j);
+        if (l.frozen) |f| if (f != j) {
+            s = @max(s, l.clip_x);
+        };
+        start = if (start) |was| @min(was, s) else s;
+    }
+    return start;
 }
 
 /// Draws a heading, returning its box left open with `open`, or else the
@@ -156,9 +196,19 @@ fn draw(g: *Grid, opts: Heading, open_for_caller: bool) ?ui.Div {
     const box = at.box;
     const open = at.open;
     {
-        const slot = ui.div(c).w(@max(0, g.opts.indent_step - g.opts.column_gap / 2) * k).h(12 * k).center();
+        const plain_w = @max(0, g.opts.indent_step - g.opts.column_gap / 2) * k;
+        const slot = switch (opts.chevron) {
+            .plain => ui.div(c).w(plain_w).h(12 * k).center(),
+            // A well as tall as the title's line, the chevron in it.
+            .well => ui.div(c).w(@max(plain_w, well * k)).h(well * k).center(),
+        };
         defer slot.end();
-        ui.icon(c, if (open) "chevron.down" else "chevron.right", .{ .size = 9.5 * k, .color = t.muted });
+        const icon = if (open) "chevron.down" else "chevron.right";
+        if (opts.chevron == .well) {
+            const w = ui.div(c).w(well * k).h(well * k).roundedFull().circular().center().bg(t.surface_hover);
+            defer w.end();
+            ui.icon(c, icon, .{ .size = 8.5 * k, .weight = .semibold, .color = t.muted });
+        } else ui.icon(c, icon, .{ .size = 9.5 * k, .color = t.muted });
     }
     ui.text(c, opts.title, .{ .size = 13, .weight = .semibold, .truncate = .ellipsis });
     if (opts.detail.len > 0) ui.text(c, opts.detail, .{ .size = 12, .color = t.muted, .truncate = .ellipsis });
