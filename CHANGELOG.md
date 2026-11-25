@@ -6,6 +6,10 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 
 ### Added
 
+- Pager: `scale`, multiplying its lengths and its buttons', as the other controls take it.
+- Legend: `text_size`, its labels' size in points over `size`, the swatches going with it; a swatch on its own takes it too.
+- Callout: `icon_color`, the icon's color apart from the tint, and `title_size`, the title's size in points.
+- Format: `in`, how long until ("in 12 min", "in a moment"), with `TimeWords`' `in` and `soon`; `day`, a day near today in words or else its date ("Today", "2026-03-01"); and `dayTime`, a time of day with its day, a weekday and date further back, and the year when it isn't this one ("Mon 9 Nov 14:02"). Days are read in the zone the app gives, as an offset from UTC, with `DayWords` for their names.
 - Grid: a heading's `cells_after`, its title across the columns up to where that column starts and the caller's cells from it on, where the grid lays them out as columns hide and scroll; and its `chevron`, `.well` drawing it in a round well (`GridHeadingChevron`).
 
 ## 0.11.1

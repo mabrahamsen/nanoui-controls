@@ -198,3 +198,39 @@ test "a long title wraps within the callout, as its text does, and is said whole
     for (list.items) |e| said = said or std.mem.eql(u8, e.label, title ++ ". Try again later.");
     try std.testing.expect(said);
 }
+
+test "a callout's icon takes a color of its own apart from its tint, and its title a size of its own" {
+    var x: Page = .{ .opts = .{ .title = "Access is on", .icon = "checkmark.circle.fill" } };
+    var t: ui.Tester = undefined;
+    try start(&x, &t);
+    defer t.deinit();
+    const tk = kit.tokens(&t.ctx);
+    const Seen = struct { icon: ui.Color, title: f32, text: f32 };
+    const seen = struct {
+        fn of(tt: *ui.Tester) Seen {
+            var s: Seen = .{ .icon = .white, .title = 0, .text = 0 };
+            for (tt.ctx.nodes.items) |n| switch (n.content) {
+                .icon => |i| s.icon = i.color,
+                .text => |tx| {
+                    if (std.mem.eql(u8, tx.str, "Access is on")) s.title = tx.style.size;
+                    if (std.mem.eql(u8, tx.str, "That folder doesn't exist.")) s.text = tx.style.size;
+                },
+                else => {},
+            };
+            return s;
+        }
+    }.of;
+    // By default the icon is the tint's color, the title the text's size.
+    const plain = seen(&t);
+    try std.testing.expectEqual(tk.primary, plain.icon);
+    try std.testing.expectEqual(plain.text, plain.title);
+    // Its own: the tint stays the status's.
+    x.opts.icon_color = tk.success;
+    x.opts.title_size = 15;
+    t.settle(1);
+    const own = seen(&t);
+    try std.testing.expectEqual(tk.success, own.icon);
+    try std.testing.expectEqual(tk.primary.alpha(0.25), t.ctx.nodes.items[x.box].style.border.?);
+    try std.testing.expectEqual(@as(f32, 15), own.title);
+    try std.testing.expectEqual(plain.text, own.text);
+}
