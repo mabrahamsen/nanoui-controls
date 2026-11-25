@@ -545,10 +545,11 @@ Figures as people read them, each for the frame (`format.size(c, …)`, in its a
 
 - `size`: "145.7 MB", "0 B", in units of 1000, as drive makers and the system count, with at most one decimal; `rate`: "12.3 MB/s".
 - `grouped`: "1,234,567"; `clock`: "1:02:03" or "2:03".
-- `span`: "45 s", "12 min", "20 days", in its largest whole unit; `ago`: "just now", "12 min ago".
+- `span`: "45 s", "12 min", "20 days", in its largest whole unit; `ago`: "just now", "12 min ago"; `in`: "in 12 min", "in a moment", for what is due or runs next.
+- `day`: "Today", "Yesterday", "Tomorrow" or "2026-03-01", for a list's day headings; `dayTime`: "Today 21:05", "Mon 9 Nov 14:02", "9 Nov 2025 14:02", for times in the last weeks. Both take a moment and now in seconds since 1970, and the zone's offset from UTC in seconds, which the app gets from its system.
 - `tilde`: "~/Documents", the home folder shown as ~.
 
-`span` and `ago` take `TimeWords`, the units and how a span reads in the past ("{} ago"), so an app can put them in its own language.
+`span`, `ago` and `in` take `TimeWords`, the units and how a span reads in the past and to come ("{} ago", "in {}"); `day` and `dayTime` take `DayWords`, the days near today and the weekdays' and months' names; so an app can put them in its own language.
 
 ## Charts
 

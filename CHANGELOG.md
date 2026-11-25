@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Format: `in`, how long until ("in 12 min", "in a moment"), with `TimeWords`' `in` and `soon`; `day`, a day near today in words or else its date ("Today", "2026-03-01"); and `dayTime`, a time of day with its day, a weekday and date further back, and the year when it isn't this one ("Mon 9 Nov 14:02"). Days are read in the zone the app gives, as an offset from UTC, with `DayWords` for their names.
+
 ## 0.11.1
 
 ### Fixed
