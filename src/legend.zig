@@ -26,6 +26,9 @@ pub const Options = struct {
     row_gap: f32 = 4,
     /// The labels' size, as the kit's; the swatches go with it.
     size: kit.Size = .xs,
+    /// The labels' size in points, over `size`, for one between the kit's
+    /// steps; the swatches go with it.
+    text_size: ?f32 = null,
     /// Labels in the monospaced font, so figures line up.
     mono: bool = false,
     /// The labels' color; null takes the theme's muted text.
@@ -64,8 +67,10 @@ pub fn legend(c: *ui.Context, opts: Options) Legend {
 pub const SwatchShape = enum { square, dot, line };
 
 pub const SwatchOptions = struct {
-    /// Sized as a legend's labels at this size.
+    /// Sized as a legend's labels at this size, or at `text_size` in
+    /// points over it.
     size: kit.Size = .xs,
+    text_size: ?f32 = null,
     shape: SwatchShape = .square,
     scale: f32 = 1,
 };
@@ -73,7 +78,7 @@ pub const SwatchOptions = struct {
 /// A swatch of `color` on its own, as a legend draws it: in a chart's
 /// title, a table's cell or a tooltip. A decoration to a screen reader.
 pub fn swatch(c: *ui.Context, color: ui.Color, opts: SwatchOptions) void {
-    const sw = @round(opts.size.text() * 0.72) * opts.scale;
+    const sw = swatchSide(opts);
     const d = switch (opts.shape) {
         .square => ui.div(c).w(sw).h(sw).rounded(shape_mod.corner(sw / 4)),
         .dot => ui.div(c).w(sw).h(sw).roundedFull(),
@@ -82,9 +87,14 @@ pub fn swatch(c: *ui.Context, color: ui.Color, opts: SwatchOptions) void {
     d.bg(color).end();
 }
 
+/// A swatch's side, from its labels' size.
+fn swatchSide(opts: SwatchOptions) f32 {
+    return @round((opts.text_size orelse opts.size.text()) * 0.72) * opts.scale;
+}
+
 /// How wide a swatch is: a line is longer than it is tall.
 fn swatchWidth(opts: SwatchOptions) f32 {
-    const sw = @round(opts.size.text() * 0.72) * opts.scale;
+    const sw = swatchSide(opts);
     return if (opts.shape == .line) sw * 1.4 else sw;
 }
 
@@ -113,7 +123,7 @@ pub const Legend = struct {
         const k = l.opts.scale;
         const style = l.labelStyle();
         const detail_style = l.detailStyle();
-        const sw = swatchWidth(.{ .size = l.opts.size, .shape = l.opts.shape, .scale = k });
+        const sw = swatchWidth(l.swatchOptions());
         const inner = @round(style.size * 0.55) * k;
         var w = sw + inner + @ceil(c.text.width(label, style));
         if (detail.len > 0) w += inner + @ceil(c.text.width(detail, detail_style));
@@ -125,7 +135,7 @@ pub const Legend = struct {
         var it = ui.div(c).row().itemsCenter().gap(inner);
         if (cut) it = it.w(room);
         defer it.end();
-        swatch(c, color, .{ .size = l.opts.size, .shape = l.opts.shape, .scale = k });
+        swatch(c, color, l.swatchOptions());
         if (cut) {
             _ = parts.oneLine(c, label, style);
         } else ui.text(c, label, style);
@@ -170,8 +180,12 @@ pub const Legend = struct {
         l.used += (if (l.used > 0) gap else 0) + w;
     }
 
+    fn swatchOptions(l: *const Legend) SwatchOptions {
+        return .{ .size = l.opts.size, .text_size = l.opts.text_size, .shape = l.opts.shape, .scale = l.opts.scale };
+    }
+
     fn labelStyle(l: *const Legend) ui.TextStyle {
-        return .{ .size = l.opts.size.text(), .mono = l.opts.mono, .color = l.opts.color orelse kit.tokens(l.c).muted };
+        return .{ .size = l.opts.text_size orelse l.opts.size.text(), .mono = l.opts.mono, .color = l.opts.color orelse kit.tokens(l.c).muted };
     }
 
     fn detailStyle(l: *const Legend) ui.TextStyle {

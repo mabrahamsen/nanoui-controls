@@ -2,6 +2,14 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Pager: `scale`, multiplying its lengths and its buttons', as the other controls take it.
+- Legend: `text_size`, its labels' size in points over `size`, the swatches going with it; a swatch on its own takes it too.
+- Callout: `icon_color`, the icon's color apart from the tint, and `title_size`, the title's size in points.
+
 ## 0.11.1
 
 ### Fixed
