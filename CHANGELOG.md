@@ -11,6 +11,7 @@ The version is in `build.zig.zon`. While it is 0.x, a minor release may change t
 - Callout: `icon_color`, the icon's color apart from the tint, and `title_size`, the title's size in points.
 - Format: `in`, how long until ("in 12 min", "in a moment"), with `TimeWords`' `in` and `soon`; `day`, a day near today in words or else its date ("Today", "2026-03-01"); and `dayTime`, a time of day with its day, a weekday and date further back, and the year when it isn't this one ("Mon 9 Nov 14:02"). Days are read in the zone the app gives, as an offset from UTC, with `DayWords` for their names.
 - Grid: a heading's `cells_after`, its title across the columns up to where that column starts and the caller's cells from it on, where the grid lays them out as columns hide and scroll; and its `chevron`, `.well` drawing it in a round well (`GridHeadingChevron`).
+- `controls.custom`, the parts the controls are built with, for a control of the app's own that acts and looks as they do: `button`, `take`, `takeIf` and `keysOf` for the keyboard, `showRing`, `ring`, `ringIn`, `ringWidth` and `dimmed` for its look, `lastSize` and `cutOff` for measuring, and `surface`, `SurfaceOwn` and `scaled` for a box in a `Surface`'s look.
 
 ## 0.11.1
 

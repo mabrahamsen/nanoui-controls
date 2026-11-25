@@ -95,6 +95,24 @@ controls.setShape(.{ .corner = 0.35, .glow = 1.4 });
 
 `corner` scales every corner a control chooses itself, a fixed one or one taken from the kit's radius (a segmented group, a tab, the sidebar's selected row, a panel, a toast, a bar's ends); `glow` every glow it chooses itself, a pill's dot, a focused `inputBox` and a `gauge`'s ticks. 0 is square, or no glow. A number the app passes (a `Surface`'s `radius` or `glow`, a `glow` option set at the call) draws as given, so an app scales its own presets. Shapes that are round by what they are (a dot, a capsule pill, a count's badge) stay round, and a toast's shadow is not a glow. `controls.shape()` says what is set.
 
+
+## Controls of your own
+
+A control an app builds itself, beside these, can act and look as they do with the parts they are built with, in `controls.custom`:
+
+```zig
+var box = controls.custom.surface(c, opts.card, .{ .fill = t.surface, .px = 10, .py = 8 });
+defer box.end();
+const it = controls.custom.button(c, box.index, !opts.disabled);
+if (controls.custom.showRing(c, it.focused)) box = box.border(controls.custom.ring(c)).borderW(controls.custom.ringWidth(c));
+if (opts.disabled) box = box.opacity(controls.custom.dimmed);
+```
+
+- `button` makes a box a button that Tab reaches and Enter or Space clicks; with `setFocusRingShows(.keyboard)`, a click on it leaves the keyboard where it was. `showRing`, `ring`, `ringIn` and `ringWidth` draw the ring when and as the controls draw theirs, and `dimmed` is how they dim what is disabled.
+- `take` and `takeIf` give a control a stop for Tab without its box taking the clicks meant for what is in it (rows, a scrollbar); a click passes the keyboard on with `c.focus = own.id`. `keysOf` takes the arrows, Home, End, the page keys, Enter, Escape or Backspace before the app's shortcuts see them, while the control has the keyboard.
+- `lastSize` is a box's size as the last frame laid it out, drawing another frame when it changes, for what is drawn to fit it; `cutOff` says whether the text just drawn was cut short, for a tooltip with the whole of it.
+- `surface` draws a box in the caller's `Surface` over the control's own look (`SurfaceOwn`), as the boxed controls take their `card`; `scaled` applies `scale` to a length in points.
+
 ## grid
 
 Rows of cells under a header of column titles, each column lined up from row to row.
