@@ -307,6 +307,57 @@ test "a double-click past the last title, or fitAll, fits every column, and rese
     try std.testing.expect(s.widths[1] >= long and s.widths[1] <= long + 3);
 }
 
+test "a column measures text in a box that grows beside a fixed one, to fit it and for its tooltip" {
+    const Growing = struct {
+        widths: [2]f32 = .{ 200, 80 },
+        fit: bool = false,
+        const name = "Documents and settings";
+        fn view(x: *@This(), c: *ui.Context) void {
+            const columns = [_]Column{ .{ .title = "Name" }, .{ .title = "Size" } };
+            var g = grid(c, &columns, .{ .count = 2, .widths = &x.widths });
+            if (x.fit) g.fitAll();
+            x.fit = false;
+            while (g.next()) |row| {
+                g.cell();
+                // A box of a fixed width, and the text in the room it leaves.
+                ui.div(c).w(16).h(16).end();
+                const rest = ui.div(c).column().w(0).grow();
+                ui.text(c, if (row.index == 0) name else "Pictures", .{});
+                rest.end();
+                g.cell();
+                ui.text(c, "1 GB", .{});
+            }
+            g.end();
+        }
+    };
+    var x: Growing = .{ .widths = .{ 100, 80 } };
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, Growing.view), .{ .width = 500, .height = 300 });
+    defer t.deinit();
+    t.settle(1);
+    // Cut short, it shows whole in a tooltip: on the first row's text.
+    try std.testing.expectEqual(@as(usize, 1), countText(&t, Growing.name));
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+    defer arena.deinit();
+    var els: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &els);
+    const first = for (els.items) |e| {
+        if (e.role == .row) break e.rect;
+    } else return error.NoRow;
+    t.moveTo(first.x + 60, first.y + first.h / 2);
+    t.advance(1);
+    try std.testing.expectEqual(@as(usize, 2), countText(&t, Growing.name));
+    t.moveTo(400, 250);
+    t.settle(1);
+    x.fit = true;
+    t.settle(1);
+    // The box, the gap between them and the whole text, not `min_width`.
+    const text = t.ctx.text.width(Growing.name, .{});
+    try std.testing.expect(x.widths[0] >= 16 + text and x.widths[0] <= 16 + text + 12);
+    const drawn = t.findText(Growing.name).?;
+    try std.testing.expect(drawn.w >= text - 0.5);
+}
+
 test "a cut-off cell shows its whole text on hover, and a whole one doesn't" {
     var s: Sizes = .{};
     var t: ui.Tester = undefined;
