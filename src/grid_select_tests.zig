@@ -33,7 +33,7 @@ const Many = struct {
     fn view(m: *Many, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull();
         defer root.end();
-        var g = grid(c, &Fruit.columns, .{ .count = m.marked.len, .sort = &m.sort, .selected = &m.selected, .selection = &m.marked, .drag_rows = m.drag_rows });
+        var g = grid(c, &Fruit.columns, .{ .count = m.marked.len, .sort = &m.sort, .selected = &m.selected, .selection = &m.marked, .drag_rows = m.drag_rows, .label = "Harvest" });
         m.frames += 1;
         // In the frame a click lands, more new state than the store has
         // room for, twice as much each time, so it grows then.
@@ -245,8 +245,13 @@ test "a screen reader hears rows, which are selected, and how the rows are sorte
     var selected: usize = 0;
     var count: ?ui.access.Element = null;
     var fruit: ?ui.access.Element = null;
+    // The grid is a list by its label, its titles and rows in it.
+    const harvest = out.items[0];
+    try std.testing.expectEqual(ui.access.Role.list, harvest.role);
+    try std.testing.expectEqualStrings("Harvest", harvest.label);
     for (out.items) |e| {
         if (e.role == .row) {
+            try std.testing.expectEqual(harvest.id, e.container);
             rows += 1;
             if (e.selected) selected += 1;
             if (std.mem.eql(u8, e.label, "fruit 1, 100, picked")) try std.testing.expect(e.selected);

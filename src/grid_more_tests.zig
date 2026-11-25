@@ -617,10 +617,14 @@ test "column titles are headers to a screen reader, in the caller's words" {
     defer arena.deinit();
     var list: std.ArrayList(ui.access.Element) = .empty;
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
-    try std.testing.expectEqualStrings("Title", list.items[0].label);
-    try std.testing.expect(list.items[0].header);
-    try std.testing.expectEqualStrings("croissant", list.items[0].value);
-    try std.testing.expectEqualStrings("trie", list.items[0].hint);
+    // The grid's list, its titles in it.
+    try std.testing.expectEqual(ui.access.Role.list, list.items[0].role);
+    const title = list.items[1];
+    try std.testing.expectEqual(list.items[0].id, title.container);
+    try std.testing.expectEqualStrings("Title", title.label);
+    try std.testing.expect(title.header);
+    try std.testing.expectEqualStrings("croissant", title.value);
+    try std.testing.expectEqualStrings("trie", title.hint);
 }
 
 test {

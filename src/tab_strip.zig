@@ -35,6 +35,9 @@ pub const Options = struct {
     max_count: usize = 999,
     /// What a screen reader says of a tab still loading its count.
     loading_text: []const u8 = "loading",
+    /// What a screen reader calls the tabs together ("Views"): they are
+    /// heard as a list by this name.
+    label: []const u8 = "",
     /// Dimmed, it doesn't change or take the keyboard, and is said to be
     /// unavailable.
     disabled: bool = false,
@@ -88,6 +91,8 @@ pub fn tabStripOpen(c: *ui.Context, tabs: []const Choice, index: *usize, opts: O
     // gives it the keyboard too. The chosen tab shows the ring.
     var g = choices_mod.Group.take(c, strip, index, tabs, opts.disabled);
     g.keys(c);
+    // A tab list to a screen reader, each tab an element of its own.
+    ui.access.describe(c, strip.index, .{ .role = .list, .label = opts.label, .enabled = !opts.disabled });
     const row = ui.div(c).row().wFull().gap(2 * k).itemsCenter();
     // A copy, written back once the tabs are drawn: what they draw may add
     // state, which can move nanoui's store of it.

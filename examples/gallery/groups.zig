@@ -121,6 +121,7 @@ pub const Pulls = struct {
         if (!p.started) c.focusNext(false);
         p.started = true;
         var g = controls.grid(c, &columns, .{
+            .label = "Pull requests",
             .count = count,
             .groups = if (p.grouped and !reloading) gs else null,
             .selected = &p.selected,

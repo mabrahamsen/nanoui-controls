@@ -28,7 +28,7 @@ pub const Mail = struct {
         defer root.end();
         if (m.start_focused and !m.started) c.focusNext(false);
         m.started = true;
-        var sb = sidebar(c, "mail", m.selected, .{ .choose_on_enter = m.choose_on_enter });
+        var sb = sidebar(c, "mail", m.selected, .{ .choose_on_enter = m.choose_on_enter, .label = "Mail" });
         m.focused = sb.focused;
         sb.heading("Mailboxes");
         if (m.drafts) sb.item("drafts", "Drafts", .{ .icon = "doc" });
@@ -211,9 +211,13 @@ test "a screen reader hears each row, the selected one selected, and the heading
     defer t.deinit();
     var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
-    var list: std.ArrayList(ui.access.Element) = .empty;
-    try ui.access.tree(&t.ctx, arena.allocator(), &list);
-    // A heading, two mailboxes, the group's heading and its three folders.
+    var all: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena.allocator(), &all);
+    // The sidebar's list by its label, the rows and headings after it.
+    try std.testing.expectEqualStrings("Mail", all.items[0].label);
+    const list: struct { items: []const ui.access.Element } = .{ .items = try elements(&t, arena.allocator()) };
+    // A heading, two mailboxes, the group's heading and its three folders,
+    // in the sidebar's list.
     try std.testing.expectEqual(@as(usize, 7), list.items.len);
     try std.testing.expectEqualStrings("Mailboxes", list.items[0].label);
     try std.testing.expect(list.items[0].header);
@@ -356,10 +360,15 @@ const Kinds = struct {
     }
 };
 
+/// What a screen reader hears inside the sidebar: its list comes first,
+/// and every row and heading after it is in it.
 pub fn elements(t: *ui.Tester, arena: std.mem.Allocator) ![]const ui.access.Element {
     var list: std.ArrayList(ui.access.Element) = .empty;
     try ui.access.tree(&t.ctx, arena, &list);
-    return list.items;
+    const all = list.items;
+    try std.testing.expectEqual(ui.access.Role.list, all[0].role);
+    for (all[1..]) |e| try std.testing.expectEqual(all[0].id, e.container);
+    return all[1..];
 }
 
 test "a disabled row is dimmed, takes no click, is passed by the keys, and is said as disabled" {

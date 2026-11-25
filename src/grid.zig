@@ -229,6 +229,9 @@ pub const Options = struct {
     /// A group's rows fade in as it opens; false shows them at once, as
     /// reduced motion does.
     fade_in: bool = true,
+    /// What a screen reader calls the grid ("Pull requests"): its rows are
+    /// heard as a list by this name.
+    label: []const u8 = "",
     /// What a screen reader says of a heading whose group is open, and
     /// folded.
     expanded_text: []const u8 = "expanded",
@@ -349,6 +352,8 @@ pub fn grid(c: *ui.Context, columns: []const Column, given: Options) Grid {
         c.changed = true;
     };
     const own = keys.take(c, box, opts.selected != null);
+    // A list to a screen reader, its titles and rows elements of their own.
+    ui.access.describe(c, box.index, .{ .role = .list, .label = opts.label });
     if (opts.selection) |m| if (own.focused and shown > 0 and c.shortcut(.{ .key = 'a', .cmd = true })) @memset(m[0..shown], true);
     // Copied in here and written back by `end`.
     const kept = lay_mod.state(c, Kept).*;

@@ -38,6 +38,9 @@ pub const Options = struct {
     /// the title.
     size: kit.Size = .md,
     text_size: ?f32 = null,
+    /// The title's level as a heading to a screen reader, 1 to 6: 1 for a
+    /// window's or a pane's title, more for one under another heading.
+    heading_level: u8 = 1,
     /// The room between the tile, the words and what is at the end, in
     /// points before `scale`.
     gap: f32 = 10,
@@ -68,7 +71,7 @@ pub fn header(c: *ui.Context, opts: Options) ui.Div {
         defer box.end();
         if (opts.icon.len > 0) tile_mod.iconTile(c, opts.icon, tile);
         kit.tooltip(c, parts.still(c, box), opts.title, .{ .placement = .right });
-        ui.access.describe(c, box.index, .{ .role = .static_text, .label = opts.title, .header = true });
+        ui.access.describe(c, box.index, .{ .role = .static_text, .label = opts.title, .header = true, .level = opts.heading_level });
         return bar;
     }
     if (opts.icon.len > 0) tile_mod.iconTile(c, opts.icon, tile);
@@ -76,22 +79,22 @@ pub fn header(c: *ui.Context, opts: Options) ui.Div {
     // to what is at the end.
     const words = ui.div(c).column().w(0).grow().gap(1 * k);
     defer words.end();
-    line(c, opts.title, .{ .size = size, .weight = .bold, .mono = opts.title_mono, .color = t.foreground }, true);
-    if (opts.subtitle.len > 0) line(c, opts.subtitle, .{ .size = size - 3, .mono = opts.subtitle_mono, .color = t.muted }, false);
+    line(c, opts.title, .{ .size = size, .weight = .bold, .mono = opts.title_mono, .color = t.foreground }, opts.heading_level);
+    if (opts.subtitle.len > 0) line(c, opts.subtitle, .{ .size = size - 3, .mono = opts.subtitle_mono, .color = t.muted }, 0);
     return bar;
 }
 
 /// `text` on its own line, cut short with an ellipsis where the room
-/// ends and then whole in a tooltip; a heading to a screen reader, or
-/// plain text.
-fn line(c: *ui.Context, text: []const u8, style: ui.TextStyle, heading: bool) void {
+/// ends and then whole in a tooltip; a heading of `level` to a screen
+/// reader, or plain text at 0.
+fn line(c: *ui.Context, text: []const u8, style: ui.TextStyle, level: u8) void {
     var cut = style;
     cut.truncate = .ellipsis;
     const box = ui.div(c).row().wFull();
     defer box.end();
     ui.text(c, text, cut);
     if (measure.cutOff(c, text, cut)) kit.tooltip(c, parts.still(c, box), text, .{});
-    ui.access.describe(c, box.index, .{ .role = .static_text, .label = text, .header = heading });
+    ui.access.describe(c, box.index, .{ .role = .static_text, .label = text, .header = level > 0, .level = level });
 }
 
 const Pane = struct {
@@ -137,8 +140,16 @@ test "a screen reader hears the title as a heading, then the subtitle" {
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
     try std.testing.expectEqualStrings("Backups", list.items[0].label);
     try std.testing.expect(list.items[0].header);
+    try std.testing.expectEqual(@as(u8, 1), list.items[0].level);
     try std.testing.expectEqualStrings("~/Documents/Projects", list.items[1].label);
     try std.testing.expect(!list.items[1].header);
+    try std.testing.expectEqual(@as(u8, 0), list.items[1].level);
+    // Under another heading, the caller's level.
+    x.opts.heading_level = 3;
+    t.settle(1);
+    list.clearRetainingCapacity();
+    try ui.access.tree(&t.ctx, arena.allocator(), &list);
+    try std.testing.expectEqual(@as(u8, 3), list.items[0].level);
 }
 
 test "a mono title is in the monospaced font" {

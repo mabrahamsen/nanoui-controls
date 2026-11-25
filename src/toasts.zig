@@ -260,7 +260,8 @@ pub fn toasts(c: *ui.Context, list: *Toasts, opts: Options) ?Hit {
         ui.key(c, c.print("toast-box-{d}", .{toast.id}));
         const box = ui.div(c).row().wFull().itemsCenter().gap(10 * k).px(12 * k).py(10 * k).rounded(shape_mod.corner(t.radius + 2) * k)
             .bg(t.popover).border(if (toast.status == .neutral) t.border else col.alpha(0.55))
-            .shadow(.{ .color = t.shadow.alpha(0.9), .blur = 24 * k, .y = 8 * k }).motion(f);
+            .shadow(.{ .color = t.shadow.alpha(0.9), .blur = 24 * k, .y = 8 * k }).occlude().motion(f);
+        // Over the page: its clicks, wheel and scrollbars stop at the toast.
         const it = parts.still(c, box);
         defer box.end();
         if (measure.lastSize(c, box.index)) |s| toast.height = s.h;
