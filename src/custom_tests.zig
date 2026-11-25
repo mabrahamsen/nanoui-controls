@@ -176,13 +176,17 @@ test "a box's size from the last frame, a frame drawn at once when it changes, a
     t.settle(1);
     try std.testing.expectEqual(@as(?f32, 300), x.room);
     try std.testing.expect(!x.cut);
-    // Narrowed: the frame that lays it out still reads the old width, and
-    // the size it leaves asks for the next frame, which reads the new.
+    // Narrowed by the app's own state, with no other event: the frame that
+    // lays it out still reads the old width, and nanoui draws the next,
+    // which reads the new.
     x.width = 80;
     t.frame();
     try std.testing.expectEqual(@as(?f32, 300), x.room);
+    try std.testing.expect(t.ctx.animating);
     t.settle(1);
     try std.testing.expectEqual(@as(?f32, 80), x.room);
+    // Once the size holds, no more frames are asked for.
+    try std.testing.expect(!t.ctx.animating);
     try std.testing.expect(x.cut);
 }
 
