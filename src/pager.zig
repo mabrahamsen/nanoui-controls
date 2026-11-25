@@ -32,6 +32,9 @@ pub const Options = struct {
     previous_text: []const u8 = "Previous page",
     next_text: []const u8 = "Next page",
     page_text: []const u8 = "Page",
+    /// Multiplies the pager's lengths, its buttons' too, for an app that
+    /// zooms its layout along with `c.setZoom`, which zooms text.
+    scale: f32 = 1,
 };
 
 /// Draws the pager for `pages` pages, the current one `page.*`, and
@@ -44,7 +47,8 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     // a change, as a click is.
     const before = page.*;
     if (page.* >= pages) page.* = pages - 1;
-    const box = ui.div(c).row().itemsCenter().gap(4).p(2).rounded(shape_mod.corner(t.radius));
+    const k = opts.scale;
+    const box = ui.div(c).row().itemsCenter().gap(4 * k).p(2 * k).rounded(shape_mod.corner(t.radius) * k);
     // Not a button: Enter and Space are left for what comes after it.
     const it = c.interact(box.index, .{ .focusable = true, .text = true });
     if (focus.showRing(c, it.focused)) {
@@ -54,12 +58,12 @@ pub fn pager(c: *ui.Context, page: *usize, pages: usize, opts: Options) bool {
     {
         defer box.end();
         if (it.focused) keys(c, page, pages);
-        const w = slotWidth(c, pages, opts.size);
+        const w = slotWidth(c, pages, opts.size, k);
         if (button(c, "chevron.left", "", opts.previous_text, false, page.* == 0, null, opts)) page.* -= 1;
         const current = page.*;
-        for (0..slots(pages, opts.around)) |k| {
-            const i = slot(k, current, pages, opts.around) orelse {
-                gap(c, k, w, opts);
+        for (0..slots(pages, opts.around)) |at| {
+            const i = slot(at, current, pages, opts.around) orelse {
+                gap(c, at, w, opts);
                 continue;
             };
             if (button(c, "", c.print("{d}", .{i + 1}), c.print("{s} {d}", .{ opts.page_text, i + 1 }), i == current, false, w, opts)) page.* = i;
@@ -103,15 +107,16 @@ fn slot(k: usize, current: usize, pages: usize, around: usize) ?usize {
 }
 
 /// A number's width: room for the widest of `pages`' digits as many times
-/// as it has them, so no number is wider, and at least a square.
-fn slotWidth(c: *ui.Context, pages: usize, size: kit.Size) f32 {
+/// as it has them, so no number is wider, and at least a square; its
+/// lengths multiplied by `k`, the text zoomed already.
+fn slotWidth(c: *ui.Context, pages: usize, size: kit.Size, k: f32) f32 {
     const style: ui.TextStyle = .{ .size = size.text(), .weight = .medium };
     var digit: f32 = 0;
     for ("0123456789") |d| digit = @max(digit, c.text.width(&.{d}, style));
     var digits: f32 = 1;
     var p = pages;
     while (p >= 10) : (p /= 10) digits += 1;
-    return @max(size.height(), @ceil(digits * digit + 2 * size.text() * 0.6));
+    return @max(size.height() * k, @ceil(digits * digit + 2 * size.text() * 0.6 * k));
 }
 
 /// Left and Right move a page, Home and End to the ends: keys it takes,
@@ -143,17 +148,28 @@ fn button(c: *ui.Context, icon: []const u8, text: []const u8, label: []const u8,
     const it = if (icon.len > 0) kit.iconButton(c, icon, o) else kit.button(c, text, o);
     if (index < c.nodes.items.len and c.nodes.items[index].id == it.id) {
         ui.access.describe(c, index, .{ .label = label, .selected = current, .enabled = !disabled });
+        const n = c.node(index);
+        if (opts.scale != 1) scaleBox(&n.style, opts.scale);
         // The slot is its width: the number centers in it, unpadded.
-        if (width != null) c.node(index).style.padding = .{};
+        if (width != null) n.style.padding = .{};
     }
     return it.clicked and !current;
 }
 
-/// An ellipsis for the pages between two numbered ones, in slot `k`, as
+/// A kit button's box at `k` times its lengths: its height, a width in
+/// points, its padding and its corners; its text zooms with the app.
+fn scaleBox(s: *ui.Style, k: f32) void {
+    if (s.height == .px) s.height = .{ .px = s.height.px * k };
+    if (s.width == .px) s.width = .{ .px = s.width.px * k };
+    s.padding = .{ .top = s.padding.top * k, .right = s.padding.right * k, .bottom = s.padding.bottom * k, .left = s.padding.left * k };
+    s.radius *= k;
+}
+
+/// An ellipsis for the pages between two numbered ones, in slot `at`, as
 /// wide as a number.
-fn gap(c: *ui.Context, k: usize, w: f32, opts: Options) void {
-    ui.key(c, c.print("gap-{d}", .{k}));
-    const d = ui.div(c).row().center().h(opts.size.height()).w(w);
+fn gap(c: *ui.Context, at: usize, w: f32, opts: Options) void {
+    ui.key(c, c.print("gap-{d}", .{at}));
+    const d = ui.div(c).row().center().h(opts.size.height() * opts.scale).w(w);
     defer d.end();
     ui.access.hide(c, d.index);
     ui.text(c, "…", .{ .size = opts.size.text(), .color = kit.tokens(c).muted });
@@ -162,6 +178,7 @@ fn gap(c: *ui.Context, k: usize, w: f32, opts: Options) void {
 const Pages = struct {
     page: usize = 0,
     pages: usize = 20,
+    scale: f32 = 1,
     changed: usize = 0,
     /// Keys left for the app after the pager, as an app's own Enter or
     /// arrows would see them.
@@ -169,7 +186,7 @@ const Pages = struct {
     fn view(p: *Pages, c: *ui.Context) void {
         const root = ui.div(c).column().sizeFull().p(10);
         defer root.end();
-        if (pager(c, &p.page, p.pages, .{})) p.changed += 1;
+        if (pager(c, &p.page, p.pages, .{ .scale = p.scale })) p.changed += 1;
         if (c.input.key != null) p.leaked += 1;
     }
 };
@@ -417,4 +434,36 @@ test "a pager keeps its arrows in place from page to page" {
             if (first) |f| try std.testing.expectEqualSlices(f32, &f, &at) else first = at;
         }
     }
+}
+
+/// The rectangle a screen reader has for the pager's button `label`.
+fn buttonRect(t: *ui.Tester, arena: std.mem.Allocator, label: []const u8) !ui.Rect {
+    var out: std.ArrayList(ui.access.Element) = .empty;
+    try ui.access.tree(&t.ctx, arena, &out);
+    for (out.items) |e| if (std.mem.eql(u8, e.label, label)) return e.rect;
+    return error.NoButton;
+}
+
+test "a pager's lengths follow scale, its buttons' too" {
+    var sizes: [2][3]ui.Rect = undefined;
+    for ([_]f32{ 1, 2 }, 0..) |k, n| {
+        var p: Pages = .{ .scale = k };
+        var t: ui.Tester = undefined;
+        try t.init(std.testing.allocator, .init(&p, Pages.view), .{ .width = 900, .height = 200 });
+        defer t.deinit();
+        t.settle(1);
+        var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
+        defer arena.deinit();
+        sizes[n] = .{ try buttonRect(&t, arena.allocator(), "Previous page"), try buttonRect(&t, arena.allocator(), "Page 1"), try buttonRect(&t, arena.allocator(), "Page 2") };
+    }
+    const one = sizes[0];
+    const two = sizes[1];
+    // The arrow's square and the numbers' height twice as large.
+    try std.testing.expectApproxEqAbs(one[0].w * 2, two[0].w, 0.5);
+    try std.testing.expectApproxEqAbs(one[0].h * 2, two[0].h, 0.5);
+    try std.testing.expectApproxEqAbs(one[1].h * 2, two[1].h, 0.5);
+    // The numbers' slots, and the gap between them, twice as wide: the
+    // text (not zoomed here) less so.
+    try std.testing.expect(two[1].w > one[1].w * 1.5);
+    try std.testing.expectApproxEqAbs((one[2].x - one[1].x - one[1].w) * 2, two[2].x - two[1].x - two[1].w, 0.5);
 }

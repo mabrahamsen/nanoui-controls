@@ -1211,7 +1211,7 @@ test "panels and notices, light and dark" {
 }
 
 /// Callouts in each status, with a title, plain, closable, and open with
-/// a button.
+/// a button; one whose icon has a color of its own and a larger title.
 fn callouts(_: *u8, c: *ui.Context) void {
     const root = ui.div(c).column().sizeFull().p(10).gap(8);
     defer root.end();
@@ -1225,12 +1225,14 @@ fn callouts(_: *u8, c: *ui.Context) void {
         _ = kit.button(c, "Retry", .{ .size = .xs });
     }
     _ = controls.callout(c, "Everything is up to date.", .{ .plain = true, .status = .success, .announce = false });
+    // The icon's own color on the accent's tint, and a larger title.
+    _ = controls.callout(c, "The app can read every folder it backs up.", .{ .icon = "checkmark.circle.fill", .icon_color = kit.tokens(c).success, .title = "Full access is on", .title_size = 15, .announce = false });
 }
 
 test "callouts, light and dark" {
     var x: u8 = 0;
-    try expectView("callouts", .init(&x, callouts), .{ .height = 330 });
-    try expectView("callouts-dark", .init(&x, callouts), .{ .height = 330, .dark = true });
+    try expectView("callouts", .init(&x, callouts), .{ .height = 345 });
+    try expectView("callouts-dark", .init(&x, callouts), .{ .height = 345, .dark = true });
 }
 
 /// Segmented groups and tab strips: counts, a count loading, an alert, a

@@ -26,9 +26,14 @@ pub const Options = struct {
     color: ?ui.Color = null,
     /// An SF Symbol, over the status's.
     icon: ?[]const u8 = null,
+    /// The icon's color, used as given, over `color` and the status's: for
+    /// an icon that says what the tint doesn't (a check on a neutral box).
+    icon_color: ?ui.Color = null,
     /// A line above the text, semibold, wrapping as the text does when it
     /// is long.
     title: []const u8 = "",
+    /// The title's size in points; null takes the text's.
+    title_size: ?f32 = null,
     /// A close button at its end; `callout` returns true when it is
     /// clicked. `calloutOpen` draws none: its caller draws one after its
     /// own.
@@ -95,11 +100,11 @@ pub fn calloutOpen(c: *ui.Context, text: []const u8, opts: Options) ui.Div {
     // With a title, the icon stays by it, as the kit's alert's does.
     const top = if (opts.icon_align) |a| a == .top else opts.title.len > 0;
     r = if (top) r.itemsStart() else r.itemsCenter();
-    ui.icon(c, icon, .{ .size = opts.icon_size * k, .color = col });
+    ui.icon(c, icon, .{ .size = opts.icon_size * k, .color = opts.icon_color orelse col });
     // Growing, so the text takes the room and wraps within it. One element
     // to a screen reader: the title and the text.
     const body = ui.div(c).column().grow().gap(2 * k);
-    if (opts.title.len > 0) ui.text(c, opts.title, .{ .size = size, .weight = .semibold, .wrap = true, .color = t.foreground });
+    if (opts.title.len > 0) ui.text(c, opts.title, .{ .size = opts.title_size orelse size, .weight = .semibold, .wrap = true, .color = t.foreground });
     ui.text(c, text, .{ .size = size, .wrap = true, .color = opts.text_color orelse t.foreground });
     body.end();
     ui.access.describe(c, body.index, .{ .role = .static_text, .label = said });
