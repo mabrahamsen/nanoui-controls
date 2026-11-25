@@ -114,3 +114,40 @@ test "a label longer than the legend is cut short on a line of its own, keeps it
     t.settle(2);
     try std.testing.expect(t.hasText(long ++ " ▲4.2"));
 }
+
+test "a legend's labels and swatches take text_size in points over size" {
+    const Sized = struct {
+        text_size: ?f32 = null,
+        fn view(x: *@This(), c: *ui.Context) void {
+            var l = legend_mod.legend(c, .{ .text_size = x.text_size });
+            l.itemDetail(red, "Read", "▲4");
+            l.end();
+            legend_mod.swatch(c, blue, .{ .text_size = x.text_size });
+        }
+    };
+    var squares: [2][2]f32 = undefined;
+    var labels: [2]f32 = undefined;
+    for ([_]?f32{ null, 15 }, 0..) |size, n| {
+        var x: Sized = .{ .text_size = size };
+        var t: ui.Tester = undefined;
+        try t.init(std.testing.allocator, .init(&x, Sized.view), .{ .width = 400, .height = 200 });
+        defer t.deinit();
+        t.settle(1);
+        var reds: [2]f32 = undefined;
+        var blues: [2]f32 = undefined;
+        squares[n] = .{ heights(&t, red, &reds)[0], heights(&t, blue, &blues)[0] };
+        for (t.ctx.nodes.items) |node| switch (node.content) {
+            .text => |tx| if (std.mem.eql(u8, tx.str, "Read")) {
+                labels[n] = tx.style.size;
+            },
+            else => {},
+        };
+    }
+    // `.xs` by default, then 15 points, the swatches going with it, the
+    // one on its own as the legend's.
+    try std.testing.expectEqual(kit.Size.xs.text(), labels[0]);
+    try std.testing.expectEqual(@as(f32, 15), labels[1]);
+    try std.testing.expectEqual(@round(15 * 0.72), squares[1][0]);
+    try std.testing.expect(squares[1][0] > squares[0][0]);
+    try std.testing.expectEqual(squares[1][0], squares[1][1]);
+}

@@ -180,7 +180,7 @@ if (controls.pager(c, &page, pages, .{})) loadPage(page);
 - `previous_text`, `next_text` and `page_text` are what a screen reader calls its buttons, in English by default.
 - When the pages grow fewer than the current page, as after a search, the pager moves it to the last and returns true, so a caller that loads a page on a change loads that one.
 - It keeps its width from page to page, so the arrows stay under the pointer: it always shows as many numbers and ellipses (near an end, the pages run on where an ellipsis would be), each as wide as the widest number. Only a change in the number of pages changes its width.
-- `around` sets how many pages either side of the current one are numbered, and `size` is the buttons' size, as the kit's (`.sm` by default).
+- `around` sets how many pages either side of the current one are numbered, `size` is the buttons' size, as the kit's (`.sm` by default), and `scale` multiplies its lengths, its buttons' too, for apps that zoom their layout with `c.setZoom`.
 - With a grid's `max_rows`, it shows a page at a time: the grid's rows are the page's.
 
 ## sidebar
@@ -370,7 +370,7 @@ controls.callout(c, "That folder doesn't exist.", .{ .status = .warning });
 if (controls.callout(c, "The disk is full.", .{ .status = .danger, .closable = true })) dismissed = true;
 ```
 
-- `status` sets the icon and tint (neutral: the accent and an info icon); `color` and `icon` go over them, and `title` is above the text, wrapping as it does.
+- `status` sets the icon and tint (neutral: the accent and an info icon); `color` and `icon` go over them, and `icon_color` colors the icon alone, for one that says what the tint doesn't. `title` is above the text, wrapping as it does, at the text's size or `title_size` in points.
 - `closable` adds a ✕ at its end, named `close_text` to a screen reader and reached by Tab; `callout` returns true when it is clicked.
 - `calloutOpen` leaves it open after its text for a button ("Retry"); the caller ends it, and draws its own ✕ if it wants one.
 - A screen reader hears its title and text as one. `announce` says them when it appears or changes, once; by default a danger or a warning callout is said, and others aren't.
@@ -717,10 +717,10 @@ l.end();
 - `itemDetail` adds a smaller, fainter detail after the label, such as a peak.
 - An item wider than the legend has a line to itself, its label cut short with "…" to fit and its detail kept; it shows whole in a tooltip, and a screen reader hears it whole.
 - `trailing` puts text at the end of the last line, such as what the items leave.
-- `size` (`.xs` by default) sizes the labels and swatches, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
+- `size` (`.xs` by default) sizes the labels and swatches, or `text_size` in points over it, `mono` lines up figures, and `color` is the labels' color. `gap` is the room between items, `row_gap` between lines.
 - `shape` draws its items' swatches as squares, dots or lines, for a line chart's series.
 - `width = .fit` makes it only as wide as its items, for a legend beside a chart's title; they still run on where the parent's width ends.
-- `controls.legendSwatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, in a chart's title, a table's cell or a tooltip.
+- `controls.legendSwatch(c, color, .{ .shape = .square | .dot | .line })` draws a legend's swatch on its own, sized by `size` or `text_size` as the legend's, in a chart's title, a table's cell or a tooltip.
 
 ## Example
 
