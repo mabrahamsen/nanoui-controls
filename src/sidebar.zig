@@ -70,6 +70,9 @@ pub const Options = struct {
     collapsed_text: []const u8 = "collapsed",
     /// What a screen reader says of a row's count while it is loading.
     loading_text: []const u8 = "loading",
+    /// What a screen reader calls the sidebar ("Sources"): its rows are
+    /// heard as the tabs of a list by this name.
+    label: []const u8 = "",
     /// Multiplies the sidebar's lengths, for an app that zooms its layout
     /// along with `c.setZoom`, which zooms text, as the grid's does.
     scale: f32 = 1,
@@ -249,6 +252,8 @@ pub fn sidebarOf(comptime Key: type, c: *ui.Context, id: []const u8, selected: ?
     c.node(outer.index).style.min_height = 0;
     // One that had no rows the last frame doesn't take Tab.
     const own = focus.takeIf(c, outer, hadRows(c).rows);
+    // A list to a screen reader, its rows and headings elements of their own.
+    ui.access.describe(c, outer.index, .{ .role = .list, .label = opts.label });
     ui.key(c, id);
     const inner = ui.div(c).column().wFull().gap(opts.gap * k);
     var kept = state(c).*;

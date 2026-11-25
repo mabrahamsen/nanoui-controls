@@ -2,6 +2,21 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## 0.11.0
+
+### Added
+
+- Sidebar, tab strip and grid: `label`, what a screen reader calls them ("Sources", "Views", "Pull requests"). Each is now heard as a list, its rows, tabs, headings and column titles elements in it, as nanoui 0.14.11 lets a list keep them.
+- Header: `heading_level`, the title's level as a heading to a screen reader, 1 by default, for a window's or a pane's title; it was heard at the level a reader assumes, 2.
+
+### Changed
+
+- Built on nanoui 0.14.11, which an app using these controls must pin too. The kit's buttons that are an icon alone center it by how it is drawn, so the pager's arrows, the close buttons of toasts and callouts, an input box's clear and show buttons and a stepper's − and + sit up to a pixel from where they were.
+
+### Fixed
+
+- Toasts: the wheel and a scrollbar's grab over a toast stop at it, as its clicks did, where they scrolled what was beneath; it takes them as the kit's own toasts do (`occlude`).
+
 ## 0.10.1
 
 ### Added

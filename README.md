@@ -43,7 +43,7 @@ Controls for [nanoui](https://github.com/justrach/nanoui) apps that nanoui's own
 | | Version |
 |---|---|
 | Zig | 0.17.1 or later |
-| nanoui | 0.14.8 |
+| nanoui | 0.14.11 |
 
 The app must pin the same nanoui release as this library, so both share one copy of nanoui. Otherwise nanoui's types don't match and the build fails.
 
@@ -52,7 +52,7 @@ The app must pin the same nanoui release as this library, so both share one copy
 Add the library to the app's `build.zig.zon`:
 
 ```sh
-zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.10.1"
+zig fetch --save "git+https://github.com/mabrahamsen/nanoui-controls?ref=v0.11.0"
 ```
 
 Then import its module next to nanoui's in `build.zig`:
@@ -155,6 +155,7 @@ if (g.chosen) |id| app.select(id); // copies it
 - **Back and Escape:** while the grid has the keyboard, Backspace or Cmd+Up (Alt+Up on Windows and Linux) sets `g.back`, for a browser to go to the parent folder, and Escape sets `g.escaped`, for an app that clears a search or closes a pane.
 - **A set number of rows:** `max_rows = 5` shows at most five, without scrolling, and takes only their height.
 - **Tables to read:** `clickable = false` makes rows that take no clicks, don't light up and show no pointing hand, for a summary or comparison; a screen reader still hears them as rows, and a cut-off cell still shows its tooltip.
+- **A list to a screen reader:** the grid is heard as a list, named by `label` ("Pull requests"), its column titles and rows in it.
 - **Hiding columns:** a column with `min_window_width` hides in narrower windows, one with `min_grid_width` while the grid itself is narrower, as when a pane beside it narrows it, and `hidden` hides columns on the caller's say. Build cells with `g.cellAt(i)`, which returns false for a hidden column, so columns keep their numbers.
 - **Lines:** `row_lines` draws a line between rows, which then meet it square, and `column_lines` one down the middle of each gap between columns, through the titles. With `freeze_first`, the frozen column has a line at its edge while the others are scrolled.
 - **Look:** `striped`, `hover`, `padding`, `header_line`, `row_height` and the gaps, `title_style` (`GridTitleStyle`) for the column titles, and `scale` for apps that zoom their layout with `c.setZoom`. The grid takes `scale` rather than the kit's `size`, as the pager does, because the kit has no sizes for a grid: `scale` multiplies all its lengths. Colors come from the theme unless set.
@@ -217,7 +218,7 @@ if (sb.end()) |key| selected = key;
 - **Fixed trees:** with `null` for `open`, a branch is fixed: its rows always show, it has no chevron, and it doesn't fold, so there is nothing for the caller to keep. A tree of only fixed branches is a fixed tree, such as a docs site's contents; fixed and folding branches can also be mixed. Right and Left still move into and out of a fixed branch.
 - **Motion,** as the kit's: the selection slides from row to row as `kit.tabs`' marker does, a row eases into a wash under the pointer, and a group opens to its rows' height and closes back as `kit.collapsible` does. Reduced motion moves at once.
 - **Keyboard,** as the grid's: a click or Tab gives it the keyboard, and `c.focusNext` before it does at the start. Up and Down move between rows, branches and group headings, past folded rows; Home and End go to the ends. Left folds an open group or branch, or goes to the group or branch a row is in; Right opens a folded one, or goes from an open branch to its first row. The keys choose a row as they reach it, or with `choose_on_enter` only on Enter or Space, for an app where showing another view is slow. With nothing selected, the first row shows where the keys start. Typing a row's first letters moves to it, and a letter typed again to the next that begins with it. The keys it acts on are its own, so an app's Enter doesn't fire too. A sidebar with no rows doesn't take Tab.
-- **Screen readers** hear each row as a tab with its count as its value, the selected one selected; headings as headings; group headings with whether they are open (`expanded_text`, `collapsed_text`), and branches as rows whose value is their count and whether they are open.
+- **Screen readers** hear the sidebar as a list, named by `label` ("Sources"), and in it each row as a tab with its count as its value, the selected one selected; headings as headings; group headings with whether they are open (`expanded_text`, `collapsed_text`), and branches as rows whose value is their count and whether they are open.
 - `size` sets the rows as the kit's controls at that size; `color` tints the selection, `background` goes behind the rows, and `scale` is for apps that zoom their layout.
 - A selected key that matches no row, or a row in a folded group, shows nothing selected until it shows; in a folded branch, the branch shows it.
 - **Icons only:** with `icons_only`, rows show just their icons, centered, for a sidebar narrowed to a strip; labels show in tooltips and are still what a screen reader says. Headings become lines, a group's heading a chevron that folds it, and counts dots; a branch's rows aren't indented, and only the keys fold it. With a `splitter`, an app can switch to it when the sidebar is dragged narrow. One id serves both shapes: as it changes, the selection shows on its row at once, rather than sliding across from where the row was. A header over it narrows with it (`header`'s `narrow`).
@@ -434,7 +435,7 @@ const tabs = [_]controls.Choice{ .{ .label = "Reviews", .count = 3 }, .{ .label 
 if (controls.tabStrip(c, &tabs, &tab, .{})) scrollToTop();
 ```
 
-- A screen reader hears each as a tab, with its count or `loading_text` as its value.
+- A screen reader hears the tabs as a list, named by `label` ("Views"), and each as a tab in it, with its count or `loading_text` as its value.
 - `tabStripOf` keeps the tab as an enum's value. `tabStripOpen` leaves the tabs' line open for a button at its end; its `end()` draws the rule and says whether the tab changed.
 - Tabs too many for the strip scroll sideways, by the wheel (either way) and the trackpad, between chevrons at its ends that page through them; the chosen tab, by a click, the keys or the caller, is scrolled into view. Tabs that fit have no chevrons.
 - `size` or `text_size`, `max_count`, `disabled` and `scale`.
@@ -451,7 +452,7 @@ if (controls.toasts(c, &s.toasts, .{})) |hit| if (hit.tag == undo) restore(hit.p
 
 - `show(message, ToastShow)` adds one and returns its id: `status` (an icon and an edge in its color), `title`, `action` (a button's words), `seconds` (4; 0 stays until closed), and the caller's `tag` and `payload`. The same toast shown again starts its time again instead of showing twice. At most 6 are kept, a seventh pushing out the oldest; their texts are copied in and cut short past fixed lengths.
 - `close(id)` slides one out, `dismiss(id)` removes it at once, and `items()` lists them.
-- `toasts(c, &list, opts)` returns the toast whose action was clicked (`id`, `tag`, `payload`), which then closes. A toast's time doesn't run while the pointer rests on it; they slide in and out, at once with reduced motion.
+- `toasts(c, &list, opts)` returns the toast whose action was clicked (`id`, `tag`, `payload`), which then closes. Clicks, the wheel and scrollbars over a toast stop at it, never reaching what is beneath. A toast's time doesn't run while the pointer rests on it; they slide in and out, at once with reduced motion.
 - The stack keeps within the window's height: the oldest show first, and one that doesn't fit after them waits until they go, its time not running and not yet said.
 - A screen reader hears each toast once as it comes ("title. text"). Tab reaches its action and its close button (`close_text`), and a click on either leaves the keyboard where it was, as the toast goes.
 - `corner` (top or bottom, left, center or right), `width` (narrowed to fit the window), `margin`, `size` or `text_size`, `layer` (over popovers, under tooltips) and `scale`.
@@ -510,7 +511,7 @@ h.end();
 - `icon` (empty leaves the tile out) and `tile`, the tile's options, which take the header's `status` or `color` unless they set their own.
 - The title is the kit's text at `size` (`.md`) and two points, or `text_size`, monospaced with `title_mono`, for an app's or a host's name; the subtitle three points under it, monospaced with `subtitle_mono`, for a path or a host.
 - `narrow` draws the tile alone, centered, for a header over a sidebar narrowed to its icons: the title shows in a tooltip and is still heard as a heading.
-- A screen reader hears the title as a heading, then the subtitle. In a narrow pane both are cut short with an ellipsis, whole in a tooltip, and what is at the end keeps its room.
+- A screen reader hears the title as a heading of `heading_level` (1, for a window's or a pane's title), then the subtitle. In a narrow pane both are cut short with an ellipsis, whole in a tooltip, and what is at the end keeps its room.
 
 ## inputBox
 

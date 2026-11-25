@@ -342,3 +342,30 @@ test "in a short window, toasts that don't fit wait, their time not running, and
     try std.testing.expectEqual(ids[shown], x.list.items()[0].id);
     try std.testing.expect(x.list.items()[0].announced);
 }
+
+test "the wheel over a toast leaves the page beneath it where it was" {
+    const T = struct {
+        list: Toasts = .{},
+        fn view(x: *@This(), c: *ui.Context) void {
+            ui.column(c, .{ .width = .fill, .height = .fill, .scroll = true });
+            for (0..60) |i| ui.text(c, c.print("Row {d}", .{i}), .{});
+            ui.end(c);
+            _ = toasts(c, &x.list, .{});
+        }
+    };
+    var x: T = .{};
+    _ = x.list.show("Saved", .{ .seconds = 0 });
+    var t: ui.Tester = undefined;
+    try t.init(std.testing.allocator, .init(&x, T.view), .{ .width = 600, .height = 400 });
+    defer t.deinit();
+    t.settle(1);
+    const top = t.findText("Row 0").?.y;
+    const on = t.findText("Saved").?;
+    t.scroll(on.x + 4, on.y + on.h / 2, -60);
+    t.settle(1);
+    try std.testing.expectEqual(top, t.findText("Row 0").?.y);
+    // Beside it, the page scrolls.
+    t.scroll(40, on.y + on.h / 2, -60);
+    t.settle(1);
+    try std.testing.expect(t.findText("Row 0") == null or t.findText("Row 0").?.y < top);
+}

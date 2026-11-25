@@ -66,7 +66,8 @@ const Gallery = struct {
         const t = kit.tokens(c);
         const root = ui.div(c).row().sizeFull();
         defer root.end();
-        const opts = g.tuning.options(c, g.side_width < narrow);
+        var opts = g.tuning.options(c, g.side_width < narrow);
+        opts.label = "Views";
         const icons_only = opts.icons_only;
         {
             const side = ui.div(c).column().w(if (icons_only) icons_width else g.side_width).hFull().p(if (icons_only) 6 else 10).bg(t.surface);

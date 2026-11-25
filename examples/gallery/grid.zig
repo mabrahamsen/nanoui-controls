@@ -150,6 +150,7 @@ pub const Browser = struct {
         if (!b.started) c.focusNext(false);
         b.started = true;
         var g = controls.grid(c, if (b.sideways) &all_columns else &columns, .{
+            .label = "Files",
             .count = count,
             .sort = &b.sort,
             .striped = b.striped,

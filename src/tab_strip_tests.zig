@@ -27,7 +27,7 @@ const Tabs = struct {
             var s = strip_mod.tabStripOpen(c, &tabs, &x.index, .{});
             if (kit.button(c, "Manage", .{ .size = .xs }).clicked) x.managed += 1;
             if (s.end()) x.changes += 1;
-        } else if (strip_mod.tabStrip(c, &tabs, &x.index, .{})) x.changes += 1;
+        } else if (strip_mod.tabStrip(c, &tabs, &x.index, .{ .label = "Views" })) x.changes += 1;
     }
 };
 
@@ -99,12 +99,18 @@ test "a screen reader hears each tab as a tab, with its count or that it is load
     defer arena.deinit();
     var list: std.ArrayList(ui.access.Element) = .empty;
     try ui.access.tree(&t.ctx, arena.allocator(), &list);
-    try std.testing.expectEqual(@as(usize, 4), list.items.len);
-    try std.testing.expectEqual(ui.access.Role.tab, list.items[0].role);
-    try std.testing.expectEqualStrings("Reviews", list.items[0].label);
-    try std.testing.expectEqualStrings("3", list.items[0].value);
-    try std.testing.expect(list.items[0].selected);
-    try std.testing.expectEqualStrings("loading", list.items[2].value);
+    // The tabs in a list, each an element of its own.
+    try std.testing.expectEqual(@as(usize, 5), list.items.len);
+    const strip = list.items[0];
+    try std.testing.expectEqual(ui.access.Role.list, strip.role);
+    try std.testing.expectEqualStrings("Views", strip.label);
+    const tabs = list.items[1..];
+    for (tabs) |e| try std.testing.expectEqual(strip.id, e.container);
+    try std.testing.expectEqual(ui.access.Role.tab, tabs[0].role);
+    try std.testing.expectEqualStrings("Reviews", tabs[0].label);
+    try std.testing.expectEqualStrings("3", tabs[0].value);
+    try std.testing.expect(tabs[0].selected);
+    try std.testing.expectEqualStrings("loading", tabs[2].value);
 }
 
 test "tabStripOf keeps an enum's value" {

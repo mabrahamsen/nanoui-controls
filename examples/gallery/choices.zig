@@ -59,7 +59,7 @@ pub const History = struct {
             .{ .label = "All runs", .count = runs },
             .{ .label = "Failed", .count = runs / 14, .alert = true },
             .{ .label = "Running", .loading = true },
-        }, &h.tab, .{});
+        }, &h.tab, .{ .label = "Runs" });
         _ = kit.button(c, "Export", .{ .size = .xs, .variant = .ghost });
         _ = strip.end();
         {
