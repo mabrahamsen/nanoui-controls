@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- Grid: a heading's `cells_after`, its title across the columns up to where that column starts and the caller's cells from it on, where the grid lays them out as columns hide and scroll; and its `chevron`, `.well` drawing it in a round well (`GridHeadingChevron`).
+
 ## 0.11.1
 
 ### Fixed

@@ -278,6 +278,7 @@ pub const RowLook = enum { plain, cards };
 
 pub const Heading = rows.Heading;
 pub const HeadingRow = rows.HeadingRow;
+pub const HeadingChevron = rows.Chevron;
 pub const TwoLines = rows.TwoLines;
 
 /// The look of the column titles; null takes the theme's.
