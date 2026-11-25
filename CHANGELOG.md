@@ -2,6 +2,12 @@
 
 The version is in `build.zig.zon`. While it is 0.x, a minor release may change the API and a patch release won't, as nanoui's own releases go.
 
+## Unreleased
+
+### Added
+
+- `controls.custom`, the parts the controls are built with, for a control of the app's own that acts and looks as they do: `button`, `take`, `takeIf` and `keysOf` for the keyboard, `showRing`, `ring`, `ringIn`, `ringWidth` and `dimmed` for its look, `lastSize` and `cutOff` for measuring, and `surface`, `SurfaceOwn` and `scaled` for a box in a `Surface`'s look.
+
 ## 0.11.1
 
 ### Fixed

@@ -238,6 +238,12 @@ pub const Shape = shape_mod.Shape;
 pub const setShape = shape_mod.setShape;
 pub const shape = shape_mod.shape;
 
+/// The parts the controls are built with, for a control of the app's own
+/// that acts and looks as they do: a box that is a button, a stop for Tab,
+/// keys taken before the app's shortcuts, the ring, a box's last size,
+/// text cut short, and a box in a `Surface`'s look (`custom.zig`).
+pub const custom = @import("custom.zig");
+
 test {
     _ = grid_mod;
     _ = pager_mod;
@@ -267,6 +273,7 @@ test {
     _ = callout_mod;
     _ = notice_mod;
     _ = format;
+    _ = custom;
     _ = @import("choices.zig");
     _ = segmented_mod;
     _ = tab_strip_mod;
